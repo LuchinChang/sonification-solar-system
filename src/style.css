@@ -412,7 +412,7 @@ body.ui-hidden #sound-menu {
 #telemetry-panel {
   position: fixed;
   right: 0;
-  top: 50%;
+  top: 0;
   z-index: 15;
 
   /* Flex row: [tab | content] */
@@ -420,7 +420,8 @@ body.ui-hidden #sound-menu {
   flex-direction: row;
   align-items: stretch;
 
-  max-height: 90vh;
+  max-height: 100vh;
+  height: 100vh;
 
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
@@ -434,7 +435,7 @@ body.ui-hidden #sound-menu {
     0 0 0 1px rgba(255, 180, 80, 0.03) inset;
 
   /* Default: fully open */
-  transform: translateY(-50%) translateX(0);
+  transform: translateX(0);
 
   transition:
     transform    var(--dur-slow) var(--ease-out-quart),
@@ -444,7 +445,7 @@ body.ui-hidden #sound-menu {
 
 /* Only the tab (40px, set by user) pokes out when collapsed */
 #telemetry-panel.collapsed {
-  transform: translateY(-50%) translateX(calc(100% - 40px));
+  transform: translateX(calc(100% - 40px));
 }
 
 #telemetry-panel:hover {
@@ -454,7 +455,7 @@ body.ui-hidden #sound-menu {
 /* ── Tab handle (always visible) ─────────────────────────────── */
 .telemetry-tab {
   flex-shrink: 0;
-  width: 40px;
+  width: 30px;
 
   display: flex;
   align-items: center;
@@ -491,7 +492,7 @@ body.ui-hidden #sound-menu {
 
 /* ── Content pane ────────────────────────────────────────────── */
 .telemetry-inner {
-  width: 400px;
+  width: 450px;
   display: flex;
   flex-direction: column;
   min-height: 0;        /* enables scrolling inside flex child */
@@ -525,7 +526,7 @@ body.ui-hidden #sound-menu {
   color: var(--text-dim);
 }
 
-/* The <pre> code block */
+/* The <textarea> code editor */
 #telemetry-code {
   padding: 14px 16px;
   margin: 0;
@@ -538,7 +539,17 @@ body.ui-hidden #sound-menu {
   overflow-x: auto;
   flex: 1;
 
-  /* Subtle syntax colouring handled by JS (plain textContent) */
+  /* Textarea-specific resets */
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  tab-size: 2;
+  -moz-tab-size: 2;
+}
+
+#telemetry-code:focus {
+  box-shadow: inset 0 0 0 1px rgba(194, 118, 46, 0.28);
 }
 
 /* Scrollbar styling for the telemetry pane */
@@ -703,4 +714,138 @@ body.ui-hidden #sound-menu {
   color: var(--text-dim);
   display: block;
   margin-bottom: 2px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   AUDIO-INIT OVERLAY
+   Full-viewport glassmorphism curtain; hidden after Start Engine.
+   ══════════════════════════════════════════════════════════════ */
+#audio-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: rgba(18, 15, 14, 0.92);
+  backdrop-filter: blur(40px) saturate(120%);
+  -webkit-backdrop-filter: blur(40px) saturate(120%);
+  transition: opacity 0.5s var(--ease-out-quart);
+}
+
+#audio-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#start-engine-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 36px 56px;
+
+  background: var(--glass-bg);
+  border: 1px solid var(--accent-copper);
+  border-radius: 24px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  color: var(--accent-amber);
+
+  transition:
+    border-color var(--dur-base) var(--ease-out-quart),
+    box-shadow   var(--dur-base) var(--ease-out-quart),
+    transform    var(--dur-base) var(--ease-out-quart);
+}
+
+#start-engine-btn:hover {
+  border-color: var(--accent-amber);
+  box-shadow: 0 0 48px rgba(232, 160, 80, 0.22);
+  transform: scale(1.03);
+}
+
+#start-engine-btn:active {
+  transform: scale(0.97);
+}
+
+.engine-icon {
+  font-size: 32px;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+.engine-label {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.engine-hint {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   EVAL STATUS INDICATOR  (inside telemetry header)
+   ══════════════════════════════════════════════════════════════ */
+.eval-status {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  transition:
+    background var(--dur-fast) var(--ease-out-quart),
+    color      var(--dur-fast) var(--ease-out-quart);
+}
+
+.eval-status.ok {
+  background: rgba(80, 200, 120, 0.18);
+  color: #50C878;
+}
+
+.eval-status.error {
+  background: rgba(232, 71, 44, 0.18);
+  color: var(--accent-coral);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TELEMETRY FOOTER  (Ctrl+Enter hint)
+   ══════════════════════════════════════════════════════════════ */
+.telemetry-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.footer-label {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SOUND MENU — template pills + separator
+   ══════════════════════════════════════════════════════════════ */
+.sound-menu-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 2px;
+  background: var(--glass-border);
+}
+
+/* Template pill active state (copper, distinct from category colours) */
+.template-pill.active {
+  background: rgba(200, 122, 46, 0.20);
+  border-color: var(--accent-copper);
+  color: var(--accent-copper);
+  box-shadow: 0 0 10px rgba(200, 122, 46, 0.18);
 }

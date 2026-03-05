@@ -2,6 +2,8 @@
 import './style.css';
 import type { Point } from './geometry';
 import { CanvasShape, type ShapeType, type SoundCategory, type PlaybackMode } from './shapes';
+import { evalScope } from '@strudel/core';
+import { webaudioRepl, initAudio, getAudioContext, type StrudelRepl } from '@strudel/webaudio';
 
 // ═══════════════════════════════════════════════════════════════
 // CANVAS SETUP
@@ -116,6 +118,22 @@ let isPlaying            = true;
 let lastFrameTime        = 0;    // 0 = not yet started
 
 // ═══════════════════════════════════════════════════════════════
+// STRUDEL AUDIO STATE
+// ═══════════════════════════════════════════════════════════════
+
+let strudelRepl: StrudelRepl | null = null;
+let audioInitialized = false;
+
+/**
+ * Tiny passthrough transpiler — makes the repl wrap our code inside
+ * (async () => { CODE })() so multi-statement blocks work.
+ * Patterns self-register via .p("sN"); no explicit return needed.
+ */
+function simpleTranspiler(code: string): { output: string } {
+  return { output: code };
+}
+
+// ═══════════════════════════════════════════════════════════════
 // CONTINUOUS ANIMATION LOOP  (performance.now() via rAF)
 // ═══════════════════════════════════════════════════════════════
 
@@ -203,47 +221,75 @@ function drawScene(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// TELEMETRY PANEL  — DOM-element approach for per-shape flash
+// TELEMETRY PANEL  — <textarea> live-code editor
 // ═══════════════════════════════════════════════════════════════
 
-const telemetryCode  = document.getElementById('telemetry-code')!;
-const telemetryPanel = document.getElementById('telemetry-panel')!;
-const telemetryTab   = document.getElementById('telemetry-tab') as HTMLButtonElement;
+const telemetryTextarea = document.getElementById('telemetry-code') as HTMLTextAreaElement;
+const telemetryPanel    = document.getElementById('telemetry-panel')!;
+const telemetryTab      = document.getElementById('telemetry-tab') as HTMLButtonElement;
+const evalStatusEl      = document.getElementById('eval-status')!;
 
-/** Re-render the entire telemetry <pre> block using individual <span>s. */
-function updateTelemetry(): void {
-  telemetryCode.innerHTML = '';
-
-  const header = document.createElement('span');
-  header.className = 'telem-header';
-  header.textContent = [
-    '// Solar System Sonification — Live Code',
-    '// ─────────────────────────────────────────',
+/** Build the full executable Strudel code from all shapes. */
+function generateFullCode(): string {
+  const header = [
+    '// Solar System Sonification \u2014 Live Code',
+    '// \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
     `// Shapes: ${shapes.length}  |  Samples: ${SAMPLE_RATE}  |  CPM: ${CPM}`,
     '',
   ].join('\n');
-  telemetryCode.appendChild(header);
 
   if (shapes.length === 0) {
-    const empty = document.createElement('span');
-    empty.textContent = '// Spawn shapes from the Sonic Foundry dock.';
-    telemetryCode.appendChild(empty);
-    return;
+    return header + '// Spawn shapes from the Sonic Foundry dock.';
   }
 
-  shapes.forEach((s, i) => {
-    if (i > 0) telemetryCode.appendChild(document.createTextNode('\n\n'));
-    const block = document.createElement('span');
-    block.id        = `telem-shape-${s.id}`;
-    block.className = 'telem-block';
-    block.textContent = s.toStrudelCode();
-    telemetryCode.appendChild(block);
-  });
+  const shapeCodes = shapes.map(s => s.toStrudelCode()).join('\n\n');
+  // Wire all stacked patterns to audio output via all()
+  return shapeCodes + '\n\n// — Play all stacked patterns\nall(x => x.play())';
 }
 
 /**
- * Briefly flash the telemetry block for `shape` with a coral glow.
- * Debounced per shape to avoid strobe at high CPM / dense intersections.
+ * Refresh the textarea contents.
+ * @param shouldEval  When true, also debounce-trigger a Strudel re-evaluation.
+ *                    Pass false for changes that only affect the header (e.g. CPM).
+ */
+function updateTelemetry(shouldEval = true): void {
+  telemetryTextarea.value = generateFullCode();
+  if (shouldEval && audioInitialized) {
+    triggerEvaluation();
+  }
+}
+
+// ── Debounced Strudel evaluation ──────────────────────────────
+
+let _evalTimer: ReturnType<typeof setTimeout> | null = null;
+const EVAL_DEBOUNCE_MS = 300;
+
+function triggerEvaluation(): void {
+  if (!audioInitialized || strudelRepl === null) return;
+  if (_evalTimer !== null) clearTimeout(_evalTimer);
+  _evalTimer = setTimeout(() => {
+    void evaluateStrudelCode(telemetryTextarea.value);
+  }, EVAL_DEBOUNCE_MS);
+}
+
+async function evaluateStrudelCode(code: string): Promise<void> {
+  if (strudelRepl === null) return;
+  try {
+    await strudelRepl.evaluate(code);
+    setEvalStatus('ok');
+  } catch (err) {
+    console.warn('[strudel-eval]', err);
+    setEvalStatus('error');
+  }
+}
+
+function setEvalStatus(status: 'ok' | 'error' | 'idle'): void {
+  evalStatusEl.className = `eval-status ${status}`;
+  evalStatusEl.textContent = status === 'ok' ? '\u2713 synced' : status === 'error' ? '\u2717 error' : '';
+}
+
+/**
+ * Flash the eval-status to show a visual trigger beat (debounced).
  */
 const _flashCooldowns = new Map<number, number>();
 const FLASH_COOLDOWN_MS = 80;
@@ -252,19 +298,63 @@ function flashTelemBlock(shape: CanvasShape, now: number): void {
   const last = _flashCooldowns.get(shape.id) ?? 0;
   if (now - last < FLASH_COOLDOWN_MS) return;
   _flashCooldowns.set(shape.id, now);
-
-  const el = document.getElementById(`telem-shape-${shape.id}`);
-  if (el === null) return;
-  el.classList.remove('telem-flash');
-  void el.offsetWidth; // force reflow to restart the CSS animation
-  el.classList.add('telem-flash');
+  // Flash the eval status indicator briefly
+  evalStatusEl.classList.remove('telem-flash');
+  void evalStatusEl.offsetWidth;
+  evalStatusEl.classList.add('telem-flash');
 }
+
+// ── Ctrl+Enter manual evaluation from textarea ───────────────
+
+telemetryTextarea.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    e.preventDefault();
+    void evaluateStrudelCode(telemetryTextarea.value);
+  }
+});
 
 function toggleTelemetry(): void {
   const collapsed = telemetryPanel.classList.toggle('collapsed');
   telemetryTab.setAttribute('aria-expanded', String(!collapsed));
 }
 telemetryTab.addEventListener('click', toggleTelemetry);
+
+// ═══════════════════════════════════════════════════════════════
+// STRUDEL AUDIO INITIALISATION  (called from overlay button)
+// ═══════════════════════════════════════════════════════════════
+
+async function initializeAudio(): Promise<void> {
+  try {
+    const ac = getAudioContext();
+    if (ac.state === 'suspended') await ac.resume();
+    await initAudio();
+    await evalScope(
+      import('@strudel/core'),
+      import('@strudel/webaudio'),
+    );
+    strudelRepl = webaudioRepl({ transpiler: simpleTranspiler });
+    strudelRepl.setCps(CPM / 60);
+    audioInitialized = true;
+
+    document.getElementById('audio-overlay')!.classList.add('hidden');
+
+    // Kick off the first evaluation with whatever code is currently generated
+    updateTelemetry(true);
+  } catch (err) {
+    console.error('[audio] init failed:', err);
+  }
+}
+
+document.getElementById('start-engine-btn')!.addEventListener('click', () => {
+  void initializeAudio();
+});
+
+/** Sync Strudel scheduler tempo to our UI CPM value. */
+function syncStrudelCps(): void {
+  if (strudelRepl !== null) {
+    strudelRepl.setCps(CPM / 60);
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // SAMPLE RATE KNOB  (bidirectional: drag ↔ Cmd+Scroll)
@@ -344,7 +434,8 @@ cpmKnobEl.addEventListener('keydown', e => {
   e.preventDefault();
   CPM = clamp(CPM + delta, MIN_CPM, MAX_CPM);
   updateCpmKnobVisual();
-  updateTelemetry();
+  syncStrudelCps();
+  updateTelemetry(false);  // CPM only → no re-eval, just update header
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -423,7 +514,8 @@ window.addEventListener('mousemove', e => {
     const dy = cpmDragStartY - e.clientY;
     CPM = clamp(cpmDragStartCPM + Math.round(dy * CPM_SENSITIVITY), MIN_CPM, MAX_CPM);
     updateCpmKnobVisual();
-    updateTelemetry();
+    syncStrudelCps();
+    updateTelemetry(false);  // CPM only → no re-eval
     return;
   }
 
@@ -507,12 +599,16 @@ document.querySelectorAll<HTMLButtonElement>('.shape-tile').forEach(tile => {
 // SOUND CATEGORY PILL MENU
 // ═══════════════════════════════════════════════════════════════
 
-const soundMenu  = document.getElementById('sound-menu')!;
-const soundPills = soundMenu.querySelectorAll<HTMLButtonElement>('.sound-pill');
+const soundMenu      = document.getElementById('sound-menu')!;
+const categoryPills  = soundMenu.querySelectorAll<HTMLButtonElement>('.sound-pill:not(.template-pill)');
+const templatePills  = soundMenu.querySelectorAll<HTMLButtonElement>('.template-pill');
 
 function showSoundMenu(shape: CanvasShape): void {
-  soundPills.forEach(p =>
+  categoryPills.forEach(p =>
     p.classList.toggle('active', p.dataset['category'] === shape.soundProfile.category),
+  );
+  templatePills.forEach(p =>
+    p.classList.toggle('active', Number(p.dataset['template']) === shape.templateIndex),
   );
   soundMenu.style.left = `${shape.x}px`;
   soundMenu.style.top  = `${shape.y - shape.size - 46}px`;
@@ -523,11 +619,21 @@ function hideSoundMenu(): void {
   soundMenu.classList.add('hidden');
 }
 
-soundPills.forEach(pill => {
+categoryPills.forEach(pill => {
   pill.addEventListener('click', () => {
     if (activeShape === null) return;
     activeShape.soundProfile.category = pill.dataset['category'] as SoundCategory;
-    soundPills.forEach(p => p.classList.remove('active'));
+    categoryPills.forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    updateTelemetry();
+  });
+});
+
+templatePills.forEach(pill => {
+  pill.addEventListener('click', () => {
+    if (activeShape === null) return;
+    activeShape.templateIndex = Number(pill.dataset['template']);
+    templatePills.forEach(p => p.classList.remove('active'));
     pill.classList.add('active');
     updateTelemetry();
   });
@@ -537,7 +643,9 @@ soundPills.forEach(pill => {
 // KEYBOARD SHORTCUTS
 //   D     → toggle dock + UI panels
 //   I     → toggle telemetry panel
+//   T     → cycle active shape's template
 //   Space → play / pause
+//   Bksp  → delete active shape
 // ═══════════════════════════════════════════════════════════════
 
 document.addEventListener('keydown', e => {
@@ -549,6 +657,12 @@ document.addEventListener('keydown', e => {
       break;
     case 'i':
       toggleTelemetry();
+      break;
+    case 't':
+      if (activeShape !== null) {
+        activeShape.templateIndex = (activeShape.templateIndex + 1) % 2;
+        updateTelemetry();
+      }
       break;
     case ' ':
       e.preventDefault();

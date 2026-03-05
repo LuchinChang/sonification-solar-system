@@ -26,6 +26,9 @@ export interface CachedIntersection {
   y: number;
 }
 
+/** Resolution of the binary rhythm grid (angular bins mapped to Strudel struct). */
+export const RHYTHM_STEPS = 256;
+
 // ── Module-private types ──────────────────────────────────────────────────────
 
 interface TriggerAnimation {
@@ -80,6 +83,8 @@ export class CanvasShape {
   activeAnimations: TriggerAnimation[];
   /** Intersection count — kept up-to-date by rebuildIntersectionCache(). */
   intersectionCount: number;
+  /** Index into the template array (0 = percussion, 1 = melodic arp). */
+  templateIndex: number;
 
   constructor(x: number, y: number, type: ShapeType, size = 60) {
     this.id                 = ++_nextId;
@@ -94,6 +99,7 @@ export class CanvasShape {
     this.cachedIntersections = [];
     this.activeAnimations   = [];
     this.intersectionCount  = 0;
+    this.templateIndex      = 0;
   }
 
   // ── Rendering ─────────────────────────────────────────────────────────────
@@ -356,28 +362,46 @@ export class CanvasShape {
     return result;
   }
 
-  // ── Mock Strudel code generation ──────────────────────────────────────────
+  // ── Rhythm string + Strudel code generation ─────────────────────────────
 
+  /**
+   * Map cached intersection angles onto a fixed-width binary grid.
+   * Each '1' marks a step where the playhead crosses an orbital line;
+   * '~' is silence.  The result is valid Strudel mini-notation for `struct()`.
+   */
+  generateRhythmString(): string {
+    const grid: string[] = new Array(RHYTHM_STEPS).fill('~');
+    for (const int of this.cachedIntersections) {
+      const step = Math.floor((int.angle / (Math.PI * 2)) * RHYTHM_STEPS) % RHYTHM_STEPS;
+      grid[step] = '1';
+    }
+    return `[${grid.join(' ')}]`;
+  }
+
+  /**
+   * Produce executable Strudel code for this shape.
+   * Each block declares a rhythm variable, applies a template, and registers
+   * itself via `.p("sN")` so the REPL stacks all shapes into a single pattern.
+   */
   toStrudelCode(): string {
     const name    = this.type.charAt(0).toUpperCase() + this.type.slice(1);
     const label   = `${name} ${this.id}`;
     const r       = Math.round(this.size);
     const n       = this.intersectionCount;
-    const cat     = this.soundProfile.category;
-    const comment = `// [${label}: (r: ${r}, ∩: ${n})]`;
+    const tpl     = this.templateIndex === 0 ? 'Perc' : 'Arp';
+    const comment = `// [${label}: (r: ${r}, \u2229: ${n}, ${tpl})]`;
 
-    if (cat === null) {
-      return `${comment}\n// — unbound  (select shape → assign sound)`;
-    }
+    const v       = `r${this.id}`;
+    const rhythm  = this.generateRhythmString();
 
-    const sounds: Record<SoundCategory, string>   = {
-      Percussion: '"kick"', Bass: '"bass"', Pad: '"pad"',
-    };
-    const patterns: Record<SoundCategory, string> = {
-      Percussion: '.every(3, fast(2))',
-      Bass:       '.slow(2).room(0.3)',
-      Pad:        '.room(0.8).gain(0.6)',
-    };
-    return `${comment}\ns(${sounds[cat]})${patterns[cat]}.play()`;
+    const templates: ((rv: string) => string)[] = [
+      // 0 — Percussion: short square-wave kick
+      rv => `note("c2").s("square").struct(${rv}).decay(.15).sustain(0).gain(0.8)`,
+      // 1 — Melodic arpeggiator: sawtooth chord
+      rv => `note("c4 e4 g4 b4").s("sawtooth").struct(${rv}).lpf(800).decay(.3).sustain(.1).gain(0.5)`,
+    ];
+
+    const pattern = (templates[this.templateIndex] ?? templates[0])(v);
+    return `${comment}\nconst ${v} = "${rhythm}";\n${pattern}.p("s${this.id}")`;
   }
 }

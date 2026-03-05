@@ -13,6 +13,15 @@
   </head>
   <body>
 
+    <!-- ══ Audio-init overlay — browser policy requires user gesture ══ -->
+    <div id="audio-overlay">
+      <button id="start-engine-btn" type="button">
+        <span class="engine-icon" aria-hidden="true">&#x25C9;</span>
+        <span class="engine-label">Start Engine</span>
+        <span class="engine-hint">Enable audio synthesis</span>
+      </button>
+    </div>
+
     <!-- ══ Orbital canvas — driven entirely by main.ts ══ -->
     <canvas id="simCanvas"></canvas>
 
@@ -178,6 +187,9 @@
       <button class="sound-pill" data-category="Percussion" role="menuitem">Perc</button>
       <button class="sound-pill" data-category="Bass"       role="menuitem">Bass</button>
       <button class="sound-pill" data-category="Pad"        role="menuitem">Pad</button>
+      <span class="sound-menu-sep" aria-hidden="true"></span>
+      <button class="sound-pill template-pill" data-template="0" role="menuitem">Drums</button>
+      <button class="sound-pill template-pill" data-template="1" role="menuitem">Arp</button>
     </div>
 
     <!-- ╔════════════════════════════════════════════════════════╗ -->
@@ -199,11 +211,22 @@
       <div class="telemetry-inner">
         <header class="telemetry-header">
           <span class="telemetry-title">Live Code</span>
-          <kbd class="telemetry-kbd">i</kbd>
+          <span id="eval-status" class="eval-status" aria-live="polite"></span>
+          <kbd class="telemetry-kbd" title="Toggle panel">i</kbd>
         </header>
-        <pre id="telemetry-code" aria-live="polite">// Spawn shapes from the dock below.
-// Select a shape to assign a sound category.
-        </pre>
+        <textarea
+          id="telemetry-code"
+          spellcheck="false"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          aria-label="Strudel live code editor"
+        >// Spawn shapes from the dock below.
+// Select a shape to assign a sound category.</textarea>
+        <footer class="telemetry-footer">
+          <kbd class="telemetry-kbd">&#x2318;/Ctrl + Enter</kbd>
+          <span class="footer-label">evaluate</span>
+        </footer>
       </div>
 
     </div>
