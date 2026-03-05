@@ -1,0 +1,706 @@
+/* ═══════════════════════════════════════════════════════════
+   SOLAR SYSTEM SONIFICATION — Global Styles
+   Theme: "Martian Dusk"
+   Palette: dark warm brown canvas · copper orbital lines ·
+            coral/vermilion intersections · glassmorphism UI
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Design Tokens ─────────────────────────────────────────── */
+:root {
+  /* Canvas palette */
+  --bg-canvas:     #120F0E;
+  --color-sun:     #FFA030;
+  --color-lines:   rgba(194, 118, 46, 0.35);   /* copper orbital lines */
+  --color-dots:    #E8472C;                     /* coral/vermilion intersection dots */
+
+  /* Accent palette (UI + canvas shape highlights) */
+  --accent-copper: #C87A2E;
+  --accent-amber:  #E8A050;
+  --accent-coral:  #E8472C;
+
+  /* Sound-category accent colours */
+  --cat-perc:  #E8472C;  /* coral  — Percussion */
+  --cat-bass:  #C87A2E;  /* copper — Bass       */
+  --cat-pad:   #E8A050;  /* amber  — Pad        */
+
+  /* Glassmorphism surfaces */
+  --glass-bg:           rgba(20, 13, 11, 0.78);
+  --glass-border:       rgba(194, 118, 46, 0.22);
+  --glass-border-hover: rgba(194, 118, 46, 0.55);
+  --glass-blur:         blur(20px) saturate(160%);
+
+  /* Typography */
+  --font-mono:      'JetBrains Mono', 'Fira Code', 'Consolas', ui-monospace, monospace;
+  --text-primary:   rgba(235, 210, 180, 0.93);
+  --text-secondary: rgba(175, 138, 95, 0.75);
+  --text-dim:       rgba(120, 88, 55, 0.58);
+
+  /* Motion */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --dur-fast:  150ms;
+  --dur-base:  240ms;
+  --dur-slow:  320ms;
+}
+
+/* ── Reset ──────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Root ───────────────────────────────────────────────────── */
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #080604;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Canvas ─────────────────────────────────────────────────── */
+#simCanvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 0;
+  cursor: default;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BOTTOM DOCK (#foundry-panel)
+   ══════════════════════════════════════════════════════════════ */
+#foundry-panel {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  z-index: 10;
+
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
+
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+
+  box-shadow:
+    0 6px 32px rgba(0, 0, 0, 0.60),
+    0 1px 0 rgba(255, 200, 120, 0.04) inset;
+
+  /* Centred via JS-free transform — also the D-key transition anchor */
+  transform: translateX(-50%) translateY(0);
+
+  transition:
+    border-color var(--dur-base) var(--ease-out-quart),
+    box-shadow   var(--dur-base) var(--ease-out-quart),
+    opacity      var(--dur-base) var(--ease-out-quart),
+    transform    var(--dur-base) var(--ease-out-quart);
+}
+
+#foundry-panel:hover {
+  border-color: var(--glass-border-hover);
+  box-shadow:
+    0 0 32px rgba(194, 118, 46, 0.14),
+    0 8px 40px rgba(0, 0, 0, 0.65),
+    0 1px 0 rgba(255, 200, 120, 0.07) inset;
+}
+
+/* D-key hidden state */
+body.ui-hidden #foundry-panel {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(14px);
+}
+
+/* ── Dock Sections ──────────────────────────────────────────── */
+.dock-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 22px 12px;
+}
+
+/* Vertical hairline between sections */
+.section-sep {
+  width: 1px;
+  margin: 14px 0;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--glass-border),
+    transparent
+  );
+}
+
+.dock-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+}
+
+.dock-icon {
+  font-size: 12px;
+  color: var(--accent-copper);
+  opacity: 0.9;
+  line-height: 1;
+}
+
+.dock-title {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.dock-divider {
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--glass-border), transparent);
+}
+
+.dock-hint {
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  color: var(--text-dim);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* ── Shape Tiles (now <button> elements, click-to-spawn) ──────── */
+.foundry-shapes {
+  display: flex;
+  gap: 10px;
+}
+
+.shape-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 11px 14px 9px;
+  width: 74px;
+
+  /* Reset <button> defaults */
+  font-family: var(--font-mono);
+  background: rgba(20, 12, 8, 0.72);
+  border: 1px solid rgba(194, 118, 46, 0.14);
+  border-radius: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+
+  transition:
+    border-color var(--dur-fast) var(--ease-out-quart),
+    background   var(--dur-fast) var(--ease-out-quart),
+    color        var(--dur-fast) var(--ease-out-quart),
+    transform    var(--dur-fast) var(--ease-out-quart),
+    box-shadow   var(--dur-fast) var(--ease-out-quart);
+}
+
+.shape-tile:hover {
+  border-color: var(--accent-copper);
+  background: rgba(194, 118, 46, 0.09);
+  color: var(--accent-amber);
+  transform: translateY(-3px);
+  box-shadow: 0 0 14px rgba(194, 118, 46, 0.20);
+}
+
+.shape-tile:active {
+  transform: scale(0.93) translateY(0);
+}
+
+.shape-tile:focus-visible {
+  outline: 2px solid var(--accent-copper);
+  outline-offset: 3px;
+}
+
+.shape-tile svg {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.shape-label {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ROTARY KNOB
+   ══════════════════════════════════════════════════════════════ */
+.knob-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+/* SVG element */
+#sample-knob {
+  width: 64px;
+  height: 64px;
+  cursor: ns-resize;
+  display: block;
+  overflow: visible;
+}
+
+#sample-knob:focus-visible {
+  outline: 2px solid var(--accent-copper);
+  outline-offset: 4px;
+  border-radius: 50%;
+}
+
+/* Track ring */
+.knob-track {
+  fill: none;
+  stroke: rgba(194, 118, 46, 0.18);
+  stroke-width: 2.5;
+}
+
+/* Rotating needle — JS writes transform: rotate(Xdeg) */
+
+#knob-needle-group {
+  transform-box: view-box;
+  transform-origin: 50% 50%; /* 50% of 56px = 28px */
+  transform: rotate(-135deg);
+}
+
+.knob-needle-line {
+  stroke: var(--accent-copper);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.knob-needle-dot {
+  fill: var(--accent-amber);
+}
+
+/* Centre hub */
+.knob-hub {
+  fill: rgba(18, 10, 6, 0.95);
+  stroke: rgba(194, 118, 46, 0.38);
+  stroke-width: 1;
+}
+
+/* Numeric readout beneath the knob */
+.knob-readout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+#knob-value {
+  font-size: 18px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  color: var(--accent-amber);
+  line-height: 1;
+}
+
+.knob-unit {
+  font-size: 8.5px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   FLOATING SOUND CATEGORY PILL MENU
+   ══════════════════════════════════════════════════════════════ */
+#sound-menu {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  gap: 5px;
+  padding: 5px 7px;
+
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.60);
+
+  /* JS sets left/top; this centres horizontally around the shape */
+  transform: translateX(-50%);
+
+  opacity: 1;
+  pointer-events: auto;
+  transition:
+    opacity  var(--dur-fast) var(--ease-out-quart),
+    transform var(--dur-fast) var(--ease-out-quart);
+}
+
+#sound-menu.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) scale(0.88) translateY(5px);
+}
+
+body.ui-hidden #sound-menu {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.sound-pill {
+  padding: 5px 13px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background   var(--dur-fast) var(--ease-out-quart),
+    border-color var(--dur-fast) var(--ease-out-quart),
+    color        var(--dur-fast) var(--ease-out-quart),
+    box-shadow   var(--dur-fast) var(--ease-out-quart);
+}
+
+/* Percussion → coral */
+.sound-pill[data-category="Percussion"]:hover,
+.sound-pill[data-category="Percussion"].active {
+  background:   rgba(232, 71, 44, 0.16);
+  border-color: var(--cat-perc);
+  color:        var(--cat-perc);
+  box-shadow:   0 0 10px rgba(232, 71, 44, 0.22);
+}
+
+/* Bass → copper */
+.sound-pill[data-category="Bass"]:hover,
+.sound-pill[data-category="Bass"].active {
+  background:   rgba(200, 122, 46, 0.16);
+  border-color: var(--cat-bass);
+  color:        var(--cat-bass);
+  box-shadow:   0 0 10px rgba(200, 122, 46, 0.22);
+}
+
+/* Pad → amber */
+.sound-pill[data-category="Pad"]:hover,
+.sound-pill[data-category="Pad"].active {
+  background:   rgba(232, 160, 80, 0.16);
+  border-color: var(--cat-pad);
+  color:        var(--cat-pad);
+  box-shadow:   0 0 10px rgba(232, 160, 80, 0.22);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LIVE CODE TELEMETRY PANEL
+   Slides in from the right.  Tab always visible.
+   .collapsed → only the 36px tab is visible.
+   ══════════════════════════════════════════════════════════════ */
+#telemetry-panel {
+  position: fixed;
+  right: 0;
+  top: 50%;
+  z-index: 15;
+
+  /* Flex row: [tab | content] */
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+
+  max-height: 90vh;
+
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-right: none;
+  border-radius: 14px 0 0 14px;
+
+  box-shadow:
+    -4px 0 24px rgba(0, 0, 0, 0.50),
+    0 0 0 1px rgba(255, 180, 80, 0.03) inset;
+
+  /* Default: fully open */
+  transform: translateY(-50%) translateX(0);
+
+  transition:
+    transform    var(--dur-slow) var(--ease-out-quart),
+    border-color var(--dur-base) var(--ease-out-quart),
+    box-shadow   var(--dur-base) var(--ease-out-quart);
+}
+
+/* Only the tab (40px, set by user) pokes out when collapsed */
+#telemetry-panel.collapsed {
+  transform: translateY(-50%) translateX(calc(100% - 40px));
+}
+
+#telemetry-panel:hover {
+  border-color: var(--glass-border-hover);
+}
+
+/* ── Tab handle (always visible) ─────────────────────────────── */
+.telemetry-tab {
+  flex-shrink: 0;
+  width: 40px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--glass-border);
+  border-radius: 0;
+  cursor: pointer;
+  color: var(--text-secondary);
+
+  /* Rotated "{ }" label */
+  writing-mode: vertical-rl;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  padding: 14px 0;
+
+  transition:
+    color      var(--dur-fast) var(--ease-out-quart),
+    background var(--dur-fast) var(--ease-out-quart);
+}
+
+.telemetry-tab:hover {
+  color: var(--accent-amber);
+  background: rgba(194, 118, 46, 0.08);
+}
+
+.telemetry-tab:focus-visible {
+  outline: 2px solid var(--accent-copper);
+  outline-offset: -2px;
+}
+
+/* ── Content pane ────────────────────────────────────────────── */
+.telemetry-inner {
+  width: 400px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;        /* enables scrolling inside flex child */
+  overflow: hidden;
+}
+
+.telemetry-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 16px 9px;
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.telemetry-title {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.telemetry-kbd {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 2px 6px;
+  background: rgba(194, 118, 46, 0.10);
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  color: var(--text-dim);
+}
+
+/* The <pre> code block */
+#telemetry-code {
+  padding: 14px 16px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--text-primary);
+  white-space: pre;
+  overflow-y: auto;
+  overflow-x: auto;
+  flex: 1;
+
+  /* Subtle syntax colouring handled by JS (plain textContent) */
+}
+
+/* Scrollbar styling for the telemetry pane */
+#telemetry-code::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+#telemetry-code::-webkit-scrollbar-track { background: transparent; }
+#telemetry-code::-webkit-scrollbar-thumb {
+  background: rgba(194, 118, 46, 0.30);
+  border-radius: 2px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CPM KNOB  — mirrors sample-knob; same SVG shape, own needle id
+   ══════════════════════════════════════════════════════════════ */
+#cpm-knob {
+  width: 64px;
+  height: 64px;
+  cursor: ns-resize;
+  display: block;
+  overflow: visible;
+}
+
+#cpm-knob:focus-visible {
+  outline: 2px solid var(--accent-copper);
+  outline-offset: 4px;
+  border-radius: 50%;
+}
+
+/* Apply the same transform-box fix the user set on #knob-needle-group */
+#cpm-needle-group {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  transform: rotate(-135deg); /* initial = MIN_CPM position */
+}
+
+/* Numeric readout for CPM */
+#cpm-value {
+  font-size: 18px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  color: var(--accent-amber);
+  line-height: 1;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DOCK LAYOUT: two-knob row + sequencer controls row
+   ══════════════════════════════════════════════════════════════ */
+.knobs-row {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.sequencer-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  justify-content: space-between;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PLAYBACK MODE PILL TOGGLE
+   ══════════════════════════════════════════════════════════════ */
+.mode-toggle {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: rgba(20, 12, 8, 0.65);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.mode-option {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+  transition:
+    background var(--dur-fast) var(--ease-out-quart),
+    color      var(--dur-fast) var(--ease-out-quart);
+}
+
+.mode-option.active {
+  background: var(--accent-copper);
+  color: rgba(255, 240, 215, 0.96);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PLAY / PAUSE BUTTON
+   ══════════════════════════════════════════════════════════════ */
+.play-btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: rgba(20, 12, 8, 0.72);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    border-color var(--dur-fast) var(--ease-out-quart),
+    color        var(--dur-fast) var(--ease-out-quart),
+    box-shadow   var(--dur-fast) var(--ease-out-quart);
+}
+
+.play-btn:hover {
+  border-color: var(--accent-amber);
+  color: var(--accent-amber);
+  box-shadow: 0 0 10px rgba(232, 160, 80, 0.22);
+}
+
+/* While playing: coral accent (matches trigger animation colour) */
+.play-btn.playing {
+  border-color: var(--accent-coral);
+  color: var(--accent-coral);
+  box-shadow: 0 0 8px rgba(232, 71, 44, 0.20);
+}
+
+.play-btn:focus-visible {
+  outline: 2px solid var(--accent-copper);
+  outline-offset: 3px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TELEMETRY FLASH ANIMATION
+   .telem-block  — wraps each shape's code section (set via JS)
+   .telem-flash  — CSS animation class toggled by flashTelemBlock()
+   ══════════════════════════════════════════════════════════════ */
+.telem-block {
+  display: block;      /* each shape occupies its own line-block */
+  border-radius: 3px;
+  padding: 1px 3px;
+  margin: 0 -3px;      /* compensate padding without shifting text */
+}
+
+@keyframes telemFlash {
+  0%   { background: rgba(242, 92, 84, 0.42); color: #F25C54; }
+  50%  { background: rgba(242, 92, 84, 0.18); }
+  100% { background: transparent; color: inherit; }
+}
+
+.telem-flash {
+  animation: telemFlash 0.38s ease-out forwards;
+}
+
+/* Dim the header span slightly to de-emphasise vs shape code blocks */
+.telem-header {
+  color: var(--text-dim);
+  display: block;
+  margin-bottom: 2px;
+}

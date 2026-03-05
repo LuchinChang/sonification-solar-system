@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Solar System Sonification</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+
+    <!-- ══ Orbital canvas — driven entirely by main.ts ══ -->
+    <canvas id="simCanvas"></canvas>
+
+    <!-- ╔════════════════════════════════════════════════════════╗ -->
+    <!-- ║            BOTTOM DOCK  (D key toggles)               ║ -->
+    <!-- ║  Left section: shape spawner  |  Right: knob control  ║ -->
+    <!-- ╚════════════════════════════════════════════════════════╝ -->
+    <aside id="foundry-panel" aria-label="Sonic Foundry and Orbital Engine">
+
+      <!-- ── Left: Shape Spawner ── -->
+      <section class="dock-section" id="foundry-shapes-section">
+        <header class="dock-header">
+          <span class="dock-icon" aria-hidden="true">◈</span>
+          <span class="dock-title">Sonic Foundry</span>
+        </header>
+        <div class="dock-divider"></div>
+        <div id="foundry-shapes" class="foundry-shapes" role="toolbar" aria-label="Spawn shapes">
+
+          <button
+            class="shape-tile"
+            data-shape="circle"
+            title="Spawn Circle at Sun"
+            aria-label="Spawn Circle"
+          >
+            <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <circle cx="16" cy="16" r="11" stroke="currentColor" stroke-width="1.5" />
+            </svg>
+            <span class="shape-label">Circle</span>
+          </button>
+
+          <button
+            class="shape-tile"
+            data-shape="triangle"
+            title="Spawn Triangle at Sun"
+            aria-label="Spawn Triangle"
+          >
+            <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <polygon points="16,4 28,27 4,27" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+            </svg>
+            <span class="shape-label">Triangle</span>
+          </button>
+
+          <button
+            class="shape-tile"
+            data-shape="rectangle"
+            title="Spawn Rectangle at Sun"
+            aria-label="Spawn Rectangle"
+          >
+            <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <rect x="3" y="9" width="26" height="14" rx="2" stroke="currentColor" stroke-width="1.5" />
+            </svg>
+            <span class="shape-label">Rect</span>
+          </button>
+
+        </div>
+        <p class="dock-hint">Click to spawn &nbsp;&middot;&nbsp; Click canvas shape to select &nbsp;&middot;&nbsp; Scroll to resize</p>
+      </section>
+
+      <!-- Vertical separator -->
+      <div class="section-sep" aria-hidden="true"></div>
+
+      <!-- ── Right: Orbital Engine ── -->
+      <section class="dock-section" id="controls-section">
+        <header class="dock-header">
+          <span class="dock-icon" aria-hidden="true">◉</span>
+          <span class="dock-title">Orbital Engine</span>
+        </header>
+        <div class="dock-divider"></div>
+
+        <!-- Two knobs side-by-side: Sample Rate + CPM -->
+        <div class="knobs-row">
+
+          <!-- Sample Rate knob (existing) -->
+          <div class="knob-container">
+            <svg
+              id="sample-knob"
+              viewBox="0 0 56 56"
+              xmlns="http://www.w3.org/2000/svg"
+              role="slider"
+              aria-label="Sample rate"
+              aria-valuemin="50"
+              aria-valuemax="2000"
+              aria-valuenow="500"
+              tabindex="0"
+            >
+              <circle cx="28" cy="28" r="22" class="knob-track" />
+              <g id="knob-needle-group">
+                <line x1="28" y1="28" x2="28" y2="9" class="knob-needle-line" />
+                <circle cx="28" cy="9" r="2.5" class="knob-needle-dot" />
+              </g>
+              <circle cx="28" cy="28" r="7" class="knob-hub" />
+            </svg>
+            <div class="knob-readout">
+              <span id="knob-value">500</span>
+              <span class="knob-unit">Samples / Orbit</span>
+            </div>
+          </div>
+
+          <!-- CPM knob (new) -->
+          <div class="knob-container">
+            <svg
+              id="cpm-knob"
+              viewBox="0 0 56 56"
+              xmlns="http://www.w3.org/2000/svg"
+              role="slider"
+              aria-label="Cycles per minute"
+              aria-valuemin="30"
+              aria-valuemax="240"
+              aria-valuenow="60"
+              tabindex="0"
+            >
+              <circle cx="28" cy="28" r="22" class="knob-track" />
+              <g id="cpm-needle-group">
+                <line x1="28" y1="28" x2="28" y2="9" class="knob-needle-line" />
+                <circle cx="28" cy="9" r="2.5" class="knob-needle-dot" />
+              </g>
+              <circle cx="28" cy="28" r="7" class="knob-hub" />
+            </svg>
+            <div class="knob-readout">
+              <span id="cpm-value">60</span>
+              <span class="knob-unit">Cycles / Min</span>
+            </div>
+          </div>
+
+        </div><!-- /knobs-row -->
+
+        <!-- Mode toggle + Play/Pause -->
+        <div class="sequencer-controls">
+
+          <!--
+            Pill toggle: clicking either option calls setPlaybackMode().
+            JS manages the .active class on each .mode-option.
+          -->
+          <div
+            class="mode-toggle"
+            id="mode-toggle"
+            role="group"
+            aria-label="Playback mode"
+          >
+            <span class="mode-option active" data-mode="constant-time"  title="All shapes complete one loop in the same time">Const T</span>
+            <span class="mode-option"        data-mode="constant-speed" title="Larger shapes take longer (fixed linear speed)">Const V</span>
+          </div>
+
+          <!-- Play / Pause button -->
+          <button
+            id="play-pause-btn"
+            class="play-btn playing"
+            aria-label="Pause playback"
+            title="Play / Pause  [ Space ]"
+          >⏸</button>
+
+        </div><!-- /sequencer-controls -->
+
+        <p class="dock-hint">⌘ / Ctrl + Scroll → Samples</p>
+      </section>
+
+    </aside>
+
+    <!-- ╔════════════════════════════════════════════════════════╗ -->
+    <!-- ║        SOUND CATEGORY PILL MENU  (canvas click)       ║ -->
+    <!-- ╚════════════════════════════════════════════════════════╝ -->
+    <div id="sound-menu" class="hidden" role="menu" aria-label="Sound category">
+      <button class="sound-pill" data-category="Percussion" role="menuitem">Perc</button>
+      <button class="sound-pill" data-category="Bass"       role="menuitem">Bass</button>
+      <button class="sound-pill" data-category="Pad"        role="menuitem">Pad</button>
+    </div>
+
+    <!-- ╔════════════════════════════════════════════════════════╗ -->
+    <!-- ║    LIVE CODE TELEMETRY PANEL  (I key toggles)         ║ -->
+    <!-- ╚════════════════════════════════════════════════════════╝ -->
+    <!--
+      Slides in from the right.
+      .collapsed = translateX(100% - 36px), only the tab is visible.
+      JS also hooks the tab button click + I keydown.
+    -->
+    <div id="telemetry-panel" class="collapsed" role="complementary" aria-label="Live code telemetry">
+
+      <!-- Handle tab — always visible on the right edge -->
+      <button class="telemetry-tab" id="telemetry-tab" title="Toggle Live Code  [ i ]" aria-expanded="false">
+        <span aria-hidden="true">{ }</span>
+      </button>
+
+      <!-- Content pane -->
+      <div class="telemetry-inner">
+        <header class="telemetry-header">
+          <span class="telemetry-title">Live Code</span>
+          <kbd class="telemetry-kbd">i</kbd>
+        </header>
+        <pre id="telemetry-code" aria-live="polite">// Spawn shapes from the dock below.
+// Select a shape to assign a sound category.
+        </pre>
+      </div>
+
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
