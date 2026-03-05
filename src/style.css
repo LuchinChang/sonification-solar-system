@@ -320,37 +320,42 @@ body.ui-hidden #foundry-panel {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   FLOATING SOUND CATEGORY PILL MENU
+   INSTRUMENT SELECTION PANEL  (floating, glassmorphism card)
+   JS sets left/top to float above the selected shape.
    ══════════════════════════════════════════════════════════════ */
 #sound-menu {
   position: fixed;
   z-index: 20;
+
   display: flex;
-  gap: 5px;
-  padding: 5px 7px;
+  flex-direction: column;
+  gap: 9px;
+  padding: 11px 13px 12px;
 
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--glass-border);
-  border-radius: 999px;
+  border-radius: 14px;
 
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.60);
+  box-shadow:
+    0 8px 36px rgba(0, 0, 0, 0.65),
+    0 1px 0 rgba(255, 200, 120, 0.05) inset;
 
-  /* JS sets left/top; this centres horizontally around the shape */
+  /* JS sets left; this centres horizontally around the shape */
   transform: translateX(-50%);
 
   opacity: 1;
   pointer-events: auto;
   transition:
-    opacity  var(--dur-fast) var(--ease-out-quart),
+    opacity   var(--dur-fast) var(--ease-out-quart),
     transform var(--dur-fast) var(--ease-out-quart);
 }
 
 #sound-menu.hidden {
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-50%) scale(0.88) translateY(5px);
+  transform: translateX(-50%) scale(0.90) translateY(6px);
 }
 
 body.ui-hidden #sound-menu {
@@ -358,18 +363,53 @@ body.ui-hidden #sound-menu {
   pointer-events: none !important;
 }
 
-.sound-pill {
-  padding: 5px 13px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.10em;
+/* ── Instrument group (label + row of buttons) ───────────────── */
+.instrument-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.instrument-group-label {
+  font-size: 7.5px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
+  color: var(--text-dim);
+  padding-left: 2px;
+  user-select: none;
+}
+
+.instrument-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* Hairline separator between groups */
+.instrument-sep {
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--glass-border), transparent);
+  margin: 1px -3px;
+}
+
+/* ── Instrument pill button ──────────────────────────────────── */
+.instrument-pill {
+  padding: 4px 11px;
+  min-width: 36px;
+
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+
   color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 999px;
+  background: rgba(20, 12, 8, 0.70);
+  border: 1px solid rgba(194, 118, 46, 0.15);
+  border-radius: 6px;
   cursor: pointer;
+
   transition:
     background   var(--dur-fast) var(--ease-out-quart),
     border-color var(--dur-fast) var(--ease-out-quart),
@@ -377,31 +417,17 @@ body.ui-hidden #sound-menu {
     box-shadow   var(--dur-fast) var(--ease-out-quart);
 }
 
-/* Percussion → coral */
-.sound-pill[data-category="Percussion"]:hover,
-.sound-pill[data-category="Percussion"].active {
-  background:   rgba(232, 71, 44, 0.16);
-  border-color: var(--cat-perc);
-  color:        var(--cat-perc);
-  box-shadow:   0 0 10px rgba(232, 71, 44, 0.22);
+.instrument-pill:hover {
+  background:   rgba(194, 118, 46, 0.12);
+  border-color: var(--accent-copper);
+  color:        var(--accent-amber);
 }
 
-/* Bass → copper */
-.sound-pill[data-category="Bass"]:hover,
-.sound-pill[data-category="Bass"].active {
-  background:   rgba(200, 122, 46, 0.16);
-  border-color: var(--cat-bass);
-  color:        var(--cat-bass);
-  box-shadow:   0 0 10px rgba(200, 122, 46, 0.22);
-}
-
-/* Pad → amber */
-.sound-pill[data-category="Pad"]:hover,
-.sound-pill[data-category="Pad"].active {
-  background:   rgba(232, 160, 80, 0.16);
-  border-color: var(--cat-pad);
-  color:        var(--cat-pad);
-  box-shadow:   0 0 10px rgba(232, 160, 80, 0.22);
+.instrument-pill.active {
+  background:   rgba(194, 118, 46, 0.22);
+  border-color: var(--accent-amber);
+  color:        var(--accent-amber);
+  box-shadow:   0 0 9px rgba(232, 160, 80, 0.25);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -546,10 +572,22 @@ body.ui-hidden #sound-menu {
   background: transparent;
   tab-size: 2;
   -moz-tab-size: 2;
+
+  /* Smooth transition for the code-flash effect */
+  transition: box-shadow 0.3s ease, background-color 0.3s ease;
 }
 
 #telemetry-code:focus {
   box-shadow: inset 0 0 0 1px rgba(194, 118, 46, 0.28);
+}
+
+/* ── Ctrl+Enter evaluation flash ─────────────────────────────── */
+/* Applied briefly via JS; transition: none ensures instant onset, */
+/* the removal of the class lets the 0.3s transition fade it out.  */
+#telemetry-code.code-flash {
+  box-shadow: 0 0 15px rgba(74, 222, 128, 0.40) inset !important;
+  background-color: rgba(74, 222, 128, 0.05) !important;
+  transition: none !important;
 }
 
 /* Scrollbar styling for the telemetry pane */
@@ -832,20 +870,4 @@ body.ui-hidden #sound-menu {
   text-transform: uppercase;
 }
 
-/* ══════════════════════════════════════════════════════════════
-   SOUND MENU — template pills + separator
-   ══════════════════════════════════════════════════════════════ */
-.sound-menu-sep {
-  width: 1px;
-  align-self: stretch;
-  margin: 4px 2px;
-  background: var(--glass-border);
-}
-
-/* Template pill active state (copper, distinct from category colours) */
-.template-pill.active {
-  background: rgba(200, 122, 46, 0.20);
-  border-color: var(--accent-copper);
-  color: var(--accent-copper);
-  box-shadow: 0 0 10px rgba(200, 122, 46, 0.18);
-}
+/* (old .sound-pill / .template-pill styles removed — replaced by .instrument-pill above) */

@@ -181,15 +181,46 @@
     </aside>
 
     <!-- ╔════════════════════════════════════════════════════════╗ -->
-    <!-- ║        SOUND CATEGORY PILL MENU  (canvas click)       ║ -->
+    <!-- ║    INSTRUMENT SELECTION PANEL  (canvas shape click)   ║ -->
+    <!-- ║  Grouped: Drums · Synths · Keys                       ║ -->
     <!-- ╚════════════════════════════════════════════════════════╝ -->
-    <div id="sound-menu" class="hidden" role="menu" aria-label="Sound category">
-      <button class="sound-pill" data-category="Percussion" role="menuitem">Perc</button>
-      <button class="sound-pill" data-category="Bass"       role="menuitem">Bass</button>
-      <button class="sound-pill" data-category="Pad"        role="menuitem">Pad</button>
-      <span class="sound-menu-sep" aria-hidden="true"></span>
-      <button class="sound-pill template-pill" data-template="0" role="menuitem">Drums</button>
-      <button class="sound-pill template-pill" data-template="1" role="menuitem">Arp</button>
+    <div id="sound-menu" class="hidden" role="menu" aria-label="Instrument selection">
+
+      <!-- ── Drums ── -->
+      <div class="instrument-group">
+        <span class="instrument-group-label">Drums</span>
+        <div class="instrument-row">
+          <button class="instrument-pill" data-instrument="bd" role="menuitem" title="Bass Drum">BD</button>
+          <button class="instrument-pill" data-instrument="sd" role="menuitem" title="Snare">SD</button>
+          <button class="instrument-pill" data-instrument="hh" role="menuitem" title="Hi-Hat">HH</button>
+          <button class="instrument-pill" data-instrument="cp" role="menuitem" title="Clap">CP</button>
+        </div>
+      </div>
+
+      <div class="instrument-sep" aria-hidden="true"></div>
+
+      <!-- ── Synths ── -->
+      <div class="instrument-group">
+        <span class="instrument-group-label">Synth</span>
+        <div class="instrument-row">
+          <button class="instrument-pill" data-instrument="sawtooth" role="menuitem" title="Sawtooth">Saw</button>
+          <button class="instrument-pill" data-instrument="sine"     role="menuitem" title="Sine">Sine</button>
+          <button class="instrument-pill" data-instrument="triangle" role="menuitem" title="Triangle">Tri</button>
+          <button class="instrument-pill" data-instrument="square"   role="menuitem" title="Square">Sqr</button>
+          <button class="instrument-pill" data-instrument="fm"       role="menuitem" title="FM Synth">FM</button>
+        </div>
+      </div>
+
+      <div class="instrument-sep" aria-hidden="true"></div>
+
+      <!-- ── Keys ── -->
+      <div class="instrument-group">
+        <span class="instrument-group-label">Keys</span>
+        <div class="instrument-row">
+          <button class="instrument-pill" data-instrument="piano" role="menuitem" title="Piano">Piano</button>
+        </div>
+      </div>
+
     </div>
 
     <!-- ╔════════════════════════════════════════════════════════╗ -->

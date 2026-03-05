@@ -2,22 +2,16 @@
 //
 // Strict TypeScript model for every user-placed shape on the orbital canvas.
 // Contains: geometry, hit-testing, playhead timing, collision detection,
-//           trigger animations, and mock Strudel code generation.
-// Audio (Strudel) is intentionally NOT wired here — mock output only.
+//           trigger animations, and Strudel code generation.
+// Audio (Strudel) is intentionally NOT wired here — code generation only.
 
 import type { Point } from './geometry';
 import { getLineCircleIntersections } from './geometry';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
-export type ShapeType    = 'circle' | 'triangle' | 'rectangle';
-export type SoundCategory = 'Percussion' | 'Bass' | 'Pad';
-export type PlaybackMode  = 'constant-time' | 'constant-speed';
-
-export interface SoundProfile {
-  category: SoundCategory | null;
-  pattern:  string | null;
-}
+export type ShapeType   = 'circle' | 'triangle' | 'rectangle';
+export type PlaybackMode = 'constant-time' | 'constant-speed';
 
 /** Pre-computed orbital intersection — angle (polar, 0…2π) + canvas coords. */
 export interface CachedIntersection {
@@ -28,6 +22,17 @@ export interface CachedIntersection {
 
 /** Resolution of the binary rhythm grid (angular bins mapped to Strudel struct). */
 export const RHYTHM_STEPS = 256;
+
+// ── Instrument classification ────────────────────────────────────────────────
+// Used to choose the right Strudel code template and accent colour.
+
+const DRUM_INSTRUMENTS = new Set(['bd', 'sd', 'hh', 'cp']);
+const KEY_INSTRUMENTS  = new Set(['piano']);
+// Synths (sawtooth, sine, triangle, square, fm, …) → everything else
+
+export function isDrum(instrument: string): boolean {
+  return DRUM_INSTRUMENTS.has(instrument);
+}
 
 // ── Module-private types ──────────────────────────────────────────────────────
 
@@ -67,7 +72,15 @@ export class CanvasShape {
   x: number;
   y: number;
   readonly type: ShapeType;
-  soundProfile: SoundProfile;
+
+  /**
+   * Active instrument — determines both the Strudel sound and the template.
+   * Drums:  bd | sd | hh | cp
+   * Synths: sawtooth | sine | triangle | square | fm
+   * Keys:   piano
+   */
+  instrument: string;
+
   /** Radius for circles; half-span for triangles / rectangles. */
   size: number;
   isSelected: boolean;
@@ -83,23 +96,20 @@ export class CanvasShape {
   activeAnimations: TriggerAnimation[];
   /** Intersection count — kept up-to-date by rebuildIntersectionCache(). */
   intersectionCount: number;
-  /** Index into the template array (0 = percussion, 1 = melodic arp). */
-  templateIndex: number;
 
   constructor(x: number, y: number, type: ShapeType, size = 60) {
-    this.id                 = ++_nextId;
-    this.x                  = x;
-    this.y                  = y;
-    this.type               = type;
-    this.soundProfile       = { category: null, pattern: null };
-    this.size               = size;
-    this.isSelected         = false;
-    this.playheadAngle      = 0;
-    this.prevPlayheadAngle  = 0;
+    this.id                  = ++_nextId;
+    this.x                   = x;
+    this.y                   = y;
+    this.type                = type;
+    this.instrument          = 'bd';   // default: bass drum
+    this.size                = size;
+    this.isSelected          = false;
+    this.playheadAngle       = 0;
+    this.prevPlayheadAngle   = 0;
     this.cachedIntersections = [];
-    this.activeAnimations   = [];
-    this.intersectionCount  = 0;
-    this.templateIndex      = 0;
+    this.activeAnimations    = [];
+    this.intersectionCount   = 0;
   }
 
   // ── Rendering ─────────────────────────────────────────────────────────────
@@ -109,10 +119,9 @@ export class CanvasShape {
     const color = this.accentColor;
     ctx.strokeStyle = color;
     ctx.lineWidth   = this.isSelected ? 2.5 : 1.5;
-    if (this.isSelected || this.soundProfile.category !== null) {
-      ctx.shadowColor = color;
-      ctx.shadowBlur  = this.isSelected ? 22 : 9;
-    }
+    // Always show glow — every shape has an instrument from spawn
+    ctx.shadowColor = color;
+    ctx.shadowBlur  = this.isSelected ? 22 : 9;
     ctx.beginPath();
     switch (this.type) {
       case 'circle':
@@ -136,14 +145,12 @@ export class CanvasShape {
   drawPlayhead(ctx: CanvasRenderingContext2D): void {
     const pos = this.getPlayheadPosition();
     ctx.save();
-    // Outer glow
     ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
     ctx.shadowBlur  = 14;
     ctx.fillStyle   = '#FFFFFF';
     ctx.beginPath();
     ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
     ctx.fill();
-    // Bright inner core (no shadow so it pops)
     ctx.shadowBlur  = 0;
     ctx.fillStyle   = '#FFFDE7';
     ctx.beginPath();
@@ -179,15 +186,12 @@ export class CanvasShape {
     ctx.closePath();
   }
 
-  // ── Accent colour — Martian Dusk ──────────────────────────────────────────
+  // ── Accent colour — derived from instrument type ──────────────────────────
 
   get accentColor(): string {
-    switch (this.soundProfile.category) {
-      case 'Percussion': return '#E8472C';
-      case 'Bass':       return '#C87A2E';
-      case 'Pad':        return '#E8A050';
-      default:           return 'rgba(175, 128, 72, 0.45)';
-    }
+    if (DRUM_INSTRUMENTS.has(this.instrument)) return '#E8472C'; // coral  — drums
+    if (KEY_INSTRUMENTS.has(this.instrument))  return '#E8A050'; // amber  — keys
+    return '#C87A2E';                                            // copper — synths
   }
 
   // ── Hit-testing ───────────────────────────────────────────────────────────
@@ -269,7 +273,7 @@ export class CanvasShape {
     for (const line of linkLines) {
       for (const pt of this.getIntersections(line)) {
         const raw   = Math.atan2(pt.y - this.y, pt.x - this.x);
-        const angle = raw < 0 ? raw + Math.PI * 2 : raw; // normalise to [0, 2π)
+        const angle = raw < 0 ? raw + Math.PI * 2 : raw;
         this.cachedIntersections.push({ angle, x: pt.x, y: pt.y });
       }
     }
@@ -280,11 +284,10 @@ export class CanvasShape {
    * Advance the playhead by one frame.
    * Constant Time  : all shapes share the same cycle duration regardless of size.
    * Constant Speed : cycle duration scales with size (fixed linear perimeter speed).
-   *                  Reference: size=100px takes baseDurationMs.
    */
   stepPlayhead(deltaMs: number, CPM: number, mode: PlaybackMode): void {
     if (deltaMs <= 0) return;
-    const baseDuration = (60 / CPM) * 1000; // ms per cycle
+    const baseDuration = (60 / CPM) * 1000;
     const duration     = mode === 'constant-time'
       ? baseDuration
       : baseDuration * (this.size / 100);
@@ -303,8 +306,8 @@ export class CanvasShape {
     const curr = this.playheadAngle;
     return this.cachedIntersections.filter(int =>
       curr >= prev
-        ? int.angle >= prev && int.angle < curr       // normal advance
-        : int.angle >= prev || int.angle < curr,      // wrapped past 2π
+        ? int.angle >= prev && int.angle < curr
+        : int.angle >= prev || int.angle < curr,
     );
   }
 
@@ -335,10 +338,6 @@ export class CanvasShape {
     }
   }
 
-  /**
-   * Cast a ray from (this.x, this.y) at `angle` and return the first
-   * intersection with the given convex polygon edges.
-   */
   private rayToEdge(angle: number, edges: [Point, Point][]): Point {
     const dx = Math.cos(angle), dy = Math.sin(angle);
     let bestT  = Infinity;
@@ -353,7 +352,6 @@ export class CanvasShape {
       const t  = (fx * ey - fy * ex) / det;
       const u  = (fx * dy - fy * dx) / det;
 
-      // t > 0 (forward along ray), u ∈ [0,1] (within edge segment)
       if (t > 1e-6 && u >= -1e-9 && u <= 1 + 1e-9 && t < bestT) {
         bestT  = t;
         result = { x: this.x + t * dx, y: this.y + t * dy };
@@ -362,7 +360,7 @@ export class CanvasShape {
     return result;
   }
 
-  // ── Rhythm string + Strudel code generation ─────────────────────────────
+  // ── Rhythm string + Strudel code generation ──────────────────────────────
 
   /**
    * Map cached intersection angles onto a fixed-width binary grid.
@@ -380,28 +378,55 @@ export class CanvasShape {
 
   /**
    * Produce executable Strudel code for this shape.
-   * Each block declares a rhythm variable, applies a template, and registers
-   * itself via `.p("sN")` so the REPL stacks all shapes into a single pattern.
+   *
+   * Structure (each block has stable markers for surgical regex updates):
+   *
+   *   // @shape-start-N
+   *   // [Type N: r=XX, ∩=YY, s="instrument"]
+   *   const r_N = "[~ ~ 1 ~ ...]"; // @rhythm-N    ← surgical patch target
+   *   <pattern>.p((N).toString())
+   *   // @shape-end-N
+   *
+   * The @rhythm-N marker lets main.ts patch ONLY the rhythm string when
+   * the shape resizes or the sample rate changes, preserving user edits
+   * to the pattern line below.
+   *
+   * The @shape-start/end markers let main.ts replace the entire block
+   * when the instrument changes (since the pattern template changes too).
    */
   toStrudelCode(): string {
-    const name    = this.type.charAt(0).toUpperCase() + this.type.slice(1);
-    const label   = `${name} ${this.id}`;
-    const r       = Math.round(this.size);
-    const n       = this.intersectionCount;
-    const tpl     = this.templateIndex === 0 ? 'Perc' : 'Arp';
-    const comment = `// [${label}: (r: ${r}, \u2229: ${n}, ${tpl})]`;
+    const typeName = this.type.charAt(0).toUpperCase() + this.type.slice(1);
+    const r        = Math.round(this.size);
+    const n        = this.intersectionCount;
+    const comment  = `// [${typeName} ${this.id}: r=${r}, \u2229=${n}, s="${this.instrument}"]`;
 
-    const v       = `r${this.id}`;
-    const rhythm  = this.generateRhythmString();
+    const v            = `r_${this.id}`;
+    const rhythm       = this.generateRhythmString();
+    const rhythmMarker = `// @rhythm-${this.id}`;
+    const startMarker  = `// @shape-start-${this.id}`;
+    const endMarker    = `// @shape-end-${this.id}`;
 
-    const templates: ((rv: string) => string)[] = [
-      // 0 — Percussion: short square-wave kick
-      rv => `note("c2").s("square").struct(${rv}).decay(.15).sustain(0).gain(0.8)`,
-      // 1 — Melodic arpeggiator: sawtooth chord
-      rv => `note("c4 e4 g4 b4").s("sawtooth").struct(${rv}).lpf(800).decay(.3).sustain(.1).gain(0.5)`,
-    ];
+    // Instrument-driven template:
+    // • Drums  → percussive single-note hit
+    // • Synths → 4-note chord arpeggio with low-pass filter
+    // • Keys   → melodic chord with softer envelope
+    //
+    // NOTE: .p((id).toString()) is used instead of .p("id") because the
+    // Strudel transpiler converts all string literals to m() Pattern objects,
+    // but .p() expects a plain string key.  (id).toString() evaluates at
+    // runtime without going through the transpiler.
+    const pat = DRUM_INSTRUMENTS.has(this.instrument)
+      ? `s("${this.instrument}").struct(${v}).gain(0.8)`
+      : KEY_INSTRUMENTS.has(this.instrument)
+        ? `note("c4 e4 g4 b4").s("${this.instrument}").struct(${v}).velocity(0.6).decay(.5).sustain(.2)`
+        : `note("c3 e3 g3 b3").s("${this.instrument}").struct(${v}).lpf(1200).decay(.3).sustain(.1).gain(0.5)`;
 
-    const pattern = (templates[this.templateIndex] ?? templates[0])(v);
-    return `${comment}\nconst ${v} = "${rhythm}";\n${pattern}.p("s${this.id}")`;
+    return [
+      startMarker,
+      comment,
+      `const ${v} = "${rhythm}"; ${rhythmMarker}`,
+      `${pat}.p((${this.id}).toString())`,
+      endMarker,
+    ].join('\n');
   }
 }
