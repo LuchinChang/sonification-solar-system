@@ -6,11 +6,11 @@
 // Audio (Strudel) is intentionally NOT wired here — code generation only.
 
 import type { Point } from './geometry';
-import { getLineCircleIntersections } from './geometry';
+import { getLineCircleIntersections, getRaySegmentDist } from './geometry';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
-export type ShapeType   = 'circle' | 'triangle' | 'rectangle';
+export type ShapeType   = 'circle' | 'triangle' | 'rectangle' | 'sweeper';
 export type PlaybackMode = 'constant-time' | 'constant-speed';
 
 /** Pre-computed orbital intersection — angle (polar, 0…2π) + canvas coords. */
@@ -18,6 +18,19 @@ export interface CachedIntersection {
   angle: number;
   x: number;
   y: number;
+}
+
+/**
+ * One density cluster on the sweeper ray — produced each frame by
+ * computeSweepClusters() and consumed by draw() and Strudel signal callbacks.
+ */
+export interface SweepCluster {
+  distance: number;  // px from ray origin
+  density:  number;  // number of link lines in this cluster
+  x:        number;  // canvas x of cluster centroid
+  y:        number;  // canvas y of cluster centroid
+  freq:     number;  // mapped Hz  : 100 + (dist/maxR) * 900
+  gain:     number;  // mapped amp : min(density/20, 1.0) * 0.7
 }
 
 /** Resolution of the binary rhythm grid (angular bins mapped to Strudel struct). */
@@ -42,6 +55,12 @@ interface TriggerAnimation {
   frame: number;
   maxFrames: number;
 }
+
+// ── Sweeper constants ─────────────────────────────────────────────────────────
+/** Max gap (px) between sorted distances before starting a new cluster. */
+const SWEEP_CLUSTER_THRESHOLD = 20;
+/** Accent colour for sweeper shapes. */
+const SWEEP_COLOR = '#2DD4BF';  // teal
 
 // ── Module-level ID counter ───────────────────────────────────────────────────
 let _nextId = 0;
@@ -96,6 +115,10 @@ export class CanvasShape {
   activeAnimations: TriggerAnimation[];
   /** Intersection count — kept up-to-date by rebuildIntersectionCache(). */
   intersectionCount: number;
+  /** Top-K clusters to track (sweeper only). */
+  k: number;
+  /** Live clusters recomputed every frame (sweeper only). */
+  sweepClusters: SweepCluster[];
 
   constructor(x: number, y: number, type: ShapeType, size = 60) {
     this.id                  = ++_nextId;
@@ -110,6 +133,8 @@ export class CanvasShape {
     this.cachedIntersections = [];
     this.activeAnimations    = [];
     this.intersectionCount   = 0;
+    this.k                   = 4;
+    this.sweepClusters       = [];
   }
 
   // ── Rendering ─────────────────────────────────────────────────────────────
@@ -136,13 +161,41 @@ export class CanvasShape {
           this.size * 2,      this.size * 1.2,
         );
         break;
+      case 'sweeper': {
+        const ex = this.x + this.size * Math.cos(this.playheadAngle);
+        const ey = this.y + this.size * Math.sin(this.playheadAngle);
+        ctx.moveTo(this.x, this.y);
+        ctx.lineTo(ex, ey);
+        break;
+      }
     }
     ctx.stroke();
+
+    // Radar blips — fixed size 3px, opacity varies with density
+    if (this.type === 'sweeper') {
+      const maxDensity = this.sweepClusters.length > 0
+        ? Math.max(...this.sweepClusters.map(c => c.density))
+        : 1;
+
+      for (const c of this.sweepClusters) {
+        const alpha = Math.min(c.density / maxDensity, 1.0);  // 0 to 1
+        const color = `rgba(45, 212, 191, ${Math.max(0.3, alpha)})`;  // min 0.3, max 1.0
+
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 3, 0, Math.PI * 2);  // fixed 3px radius
+        ctx.strokeStyle = color;
+        ctx.lineWidth   = 1.5;
+        ctx.shadowBlur  = 4;  // reduced from 6
+        ctx.stroke();
+      }
+    }
+
     ctx.restore();
   }
 
   /** Draws the travelling playhead dot on this shape's perimeter. */
   drawPlayhead(ctx: CanvasRenderingContext2D): void {
+    if (this.type === 'sweeper') return; // the rotating line IS the playhead
     const pos = this.getPlayheadPosition();
     ctx.save();
     ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
@@ -189,9 +242,10 @@ export class CanvasShape {
   // ── Accent colour — derived from instrument type ──────────────────────────
 
   get accentColor(): string {
-    if (DRUM_INSTRUMENTS.has(this.instrument)) return '#E8472C'; // coral  — drums
-    if (KEY_INSTRUMENTS.has(this.instrument))  return '#E8A050'; // amber  — keys
-    return '#C87A2E';                                            // copper — synths
+    if (this.type === 'sweeper')               return SWEEP_COLOR;  // violet — sweeper
+    if (DRUM_INSTRUMENTS.has(this.instrument)) return '#E8472C';    // coral  — drums
+    if (KEY_INSTRUMENTS.has(this.instrument))  return '#E8A050';    // amber  — keys
+    return '#C87A2E';                                               // copper — synths
   }
 
   // ── Hit-testing ───────────────────────────────────────────────────────────
@@ -207,6 +261,9 @@ export class CanvasShape {
         return px >= this.x - hw && px <= this.x + hw
             && py >= this.y - hh && py <= this.y + hh;
       }
+      case 'sweeper':
+        // Selectable by clicking within 20px of its origin (the Sun)
+        return Math.hypot(px - this.x, py - this.y) <= 20;
     }
   }
 
@@ -231,6 +288,8 @@ export class CanvasShape {
         return this.edgeIntersections(line, this.triangleEdges());
       case 'rectangle':
         return this.edgeIntersections(line, this.rectEdges());
+      case 'sweeper':
+        return []; // sweeper uses computeSweepClusters() instead
     }
   }
 
@@ -269,6 +328,7 @@ export class CanvasShape {
    * Also sets intersectionCount for the telemetry panel.
    */
   rebuildIntersectionCache(linkLines: { p1: Point; p2: Point }[]): void {
+    if (this.type === 'sweeper') return; // sweeper intersections are dynamic per-frame
     this.cachedIntersections = [];
     for (const line of linkLines) {
       for (const pt of this.getIntersections(line)) {
@@ -335,6 +395,8 @@ export class CanvasShape {
         return this.rayToEdge(this.playheadAngle, this.triangleEdges());
       case 'rectangle':
         return this.rayToEdge(this.playheadAngle, this.rectEdges());
+      case 'sweeper':
+        return { x: this.x, y: this.y }; // unreachable — drawPlayhead() returns early
     }
   }
 
@@ -358,6 +420,66 @@ export class CanvasShape {
       }
     }
     return result;
+  }
+
+  // ── Sweeper cluster computation ───────────────────────────────────────────
+
+  /**
+   * Recompute this.sweepClusters from the current playheadAngle.
+   * Called every animation frame for 'sweeper' shapes.
+   *
+   * Algorithm:
+   *   1. Ray-cast each link line against the sweeper ray → get distances.
+   *   2. Sort distances ascending.
+   *   3. Greedy 1D cluster: merge points within SWEEP_CLUSTER_THRESHOLD px.
+   *   4. Keep Top-K clusters by density (line count).
+   *   5. Map distance → freq (100–1000 Hz), density → gain (0.6–0.9).
+   */
+  computeSweepClusters(
+    linkLines: { p1: Point; p2: Point }[],
+    maxR:      number,
+  ): void {
+    // 1. Collect distances of all ray-segment hits within maxR
+    const dists: number[] = [];
+    const origin: Point = { x: this.x, y: this.y };
+    for (const line of linkLines) {
+      const t = getRaySegmentDist(origin, this.playheadAngle, line.p1, line.p2);
+      if (t !== null && t <= maxR) dists.push(t);
+    }
+
+    // 2. Sort ascending
+    dists.sort((a, b) => a - b);
+
+    // 3. Greedy 1D clustering
+    const groups: number[][] = [];
+    for (const d of dists) {
+      const last = groups[groups.length - 1];
+      if (last !== undefined && d - last[last.length - 1] <= SWEEP_CLUSTER_THRESHOLD) {
+        last.push(d);
+      } else {
+        groups.push([d]);
+      }
+    }
+
+    // 4. Top-K by density
+    const topK = groups
+      .sort((a, b) => b.length - a.length)
+      .slice(0, this.k);
+
+    // 5. Map to SweepCluster objects
+    const cos = Math.cos(this.playheadAngle);
+    const sin = Math.sin(this.playheadAngle);
+    this.sweepClusters = topK.map(group => {
+      const avgDist = group.reduce((s, v) => s + v, 0) / group.length;
+      return {
+        distance: avgDist,
+        density:  group.length,
+        x:        this.x + cos * avgDist,
+        y:        this.y + sin * avgDist,
+        freq:     100 + (avgDist / maxR) * 900,            // 100–1000 Hz
+        gain:     0.6 + Math.min(group.length / 20, 1.0) * 0.3,  // 0.6–0.9
+      };
+    });
   }
 
   // ── Rhythm string + Strudel code generation ──────────────────────────────
@@ -395,6 +517,7 @@ export class CanvasShape {
    * when the instrument changes (since the pattern template changes too).
    */
   toStrudelCode(): string {
+    if (this.type === 'sweeper') return this._toSweeperCode();
     const typeName = this.type.charAt(0).toUpperCase() + this.type.slice(1);
     const r        = Math.round(this.size);
     const n        = this.intersectionCount;
@@ -428,5 +551,43 @@ export class CanvasShape {
       `${pat}.p((${this.id}).toString())`,
       endMarker,
     ].join('\n');
+  }
+
+  /**
+   * Strudel code for the sweeper instrument.
+   *
+   * Generates k stacked sine patterns whose .freq() and .gain() read from
+   * globalThis globals (e.g. globalThis.__sw_1_f0) updated each rAF frame
+   * by main.ts.  signal() is available because evalScope loads @strudel/core
+   * onto globalThis, registering it as a global function.
+   *
+   * This code is generated once and never surgically patched — the live
+   * globals provide the continuous parameter updates without re-evaluation.
+   */
+  private _toSweeperCode(): string {
+    const startMarker = `// @shape-start-${this.id}`;
+    const endMarker   = `// @shape-end-${this.id}`;
+    const comment     = `// [Sweeper ${this.id}: k=${this.k}, s="${this.instrument}"]`;
+
+    // Choose sound based on instrument type
+    const sound = this.instrument === 'sine' ? 's("sine")'
+                : this.instrument === 'sawtooth' ? 's("sawtooth")'
+                : this.instrument === 'square' ? 's("square")'
+                : this.instrument === 'triangle' ? 's("triangle")'
+                : this.instrument === 'fm' ? 's("fm")'
+                : 's("sine")';  // fallback
+
+    const tones = Array.from({ length: this.k }, (_, i) =>
+      sound +
+      `.freq(signal(() => (globalThis.__sw_${this.id}_f${i} ?? 0)))` +
+      `.gain(signal(() => (globalThis.__sw_${this.id}_g${i} ?? 0)))`,
+    );
+
+    // Stack all k tones; use (id).toString() to avoid transpiler string conversion
+    const pat = tones[0]
+      + tones.slice(1).map(t => `.stack(${t})`).join('')
+      + `.p((${this.id}).toString())`;
+
+    return [startMarker, comment, pat, endMarker].join('\n');
   }
 }
