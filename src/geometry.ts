@@ -33,3 +33,27 @@ export function getLineCircleIntersections(
     
     return intersections;
 }
+
+/**
+ * Returns the distance t ≥ 0 from `origin` along the ray at `angle`
+ * where it hits segment [p1, p2] (with parametric s ∈ [0,1]),
+ * or null if there is no valid intersection.
+ *
+ * Solves: origin + t*(cosθ, sinθ) = p1 + s*(p2−p1)
+ */
+export function getRaySegmentDist(
+  origin: Point,
+  angle:  number,
+  p1:     Point,
+  p2:     Point,
+): number | null {
+  const dx = Math.cos(angle), dy = Math.sin(angle);
+  const ex = p2.x - p1.x,    ey = p2.y - p1.y;
+  const denom = dx * ey - dy * ex;
+  if (Math.abs(denom) < 1e-10) return null;           // parallel
+  const fx = p1.x - origin.x, fy = p1.y - origin.y;
+  const t  = (fx * ey - fy * ex) / denom;             // distance along ray
+  const s  = (fx * dy - fy * dx) / denom;             // param along segment
+  if (t < 0 || s < -1e-9 || s > 1 + 1e-9) return null;
+  return t;
+}

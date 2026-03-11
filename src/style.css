@@ -871,3 +871,37 @@ body.ui-hidden #sound-menu {
 }
 
 /* (old .sound-pill / .template-pill styles removed — replaced by .instrument-pill above) */
+
+/* ══════════════════════════════════════════════════════════════
+   SWEEPER K-SLIDER  (Top-K cluster count control)
+   ══════════════════════════════════════════════════════════════ */
+#sweeper-k-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 5px;
+  background: linear-gradient(to right, rgba(45, 212, 191, 0.3), rgba(45, 212, 191, 0.8));
+  outline: none;
+  border-radius: 2px;
+}
+
+#sweeper-k-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: #2DD4BF;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(45, 212, 191, 0.6);
+}
+
+#sweeper-k-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: #2DD4BF;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 8px rgba(45, 212, 191, 0.6);
+}
