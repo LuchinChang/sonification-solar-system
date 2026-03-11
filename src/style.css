@@ -40,6 +40,77 @@
   --dur-fast:  150ms;
   --dur-base:  240ms;
   --dur-slow:  320ms;
+
+  /* Surface tokens (variablised for theming) */
+  --bg-html:           #080604;
+  --tile-bg:           rgba(20, 12, 8, 0.72);
+  --knob-track-stroke: rgba(194, 118, 46, 0.18);
+  --hub-fill:          rgba(18, 10, 6, 0.95);
+  --hub-stroke:        rgba(194, 118, 46, 0.38);
+  --overlay-bg:        rgba(18, 15, 14, 0.92);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DAYLIGHT THEME  [data-theme="light"]
+   High-end glassmorphism adapted for bright sunlight.
+   Creamy off-white background · dark copper/brown lines ·
+   vermilion accents · light frosted glass with dark text.
+   ══════════════════════════════════════════════════════════════ */
+[data-theme="light"] {
+  /* Background */
+  --bg-html:           #EDE9E0;
+
+  /* Accent palette — vermilion replaces copper/amber */
+  --accent-copper:     #E03C31;
+  --accent-amber:      #B8441C;
+  --accent-coral:      #E03C31;
+  --cat-perc:          #E03C31;
+  --cat-bass:          #B8441C;
+  --cat-pad:           #D4621A;
+
+  /* Glass surfaces — light frosted */
+  --glass-bg:           rgba(252, 250, 246, 0.88);
+  --glass-border:       rgba(92, 58, 33, 0.20);
+  --glass-border-hover: rgba(92, 58, 33, 0.50);
+  --glass-blur:         blur(24px) saturate(180%);
+
+  /* Typography — dark warm text */
+  --text-primary:   rgba(35, 18, 6, 0.92);
+  --text-secondary: rgba(92, 58, 33, 0.85);
+  --text-dim:       rgba(120, 80, 50, 0.60);
+
+  /* Surface tokens */
+  --tile-bg:           rgba(252, 250, 246, 0.72);
+  --knob-track-stroke: rgba(92, 58, 33, 0.22);
+  --hub-fill:          rgba(242, 238, 230, 0.95);
+  --hub-stroke:        rgba(92, 58, 33, 0.38);
+  --overlay-bg:        rgba(240, 237, 230, 0.95);
+}
+
+/* Light-theme component overrides that reference hardcoded rgba values */
+[data-theme="light"] .shape-tile:hover {
+  background: rgba(224, 60, 49, 0.09);
+}
+[data-theme="light"] .instrument-pill:hover {
+  background: rgba(224, 60, 49, 0.12);
+}
+[data-theme="light"] .instrument-pill.active {
+  background: rgba(224, 60, 49, 0.22);
+  box-shadow: 0 0 9px rgba(224, 60, 49, 0.25);
+}
+[data-theme="light"] .telemetry-tab:hover {
+  background: rgba(92, 58, 33, 0.08);
+}
+[data-theme="light"] #foundry-panel {
+  box-shadow:
+    0 6px 32px rgba(100, 60, 20, 0.18),
+    0 1px 0 rgba(255, 240, 220, 0.40) inset;
+}
+[data-theme="light"] #foundry-panel:hover {
+  box-shadow:
+    0 0 32px rgba(224, 60, 49, 0.14),
+    0 8px 40px rgba(100, 60, 20, 0.22),
+    0 1px 0 rgba(255, 240, 220, 0.40) inset;
 }
 
 /* ── Reset ──────────────────────────────────────────────────── */
@@ -54,7 +125,7 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #080604;
+  background: var(--bg-html);
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--text-primary);
@@ -195,8 +266,8 @@ body.ui-hidden #foundry-panel {
 
   /* Reset <button> defaults */
   font-family: var(--font-mono);
-  background: rgba(20, 12, 8, 0.72);
-  border: 1px solid rgba(194, 118, 46, 0.14);
+  background: var(--tile-bg);
+  border: 1px solid var(--glass-border);
   border-radius: 12px;
   color: var(--text-secondary);
   cursor: pointer;
@@ -267,7 +338,7 @@ body.ui-hidden #foundry-panel {
 /* Track ring */
 .knob-track {
   fill: none;
-  stroke: rgba(194, 118, 46, 0.18);
+  stroke: var(--knob-track-stroke);
   stroke-width: 2.5;
 }
 
@@ -291,8 +362,8 @@ body.ui-hidden #foundry-panel {
 
 /* Centre hub */
 .knob-hub {
-  fill: rgba(18, 10, 6, 0.95);
-  stroke: rgba(194, 118, 46, 0.38);
+  fill: var(--hub-fill);
+  stroke: var(--hub-stroke);
   stroke-width: 1;
 }
 
@@ -405,8 +476,8 @@ body.ui-hidden #sound-menu {
   text-transform: uppercase;
 
   color: var(--text-secondary);
-  background: rgba(20, 12, 8, 0.70);
-  border: 1px solid rgba(194, 118, 46, 0.15);
+  background: var(--tile-bg);
+  border: 1px solid var(--glass-border);
   border-radius: 6px;
   cursor: pointer;
 
@@ -658,7 +729,7 @@ body.ui-hidden #sound-menu {
   display: flex;
   gap: 2px;
   padding: 2px;
-  background: rgba(20, 12, 8, 0.65);
+  background: var(--tile-bg);
   border: 1px solid var(--glass-border);
   border-radius: 999px;
   cursor: pointer;
@@ -693,7 +764,7 @@ body.ui-hidden #sound-menu {
   height: 34px;
   border-radius: 50%;
   border: 1px solid var(--glass-border);
-  background: rgba(20, 12, 8, 0.72);
+  background: var(--tile-bg);
   color: var(--text-secondary);
   font-size: 12px;
   font-family: var(--font-mono);
@@ -767,7 +838,7 @@ body.ui-hidden #sound-menu {
   align-items: center;
   justify-content: center;
 
-  background: rgba(18, 15, 14, 0.92);
+  background: var(--overlay-bg);
   backdrop-filter: blur(40px) saturate(120%);
   -webkit-backdrop-filter: blur(40px) saturate(120%);
   transition: opacity 0.5s var(--ease-out-quart);
@@ -871,3 +942,109 @@ body.ui-hidden #sound-menu {
 }
 
 /* (old .sound-pill / .template-pill styles removed — replaced by .instrument-pill above) */
+
+/* ══════════════════════════════════════════════════════════════
+   GLOBAL VIEWPORT FLASH  (Ctrl+Enter feedback)
+   body.global-flash::after renders a full-viewport green ring
+   that fades out in 150ms after evaluateAndFlash() fires.
+   ══════════════════════════════════════════════════════════════ */
+/* Hold full brightness for ~33% of the animation, then fade —
+   mirrors the code-flash behaviour (instant on, slow fade-out). */
+@keyframes globalFlashFade {
+  0%   { opacity: 1; }
+  33%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+body.global-flash::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  /* Inset glow + subtle background tint — matches code-flash aesthetic */
+  background: rgba(74, 222, 128, 0.04);
+  box-shadow: inset 0 0 60px rgba(74, 222, 128, 0.30);
+  animation: globalFlashFade 450ms ease-out forwards;
+  z-index: 999;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   THEME TOGGLE BUTTON  (near CPM knob in the dock)
+   ══════════════════════════════════════════════════════════════ */
+.theme-toggle-btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: var(--tile-bg);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    border-color var(--dur-fast) var(--ease-out-quart),
+    color        var(--dur-fast) var(--ease-out-quart),
+    box-shadow   var(--dur-fast) var(--ease-out-quart);
+}
+
+.theme-toggle-btn:hover {
+  border-color: var(--accent-amber);
+  color: var(--accent-amber);
+  box-shadow: 0 0 10px rgba(232, 160, 80, 0.22);
+}
+
+[data-theme="light"] .theme-toggle-btn:hover {
+  box-shadow: 0 0 10px rgba(224, 60, 49, 0.22);
+}
+
+.theme-toggle-btn:focus-visible {
+  outline: 2px solid var(--accent-copper);
+  outline-offset: 3px;
+}
+
+body.ui-hidden .theme-toggle-btn {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SYNC AUDIO BUTTON  (in telemetry footer)
+   ══════════════════════════════════════════════════════════════ */
+.sync-audio-btn {
+  margin-left: auto;
+  padding: 3px 11px;
+
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+
+  color: var(--text-secondary);
+  background: var(--tile-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  cursor: pointer;
+
+  transition:
+    background   var(--dur-fast) var(--ease-out-quart),
+    border-color var(--dur-fast) var(--ease-out-quart),
+    color        var(--dur-fast) var(--ease-out-quart),
+    box-shadow   var(--dur-fast) var(--ease-out-quart);
+}
+
+.sync-audio-btn:hover {
+  background:   rgba(74, 222, 128, 0.10);
+  border-color: rgba(74, 222, 128, 0.50);
+  color:        #50C878;
+  box-shadow:   0 0 8px rgba(74, 222, 128, 0.18);
+}
+
+.sync-audio-btn:focus-visible {
+  outline: 2px solid var(--accent-copper);
+  outline-offset: 2px;
+}
