@@ -182,7 +182,7 @@ function animate(now: number): void {
         // Sweeper: recompute clusters from current angle and publish to globalThis
         // so that signal() callbacks in the Strudel pattern read fresh values.
         shape.computeSweepClusters(linkLines, ORBITAL_MAX_RADIUS);
-        const g = globalThis as Record<string, number>;
+        const g = globalThis as unknown as Record<string, number>;
         for (let i = 0; i < shape.k; i++) {
           const c = shape.sweepClusters[i];
           g[`__sw_${shape.id}_f${i}`] = c ? c.freq : 0;
