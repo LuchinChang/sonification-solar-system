@@ -32,6 +32,9 @@ const EARTH_PERIOD = 365.25;
 const VENUS_PERIOD = 224.7;
 const SIM_YEARS    = 8;
 
+// Orbital bounds: furthest point from Sun (used for sweeper line length normalization)
+const ORBITAL_MAX_RADIUS = Math.max(EARTH_R, VENUS_R) * 1.05;  // ~315 px
+
 let SAMPLE_RATE   = 500;
 const MIN_SAMPLES = 10;
 const MAX_SAMPLES = 2000;
@@ -81,7 +84,9 @@ function rebuildAllCaches(): void {
 
 function spawnShape(type: ShapeType): void {
   const { x, y } = sunPos();
-  const s = new CanvasShape(x, y, type);
+  // Sweepers extend to MAX_SHAPE_SIZE; other shapes use the constructor default
+  const size = type === 'sweeper' ? MAX_SHAPE_SIZE : undefined;
+  const s = new CanvasShape(x, y, type, size);
   shapes.push(s);
   s.rebuildIntersectionCache(linkLines);
   setActiveShape(s);
@@ -138,13 +143,24 @@ function animate(now: number): void {
     for (const shape of shapes) {
       shape.stepPlayhead(dt, CPM, playbackMode);
 
-      const triggered = shape.checkAndFireCollisions();
-      if (triggered.length > 0) {
-        for (const int of triggered) shape.triggerAt(int.x, int.y);
-        flashTelemBlock(shape, now);
+      if (shape.type === 'sweeper') {
+        // Sweeper: recompute clusters from current angle and publish to globalThis
+        // so that signal() callbacks in the Strudel pattern read fresh values.
+        shape.computeSweepClusters(linkLines, ORBITAL_MAX_RADIUS);
+        const g = globalThis as Record<string, number>;
+        for (let i = 0; i < shape.k; i++) {
+          const c = shape.sweepClusters[i];
+          g[`__sw_${shape.id}_f${i}`] = c ? c.freq : 0;
+          g[`__sw_${shape.id}_g${i}`] = c ? c.gain : 0;
+        }
+      } else {
+        const triggered = shape.checkAndFireCollisions();
+        if (triggered.length > 0) {
+          for (const int of triggered) shape.triggerAt(int.x, int.y);
+          flashTelemBlock(shape, now);
+        }
+        shape.stepAnimations();
       }
-
-      shape.stepAnimations();
     }
   }
 
@@ -700,6 +716,23 @@ function showSoundMenu(shape: CanvasShape): void {
   instrumentBtns.forEach(btn =>
     btn.classList.toggle('active', btn.dataset['instrument'] === shape.instrument),
   );
+
+  // Show/hide sweeper-specific controls and sync k-slider
+  const sweeperControls = soundMenu.querySelector('#sweeper-controls');
+  if (sweeperControls) {
+    if (shape.type === 'sweeper') {
+      sweeperControls.classList.remove('hidden');
+      const kSlider = soundMenu.querySelector('#sweeper-k-slider') as HTMLInputElement;
+      const kValue = soundMenu.querySelector('#sweeper-k-value');
+      if (kSlider && kValue) {
+        kSlider.value = shape.k.toString();
+        kValue.textContent = shape.k.toString();
+      }
+    } else {
+      sweeperControls.classList.add('hidden');
+    }
+  }
+
   // Position above the shape; clamp to stay within viewport top
   soundMenu.style.left = `${shape.x}px`;
   soundMenu.style.top  = `${Math.max(10, shape.y - shape.size - 160)}px`;
@@ -727,6 +760,20 @@ instrumentBtns.forEach(btn => {
     if (audioInitialized) triggerEvaluation();
   });
 });
+
+// K-slider: control top-K cluster count for sweepers
+const kSlider = document.getElementById('sweeper-k-slider') as HTMLInputElement;
+const kValue = document.getElementById('sweeper-k-value');
+if (kSlider && kValue) {
+  kSlider.addEventListener('input', () => {
+    const k = parseInt(kSlider.value, 10);
+    kValue.textContent = k.toString();
+    if (activeShape?.type === 'sweeper') {
+      activeShape.k = k;
+      updateTelemetry(true);  // regenerate Strudel code
+    }
+  });
+}
 
 // ═══════════════════════════════════════════════════════════════
 // KEYBOARD SHORTCUTS
