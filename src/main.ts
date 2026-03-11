@@ -91,7 +91,7 @@ function spawnShape(type: ShapeType): void {
   s.rebuildIntersectionCache(linkLines);
   setActiveShape(s);
   hideSoundMenu();
-  updateTelemetry(true);  // full regen — shape list changed
+  updateTelemetry();   // update textarea only — no auto-eval
 }
 
 function setActiveShape(s: CanvasShape | null): void {
@@ -107,7 +107,7 @@ function deleteActiveShape(): void {
   _flashCooldowns.delete(activeShape.id);
   activeShape = null;
   hideSoundMenu();
-  updateTelemetry(true);  // full regen — shape list changed
+  updateTelemetry();   // update textarea only — no auto-eval
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -120,6 +120,41 @@ const MAX_CPM            = 120;
 let playbackMode: PlaybackMode = 'constant-time';
 let isPlaying            = true;
 let lastFrameTime        = 0;
+
+// ═══════════════════════════════════════════════════════════════
+// THEME STATE — canvas colors tracked in JS, CSS vars for UI
+// ═══════════════════════════════════════════════════════════════
+
+type AppTheme = 'dark' | 'light';
+let currentTheme: AppTheme = 'dark';
+
+interface CanvasThemeColors {
+  bg: string;
+  sunGlow0: string;
+  sunGlow1: string;
+  sunGlow2: string;
+  sunCore: string;
+  linkLine: string;
+}
+
+const CANVAS_THEMES: Record<AppTheme, CanvasThemeColors> = {
+  dark: {
+    bg:       '#120F0E',
+    sunGlow0: 'rgba(255, 170, 60, 0.85)',
+    sunGlow1: 'rgba(230, 100, 30, 0.35)',
+    sunGlow2: 'rgba(180,  60, 10, 0)',
+    sunCore:  '#FFA030',
+    linkLine: 'rgba(194, 118, 46, 0.32)',
+  },
+  light: {
+    bg:       '#F0EDE6',
+    sunGlow0: 'rgba(255, 180, 50, 0.80)',
+    sunGlow1: 'rgba(240, 120, 20, 0.30)',
+    sunGlow2: 'rgba(200,  80, 10, 0)',
+    sunCore:  '#F08010',
+    linkLine: 'rgba(92, 58, 33, 0.40)',
+  },
+};
 
 // ═══════════════════════════════════════════════════════════════
 // STRUDEL AUDIO STATE
@@ -169,20 +204,21 @@ function animate(now: number): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// RENDER LOOP — Martian Dusk palette
+// RENDER LOOP — theme-aware canvas painting
 // ═══════════════════════════════════════════════════════════════
 
 function drawScene(): void {
-  ctx.fillStyle = '#120F0E';
+  const ct = CANVAS_THEMES[currentTheme];
+  ctx.fillStyle = ct.bg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   const { x: cx, y: cy } = sunPos();
 
   // ── Sun (radial glow + solid core) ───────────────────────────
   const sunGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, 34);
-  sunGlow.addColorStop(0,   'rgba(255, 170, 60, 0.85)');
-  sunGlow.addColorStop(0.5, 'rgba(230, 100, 30, 0.35)');
-  sunGlow.addColorStop(1,   'rgba(180,  60, 10, 0)');
+  sunGlow.addColorStop(0,   ct.sunGlow0);
+  sunGlow.addColorStop(0.5, ct.sunGlow1);
+  sunGlow.addColorStop(1,   ct.sunGlow2);
   ctx.beginPath();
   ctx.arc(cx, cy, 34, 0, Math.PI * 2);
   ctx.fillStyle = sunGlow;
@@ -190,11 +226,11 @@ function drawScene(): void {
 
   ctx.beginPath();
   ctx.arc(cx, cy, 10, 0, Math.PI * 2);
-  ctx.fillStyle = '#FFA030';
+  ctx.fillStyle = ct.sunCore;
   ctx.fill();
 
-  // ── Orbital link lines (copper) ───────────────────────────────
-  ctx.strokeStyle = 'rgba(194, 118, 46, 0.32)';
+  // ── Orbital link lines ────────────────────────────────────────
+  ctx.strokeStyle = ct.linkLine;
   ctx.lineWidth   = 1;
   for (const line of linkLines) {
     ctx.beginPath();
@@ -249,15 +285,9 @@ function generateFullCode(): string {
 // These preserve user edits to pattern lines while updating only
 // what the geometry engine owns (the rhythm string or full block).
 
-/**
- * Patch ONLY the `const r_N = "...";` line in the textarea.
- * Used when shape resizes, moves, or sample rate changes.
- * User edits to the pattern line below are untouched.
- */
 function patchRhythm(shape: CanvasShape): void {
   const v      = `r_${shape.id}`;
   const marker = `// @rhythm-${shape.id}`;
-  // [^"]* safely matches rhythm content; rhythm strings never contain quotes
   const regex  = new RegExp(`const ${v} = "[^"]*"; ${marker}`);
   const newLine = `const ${v} = "${shape.generateRhythmString()}"; ${marker}`;
   const current = telemetryTextarea.value;
@@ -265,31 +295,18 @@ function patchRhythm(shape: CanvasShape): void {
   if (patched !== current) telemetryTextarea.value = patched;
 }
 
-/**
- * Replace the entire code block for one shape (between its @shape-start/end
- * markers).  Used when the instrument changes — the pattern template changes
- * completely, so preserving the old pattern line would produce wrong output.
- * Other shapes' code and any user edits outside this block are preserved.
- */
 function patchShapeBlock(shape: CanvasShape): void {
   const start = `// @shape-start-${shape.id}`;
   const end   = `// @shape-end-${shape.id}`;
-  // [\s\S]*? = any characters including newlines, non-greedy
   const regex = new RegExp(`${start}[\\s\\S]*?${end}`);
   const current = telemetryTextarea.value;
   if (regex.test(current)) {
     telemetryTextarea.value = current.replace(regex, shape.toStrudelCode());
   } else {
-    // Block not found (e.g. textarea was fully cleared) — fall back to full regen
     telemetryTextarea.value = generateFullCode();
   }
 }
 
-/**
- * Update only the header comment line with current counts.
- * Used when CPM, SAMPLE_RATE, or shape count changes but we don't
- * want to re-evaluate the Strudel engine.
- */
 function patchHeader(): void {
   const newHeader = `// Shapes: ${shapes.length}  |  Samples: ${SAMPLE_RATE}  |  CPM: ${CPM}`;
   telemetryTextarea.value = telemetryTextarea.value.replace(
@@ -298,10 +315,6 @@ function patchHeader(): void {
   );
 }
 
-/**
- * Patch all shapes' rhythm lines and update the header comment.
- * Call after SAMPLE_RATE changes or after a shape drag ends.
- */
 function patchAllRhythms(): void {
   for (const s of shapes) patchRhythm(s);
   patchHeader();
@@ -310,29 +323,14 @@ function patchAllRhythms(): void {
 // ── Full regeneration (add/delete) ────────────────────────────
 
 /**
- * Fully regenerate the textarea.  Used when the shape list changes
- * (add/delete) so the block structure itself changes.
- * @param shouldEval  When true, also debounce-trigger a Strudel re-evaluation.
+ * Fully regenerate the textarea from current shape state.
+ * Never auto-evaluates — press Ctrl+Enter or click Sync to run.
  */
-function updateTelemetry(shouldEval = true): void {
+function updateTelemetry(): void {
   telemetryTextarea.value = generateFullCode();
-  if (shouldEval && audioInitialized) {
-    triggerEvaluation();
-  }
 }
 
-// ── Debounced Strudel evaluation ──────────────────────────────
-
-let _evalTimer: ReturnType<typeof setTimeout> | null = null;
-const EVAL_DEBOUNCE_MS = 300;
-
-function triggerEvaluation(): void {
-  if (!audioInitialized || strudelRepl === null) return;
-  if (_evalTimer !== null) clearTimeout(_evalTimer);
-  _evalTimer = setTimeout(() => {
-    playLiveCode(telemetryTextarea.value);
-  }, EVAL_DEBOUNCE_MS);
-}
+// ── Strudel evaluation (manual only via evaluateAndFlash) ─────
 
 function playLiveCode(codeString: string): void {
   if (!strudelRepl) return;
@@ -366,24 +364,39 @@ function flashTelemBlock(shape: CanvasShape, now: number): void {
   evalStatusEl.classList.add('telem-flash');
 }
 
-// ── Ctrl+Enter manual evaluation from textarea ───────────────
-
-telemetryTextarea.addEventListener('keydown', e => {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-    e.preventDefault();
-    playLiveCode(telemetryTextarea.value);
-    // Green flash: instant onset (transition: none on .code-flash),
-    // smooth fade-out when the class is removed 150ms later.
-    telemetryTextarea.classList.add('code-flash');
-    setTimeout(() => telemetryTextarea.classList.remove('code-flash'), 150);
-  }
-});
-
 function toggleTelemetry(): void {
   const collapsed = telemetryPanel.classList.toggle('collapsed');
   telemetryTab.setAttribute('aria-expanded', String(!collapsed));
 }
 telemetryTab.addEventListener('click', toggleTelemetry);
+
+// ═══════════════════════════════════════════════════════════════
+// EVALUATE + GLOBAL FLASH
+// The ONLY entry-points for audio evaluation: Ctrl+Enter or Sync btn.
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Evaluate the live code and flash whichever surface is currently visible:
+ * - Panel open   → flash the textarea (code-flash), no global flash
+ * - Panel collapsed → flash the main view (global-flash), no textarea flash
+ *
+ * This is the single place that calls playLiveCode().
+ */
+function evaluateAndFlash(): void {
+  if (!audioInitialized) return;
+  playLiveCode(telemetryTextarea.value);
+
+  const panelOpen = !telemetryPanel.classList.contains('collapsed');
+  if (panelOpen) {
+    // Code panel visible — flash the textarea only
+    telemetryTextarea.classList.add('code-flash');
+    setTimeout(() => telemetryTextarea.classList.remove('code-flash'), 150);
+  } else {
+    // Code panel hidden — flash the main view instead
+    document.body.classList.add('global-flash');
+    setTimeout(() => document.body.classList.remove('global-flash'), 450);
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // STRUDEL AUDIO INITIALISATION  (called from overlay button)
@@ -395,23 +408,15 @@ async function initializeAudio(): Promise<void> {
     const ac = getAudioContext();
     if (ac.state === 'suspended') await ac.resume();
 
-    // initAudio boots the superdough WebAudio engine (worklet, routing, etc.).
-    // registerSynthSounds adds oscillator synths (square, sawtooth, sine,
-    // triangle, fm, supersaw…) into superdough's sound registry.
     await initAudio();
     registerSynthSounds();
 
-    // Register all Strudel globals onto globalThis (s, note, silence,
-    // struct, m, samples, etc.) so eval'd code can access them.
     await evalScope(
       import('@strudel/core'),
       import('@strudel/webaudio'),
       import('@strudel/mini'),
     );
 
-    // Best-effort: load the Tidal Dirt-Samples pack so that drum sounds
-    // (bd, sd, hh, cp) resolve at runtime.  Loads lazily from GitHub;
-    // browser caches after first use.  Synth sounds work without this.
     const globalSamples = (globalThis as Record<string, unknown>)['samples'];
     if (typeof globalSamples === 'function') {
       (globalSamples as (url: string) => Promise<void>)(
@@ -419,9 +424,6 @@ async function initializeAudio(): Promise<void> {
       ).catch(() => console.warn('[audio] Drum samples unavailable (offline?)'));
     }
 
-    // Create the REPL with the transpiler wired in.
-    // repl.evaluate() transpiles mini-notation, evals, and starts the
-    // scheduler automatically — no manual scheduler.start() needed.
     strudelRepl = repl({
       defaultOutput: webaudioOutput,
       getTime: () => ac.currentTime,
@@ -433,8 +435,8 @@ async function initializeAudio(): Promise<void> {
 
     document.getElementById('audio-overlay')!.classList.add('hidden');
 
-    // Kick off the first evaluation with whatever code is currently generated
-    updateTelemetry(true);
+    // Populate the textarea — press Ctrl+Enter or Sync to evaluate.
+    updateTelemetry();
   } catch (err) {
     console.error('[audio] init failed:', err);
   }
@@ -490,7 +492,7 @@ sampleKnobEl.addEventListener('keydown', e => {
   calculateLines();
   updateSampleKnobVisual();
   patchAllRhythms();
-  if (audioInitialized) triggerEvaluation();
+  // No auto-eval — press Ctrl+Enter to sync
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -531,7 +533,7 @@ cpmKnobEl.addEventListener('keydown', e => {
   CPM = clamp(CPM + delta, MIN_CPM, MAX_CPM);
   updateCpmKnobVisual();
   syncStrudelCps();
-  patchHeader();  // just update the header comment, no re-eval needed
+  patchHeader();
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -568,8 +570,6 @@ function togglePlayback(): void {
   playPauseBtn.setAttribute('aria-label', isPlaying ? 'Pause playback' : 'Resume playback');
   playPauseBtn.classList.toggle('playing', isPlaying);
 
-  // Sync the Strudel scheduler so audio play/pause matches the canvas.
-  // start() resumes from where it left off (or restarts if not yet started).
   if (strudelRepl !== null) {
     if (isPlaying) strudelRepl.start();
     else           strudelRepl.stop();
@@ -607,9 +607,8 @@ window.addEventListener('mousemove', e => {
     SAMPLE_RATE = clamp(knobDragStartRate + Math.round(dy * KNOB_SENSITIVITY), MIN_SAMPLES, MAX_SAMPLES);
     calculateLines();
     updateSampleKnobVisual();
-    // Surgical patch — only rhythm lines change, not the full structure
     patchAllRhythms();
-    if (audioInitialized) triggerEvaluation();  // debounced, safe on every frame
+    // No auto-eval — press Ctrl+Enter to sync
     return;
   }
 
@@ -619,7 +618,7 @@ window.addEventListener('mousemove', e => {
     CPM = clamp(cpmDragStartCPM + Math.round(dy * CPM_SENSITIVITY), MIN_CPM, MAX_CPM);
     updateCpmKnobVisual();
     syncStrudelCps();
-    patchHeader();  // CPM is only in the header comment — no re-eval needed
+    patchHeader();
     return;
   }
 
@@ -646,9 +645,8 @@ window.addEventListener('mouseup', () => {
 canvas.addEventListener('click', e => {
   if (didDragShape) {
     didDragShape = false;
-    // Surgical: only patch rhythm strings — user edits to pattern lines kept
     patchAllRhythms();
-    if (audioInitialized) triggerEvaluation();
+    // No auto-eval — press Ctrl+Enter to sync
     return;
   }
 
@@ -666,11 +664,11 @@ canvas.addEventListener('click', e => {
     setActiveShape(null);
     hideSoundMenu();
   }
-  // No updateTelemetry here — clicking a shape doesn't change code structure
 });
 
 // ═══════════════════════════════════════════════════════════════
 // WHEEL  — shape resize (plain scroll) | SAMPLE_RATE (Cmd/Ctrl+scroll)
+// Fine-grained step (+2/-2) for precise shape sizing.
 // ═══════════════════════════════════════════════════════════════
 
 canvas.addEventListener('wheel', e => {
@@ -681,16 +679,15 @@ canvas.addEventListener('wheel', e => {
     SAMPLE_RATE = clamp(SAMPLE_RATE + (up ? +25 : -25), MIN_SAMPLES, MAX_SAMPLES);
     calculateLines();
     updateSampleKnobVisual();
-    // Surgical: all rhythms change (density changes), structure doesn't
     patchAllRhythms();
-    if (audioInitialized) triggerEvaluation();
+    // No auto-eval
   } else if (activeShape !== null) {
-    activeShape.size = clamp(activeShape.size + (up ? +8 : -8), MIN_SHAPE_SIZE, MAX_SHAPE_SIZE);
+    // Fine-grained step: +2/-2 px for precise control
+    activeShape.size = clamp(activeShape.size + (up ? +2 : -2), MIN_SHAPE_SIZE, MAX_SHAPE_SIZE);
     activeShape.rebuildIntersectionCache(linkLines);
-    // Surgical: only this shape's rhythm line changes
     patchRhythm(activeShape);
     patchHeader();
-    if (audioInitialized) triggerEvaluation();
+    // No auto-eval
   }
 }, { passive: false });
 
@@ -712,7 +709,6 @@ const soundMenu       = document.getElementById('sound-menu')!;
 const instrumentBtns  = soundMenu.querySelectorAll<HTMLButtonElement>('[data-instrument]');
 
 function showSoundMenu(shape: CanvasShape): void {
-  // Mark the currently active instrument
   instrumentBtns.forEach(btn =>
     btn.classList.toggle('active', btn.dataset['instrument'] === shape.instrument),
   );
@@ -733,7 +729,7 @@ function showSoundMenu(shape: CanvasShape): void {
     }
   }
 
-  // Position above the shape; clamp to stay within viewport top
+
   soundMenu.style.left = `${shape.x}px`;
   soundMenu.style.top  = `${Math.max(10, shape.y - shape.size - 160)}px`;
   soundMenu.classList.remove('hidden');
@@ -749,15 +745,12 @@ instrumentBtns.forEach(btn => {
     const instr = btn.dataset['instrument']!;
     activeShape.instrument = instr;
 
-    // Update active pill state
     instrumentBtns.forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
-    // Replace this shape's entire code block — instrument change means
-    // the pattern template line changes too, not just the rhythm string.
     patchShapeBlock(activeShape);
     patchHeader();
-    if (audioInitialized) triggerEvaluation();
+    // No auto-eval — press Ctrl+Enter to sync
   });
 });
 
@@ -770,19 +763,58 @@ if (kSlider && kValue) {
     kValue.textContent = k.toString();
     if (activeShape?.type === 'sweeper') {
       activeShape.k = k;
-      updateTelemetry(true);  // regenerate Strudel code
+      updateTelemetry();  // regenerate Strudel code
     }
   });
 }
 
 // ═══════════════════════════════════════════════════════════════
+// SYNC AUDIO BUTTON  (#sync-audio-btn in telemetry footer)
+// ═══════════════════════════════════════════════════════════════
+
+document.getElementById('sync-audio-btn')!.addEventListener('click', () => {
+  evaluateAndFlash();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// THEME TOGGLE  (#theme-toggle near CPM knob)
+// ═══════════════════════════════════════════════════════════════
+
+const themeToggleBtn = document.getElementById('theme-toggle') as HTMLButtonElement;
+
+function setTheme(theme: AppTheme): void {
+  currentTheme = theme;
+  document.documentElement.dataset['theme'] = theme === 'light' ? 'light' : '';
+  themeToggleBtn.textContent = theme === 'light' ? '◑' : '☀';
+  themeToggleBtn.setAttribute(
+    'aria-label',
+    theme === 'light' ? 'Switch to Martian Dusk' : 'Switch to Daylight',
+  );
+  themeToggleBtn.title = theme === 'light' ? 'Martian Dusk theme' : 'Daylight theme';
+}
+
+themeToggleBtn.addEventListener('click', () => {
+  setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+});
+
+// ═══════════════════════════════════════════════════════════════
 // KEYBOARD SHORTCUTS
-//   D     → toggle dock + UI panels
-//   I     → toggle telemetry panel
-//   Space → play / pause
+//   Ctrl/Cmd+Enter → evaluate & flash (global, works from textarea too)
+//   D              → toggle dock + UI panels
+//   I              → toggle telemetry panel
+//   Space          → play / pause
+//   Backspace      → delete active shape
 // ═══════════════════════════════════════════════════════════════
 
 document.addEventListener('keydown', e => {
+  // Ctrl/Cmd+Enter: intercept globally before any input guard
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    e.preventDefault();
+    evaluateAndFlash();
+    return;
+  }
+
+  // All other shortcuts — skip when focus is in a text input
   if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
   switch (e.key.toLowerCase()) {
@@ -813,5 +845,6 @@ calculateLines();
 updateSampleKnobVisual();
 updateCpmKnobVisual();
 updateTelemetry();
+setTheme('dark');   // initialise button label + dataset attribute
 
 requestAnimationFrame(animate);
