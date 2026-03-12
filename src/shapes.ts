@@ -40,7 +40,8 @@ export const RHYTHM_STEPS = 256;
 // Used to choose the right Strudel code template and accent colour.
 
 const DRUM_INSTRUMENTS = new Set(['bd', 'sd', 'hh', 'cp']);
-const KEY_INSTRUMENTS  = new Set(['piano']);
+const KEY_INSTRUMENTS  = new Set(['superpiano']);
+const BASS_INSTRUMENTS = new Set(['gm_acoustic_bass']);
 // Synths (sawtooth, sine, triangle, square, fm, …) → everything else
 
 export function isDrum(instrument: string): boolean {
@@ -58,7 +59,7 @@ interface TriggerAnimation {
 
 // ── Sweeper constants ─────────────────────────────────────────────────────────
 /** Max gap (px) between sorted distances before starting a new cluster. */
-const SWEEP_CLUSTER_THRESHOLD = 3;
+const SWEEP_CLUSTER_THRESHOLD = 2;
 /** Accent colour for sweeper shapes. */
 const SWEEP_COLOR = '#2DD4BF';  // teal
 
@@ -117,22 +118,27 @@ export class CanvasShape {
   intersectionCount: number;
   /** Top-K clusters to track (sweeper only). */
   k: number;
-  /** Live clusters recomputed every frame (sweeper only). */
+  /** Number of evenly-spaced arms (sweeper only). Default 1, range 1–8. */
+  sweepCount: number;
+  /** Live clusters recomputed every frame (sweeper only). Flat across all arms. */
   sweepClusters: SweepCluster[];
   /**
    * Absolute angle of the 12 o'clock position (tick 0) in canvas radians [0, 2π).
    * Default 3π/2 = UP.  Adjusted per 1° scroll steps on selected sweepers.
    */
   startAngle: number;
-  /** Pre-computed clusters for each of 60 tick positions (sweeper only). */
-  sweepTicks: SweepCluster[][];
+  /**
+   * Pre-computed clusters indexed [armIdx][tickIdx].
+   * Rebuilt on geometry change (sample rate / resize / startAngle / k / sweepCount).
+   */
+  sweepTicks: SweepCluster[][][];
 
   constructor(x: number, y: number, type: ShapeType, size = 60) {
     this.id                  = ++_nextId;
     this.x                   = x;
     this.y                   = y;
     this.type                = type;
-    this.instrument          = 'bd';   // default: bass drum
+    this.instrument          = type === 'sweeper' ? 'sine' : 'bd';  // sweeper defaults to sine
     this.size                = size;
     this.isSelected          = false;
     this.playheadAngle       = 3 * Math.PI / 2;  // 12 o'clock, stays in [0, 2π)
@@ -141,6 +147,7 @@ export class CanvasShape {
     this.activeAnimations    = [];
     this.intersectionCount   = 0;
     this.k                   = 4;
+    this.sweepCount          = 1;
     this.sweepClusters       = [];
     this.startAngle          = 3 * Math.PI / 2;  // 90° math = UP = 12 o'clock
     this.sweepTicks          = [];
@@ -171,10 +178,15 @@ export class CanvasShape {
         );
         break;
       case 'sweeper': {
-        const ex = this.x + this.size * Math.cos(this.playheadAngle);
-        const ey = this.y + this.size * Math.sin(this.playheadAngle);
-        ctx.moveTo(this.x, this.y);
-        ctx.lineTo(ex, ey);
+        // Draw all N arms evenly spaced around the pivot
+        const armSpacing = (Math.PI * 2) / this.sweepCount;
+        for (let arm = 0; arm < this.sweepCount; arm++) {
+          const angle = (this.playheadAngle + arm * armSpacing) % (Math.PI * 2);
+          const ex = this.x + this.size * Math.cos(angle);
+          const ey = this.y + this.size * Math.sin(angle);
+          ctx.moveTo(this.x, this.y);
+          ctx.lineTo(ex, ey);
+        }
         break;
       }
     }
@@ -184,18 +196,24 @@ export class CanvasShape {
     if (this.type === 'sweeper' && this.sweepTicks.length > 0) {
       ctx.save();
       ctx.shadowBlur = 0;
-      const step = (Math.PI * 2) / 60;
-      for (let i = 0; i < this.sweepTicks.length; i++) {
-        const angle = (this.startAngle + i * step) % (Math.PI * 2);
-        const cos   = Math.cos(angle);
-        const sin   = Math.sin(angle);
-        for (const c of this.sweepTicks[i]) {
-          const tx = this.x + cos * c.distance;
-          const ty = this.y + sin * c.distance;
-          ctx.beginPath();
-          ctx.arc(tx, ty, 2, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(45, 212, 191, ${Math.min(c.gain * 0.35, 0.28)})`;
-          ctx.fill();
+      const TICKS      = 60;
+      const step       = (Math.PI * 2) / TICKS;
+      const armSpacing = (Math.PI * 2) / this.sweepCount;
+      for (let arm = 0; arm < this.sweepCount; arm++) {
+        const armOffset = arm * armSpacing;
+        const armTicks  = this.sweepTicks[arm] ?? [];
+        for (let i = 0; i < armTicks.length; i++) {
+          const angle = (this.startAngle + armOffset + i * step) % (Math.PI * 2);
+          const cos   = Math.cos(angle);
+          const sin   = Math.sin(angle);
+          for (const c of armTicks[i]) {
+            const tx = this.x + cos * c.distance;
+            const ty = this.y + sin * c.distance;
+            ctx.beginPath();
+            ctx.arc(tx, ty, 2, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(45, 212, 191, ${Math.min(c.gain * 0.35, 0.28)})`;
+            ctx.fill();
+          }
         }
       }
       ctx.restore();
@@ -515,29 +533,41 @@ export class CanvasShape {
 
   /**
    * Recompute this.sweepClusters from the current playheadAngle.
-   * Called every animation frame for live blip rendering.
+   * For multi-arm sweepers all N arm angles are computed; results are
+   * accumulated into a single flat array for the live-blip renderer.
+   * Called every animation frame.
    */
   computeSweepClusters(
     linkLines: { p1: Point; p2: Point }[],
     maxR:      number,
   ): void {
-    this.sweepClusters = this._clustersAtAngle(this.playheadAngle, linkLines, maxR);
+    const armSpacing = (Math.PI * 2) / this.sweepCount;
+    this.sweepClusters = [];
+    for (let arm = 0; arm < this.sweepCount; arm++) {
+      const angle = (this.playheadAngle + arm * armSpacing) % (Math.PI * 2);
+      this.sweepClusters.push(...this._clustersAtAngle(angle, linkLines, maxR));
+    }
   }
 
   /**
-   * Pre-compute clusters for all 60 tick positions evenly spaced from startAngle.
-   * Call when: shape spawned, linkLines rebuilt (sample rate / resize), startAngle changes, k changes.
+   * Pre-compute clusters for all arms × 60 tick positions.
+   * sweepTicks[armIdx][tickIdx] = SweepCluster[].
+   * Call when: shape spawned, linkLines rebuilt (sample rate / resize),
+   *            startAngle changes, k changes, or sweepCount changes.
    */
   rebuildSweepTicks(
     linkLines: { p1: Point; p2: Point }[],
     maxR:      number,
   ): void {
-    const TICKS = 60;
-    const step  = (Math.PI * 2) / TICKS;
-    this.sweepTicks = Array.from({ length: TICKS }, (_, i) => {
-      const angle = (this.startAngle + i * step) % (Math.PI * 2);
-      return this._clustersAtAngle(angle, linkLines, maxR);
-    });
+    const TICKS      = 60;
+    const step       = (Math.PI * 2) / TICKS;
+    const armSpacing = (Math.PI * 2) / this.sweepCount;
+    this.sweepTicks  = Array.from({ length: this.sweepCount }, (_, arm) =>
+      Array.from({ length: TICKS }, (_, i) => {
+        const angle = (this.startAngle + arm * armSpacing + i * step) % (Math.PI * 2);
+        return this._clustersAtAngle(angle, linkLines, maxR);
+      })
+    );
   }
 
   // ── Rhythm string + Strudel code generation ──────────────────────────────
@@ -553,7 +583,12 @@ export class CanvasShape {
       const step = Math.floor((int.angle / (Math.PI * 2)) * RHYTHM_STEPS) % RHYTHM_STEPS;
       grid[step] = '1';
     }
-    return `[${grid.join(' ')}]`;
+    // Format as 16 tokens per line → 16×16 square grid for readability.
+    // Strudel mini-notation treats newlines as whitespace separators.
+    const rows = Array.from({ length: Math.ceil(grid.length / 16) }, (_, i) =>
+      grid.slice(i * 16, i * 16 + 16).join(' ')
+    );
+    return `[${rows.join('\n  ')}]`;
   }
 
   /**
@@ -597,32 +632,35 @@ export class CanvasShape {
     // but .p() expects a plain string key.  (id).toString() evaluates at
     // runtime without going through the transpiler.
     const pat = DRUM_INSTRUMENTS.has(this.instrument)
-      ? `s("${this.instrument}").struct(${v}).gain(0.8)`
-      : KEY_INSTRUMENTS.has(this.instrument)
-        ? `note("c4 e4 g4 b4").s("${this.instrument}").struct(${v}).velocity(0.6).decay(.5).sustain(.2)`
-        : `note("c3 e3 g3 b3").s("${this.instrument}").struct(${v}).lpf(1200).decay(.3).sustain(.1).gain(0.5)`;
+      ? `s("${this.instrument}")\n  .struct(${v})\n  .gain(0.8)`
+      : BASS_INSTRUMENTS.has(this.instrument)
+        ? `note("c1 e1 g1")\n  .s("${this.instrument}")\n  .struct(${v})\n  .decay(1.8)\n  .sustain(0.7)\n  .gain(0.9)`
+        : KEY_INSTRUMENTS.has(this.instrument)
+          ? `note("c4 e4 g4 b4")\n  .s("${this.instrument}")\n  .struct(${v})\n  .velocity(0.6)\n  .decay(.5)\n  .sustain(.2)`
+          : `note("c3 e3 g3 b3")\n  .s("${this.instrument}")\n  .struct(${v})\n  .lpf(1200)\n  .decay(.3)\n  .sustain(.1)\n  .gain(0.5)`;
 
     return [
       startMarker,
       comment,
-      `const ${v} = "${rhythm}"; ${rhythmMarker}`,
-      `${pat}.p((${this.id}).toString())`,
+      `const ${v} = \`${rhythm}\`; ${rhythmMarker}`,
+      `${pat}\n  .p((${this.id}).toString())`,
       endMarker,
     ].join('\n');
   }
 
   /**
-   * Generates k stacked synth patterns using 60 pre-computed tick values.
+   * Generates sweepCount × k stacked synth patterns using 60 pre-computed tick values.
    *
    * One Strudel cycle = one full sweep rotation (CPS = CPM/60, period = 60/CPM s).
    * With 60 steps, each step fires at exactly one of the 60 clock-face tick positions.
-   * No signal() globals needed — the pattern is fully self-contained.
+   * Arms are evenly spaced; each arm contributes k tones via .stack().
    */
   private _toSweeperCode(): string {
     const startMarker = `// @shape-start-${this.id}`;
     const endMarker   = `// @shape-end-${this.id}`;
     const deg         = (this.startAngle * 180 / Math.PI).toFixed(1);
-    const comment     = `// [Sweeper ${this.id}: k=${this.k}, s="${this.instrument}", 12o'clock=${deg}°]`;
+    const armLabel    = this.sweepCount > 1 ? `, arms=${this.sweepCount}` : '';
+    const comment     = `// [Sweeper ${this.id}: k=${this.k}${armLabel}, s="${this.instrument}", 12o'clock=${deg}°]`;
 
     // Formats a value array into 8-per-line chunks for textarea readability.
     // Strudel mini-notation treats all whitespace (including \n) as separators.
@@ -631,26 +669,38 @@ export class CanvasShape {
         vals.slice(i * 8, i * 8 + 8).join(' ')
       ).join('\n    ');
 
-    // Build one tone per cluster slot using pre-computed 60-tick freq/gain arrays.
-    // sweepTicks[tickIdx][clusterSlot] — undefined when that slot is empty at that tick.
-    const tones = this.sweepTicks.length > 0
-      ? Array.from({ length: this.k }, (_, i) => {
-          const freqVals = this.sweepTicks.map(clusters => {
-            const c = clusters[i];
-            return c ? c.freq.toFixed(1) : '0';
-          });
-          const gainVals = this.sweepTicks.map(clusters => {
-            const c = clusters[i];
-            return c ? c.gain.toFixed(3) : '0';
-          });
-          // freq().gain().s() order: sound definition at end of chain
-          return `freq(\`${fmt(freqVals)}\`)\n  .gain(\`${fmt(gainVals)}\`)\n  .s("${this.instrument}")`;
-        })
-      : Array.from({ length: this.k }, () => `freq(440).gain(0).s("${this.instrument}")`);
+    // Build tones for each arm × each k cluster slot.
+    // sweepTicks[armIdx][tickIdx][clusterSlot]
+    const allTones: string[] = [];
+    for (let arm = 0; arm < this.sweepCount; arm++) {
+      const armTicks = this.sweepTicks[arm] ?? [];
+      if (armTicks.length === 0) {
+        // fallback: silent tones for this arm
+        for (let ki = 0; ki < this.k; ki++) {
+          allTones.push(`freq(440).gain(0).s("${this.instrument}")`);
+        }
+        continue;
+      }
+      for (let ki = 0; ki < this.k; ki++) {
+        const freqVals = armTicks.map(clusters => {
+          const c = clusters[ki];
+          return c ? c.freq.toFixed(1) : '0';
+        });
+        const gainVals = armTicks.map(clusters => {
+          const c = clusters[ki];
+          return c ? c.gain.toFixed(3) : '0';
+        });
+        allTones.push(`freq(\`${fmt(freqVals)}\`)\n  .gain(\`${fmt(gainVals)}\`)\n  .s("${this.instrument}")`);
+      }
+    }
 
-    // Stack all k tones; use (id).toString() to avoid transpiler string conversion
-    const pat = tones[0]
-      + tones.slice(1).map(t => `.stack(\n  ${t}\n)`).join('')
+    if (allTones.length === 0) {
+      allTones.push(`freq(440).gain(0).s("${this.instrument}")`);
+    }
+
+    // Stack all tones; use (id).toString() to avoid transpiler string conversion
+    const pat = allTones[0]
+      + allTones.slice(1).map(t => `.stack(\n  ${t}\n)`).join('')
       + `\n  .p((${this.id}).toString())`;
 
     return [startMarker, comment, pat, endMarker].join('\n');

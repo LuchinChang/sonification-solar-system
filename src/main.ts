@@ -190,11 +190,20 @@ function animate(now: number): void {
       if (shape.type === 'sweeper') {
         // Drive sweeper arm from AudioContext clock — stays in sync with Strudel's
         // WebAudio scheduler and eliminates rAF delta accumulation drift.
-        const cycleS = 60 / CPM;
-        const phase  = (sweepPhaseAtRef +
-          (getAudioContext().currentTime - sweepAudioRefTime) / cycleS) % 1;
-        shape.prevPlayheadAngle = shape.playheadAngle;
-        shape.playheadAngle     = (shape.startAngle + phase * Math.PI * 2) % (Math.PI * 2);
+        // Guard: fall back to stepPlayhead if AC not yet running or ref not set.
+        try {
+          if (audioInitialized && sweepAudioRefTime > 0) {
+            const cycleS = 60 / CPM;
+            const phase  = (sweepPhaseAtRef +
+              (getAudioContext().currentTime - sweepAudioRefTime) / cycleS) % 1;
+            shape.prevPlayheadAngle = shape.playheadAngle;
+            shape.playheadAngle     = (shape.startAngle + phase * Math.PI * 2) % (Math.PI * 2);
+          } else {
+            shape.stepPlayhead(dt, CPM, playbackMode);
+          }
+        } catch (_) {
+          shape.stepPlayhead(dt, CPM, playbackMode);
+        }
         shape.computeSweepClusters(linkLines, ORBITAL_MAX_RADIUS);
       } else {
         shape.stepPlayhead(dt, CPM, playbackMode);
@@ -297,8 +306,9 @@ function generateFullCode(): string {
 function patchRhythm(shape: CanvasShape): void {
   const v      = `r_${shape.id}`;
   const marker = `// @rhythm-${shape.id}`;
-  const regex  = new RegExp(`const ${v} = "[^"]*"; ${marker}`);
-  const newLine = `const ${v} = "${shape.generateRhythmString()}"; ${marker}`;
+  // Match backtick-delimited multi-line rhythm string ([\s\S]*? = any char incl. newlines)
+  const regex   = new RegExp(`const ${v} = \`[\\s\\S]*?\`; ${marker}`);
+  const newLine = `const ${v} = \`${shape.generateRhythmString()}\`; ${marker}`;
   const current = telemetryTextarea.value;
   const patched = current.replace(regex, newLine);
   if (patched !== current) telemetryTextarea.value = patched;
@@ -327,6 +337,19 @@ function patchHeader(): void {
 function patchAllRhythms(): void {
   for (const s of shapes) patchRhythm(s);
   patchHeader();
+}
+
+/**
+ * After linkLines change (sample rate / resize), re-emit Strudel blocks for
+ * sweeper shapes so freq/gain values reflect the new orbital geometry.
+ * Non-sweepers are handled surgically by patchAllRhythms().
+ */
+function rebuildSweeperPatterns(): void {
+  let hasSweeper = false;
+  for (const s of shapes) {
+    if (s.type === 'sweeper') { patchShapeBlock(s); hasSweeper = true; }
+  }
+  if (hasSweeper && audioInitialized) playLiveCode(telemetryTextarea.value);
 }
 
 // ── Full regeneration (add/delete) ────────────────────────────
@@ -431,6 +454,14 @@ async function initializeAudio(): Promise<void> {
       (globalSamples as (url: string) => Promise<void>)(
         'github:tidalcycles/Dirt-Samples/main',
       ).catch(() => console.warn('[audio] Drum samples unavailable (offline?)'));
+
+      // Acoustic bass — pitch-mapped MP3s from midi-js-soundfonts CDN.
+      // Strudel interpolates pitch between these anchor notes automatically.
+      const bassBase = 'https://gleitz.github.io/midi-js-soundfonts/MusyngKite/acoustic_bass-mp3/';
+      (globalSamples as (obj: Record<string, string[]>) => Promise<void>)({
+        gm_acoustic_bass: ['A1','C2','E2','G2','A2','C3','E3','G3','A3','C4']
+          .map(n => bassBase + n + '.mp3'),
+      }).catch(() => console.warn('[audio] Bass samples unavailable (offline?)'));
     }
 
     strudelRepl = repl({
@@ -503,6 +534,7 @@ sampleKnobEl.addEventListener('keydown', e => {
   calculateLines();
   updateSampleKnobVisual();
   patchAllRhythms();
+  rebuildSweeperPatterns();
   // No auto-eval — press Ctrl+Enter to sync
 });
 
@@ -650,6 +682,7 @@ window.addEventListener('mousemove', e => {
     calculateLines();
     updateSampleKnobVisual();
     patchAllRhythms();
+    rebuildSweeperPatterns();
     // No auto-eval — press Ctrl+Enter to sync
     return;
   }
@@ -730,6 +763,7 @@ canvas.addEventListener('wheel', e => {
     calculateLines();
     updateSampleKnobVisual();
     patchAllRhythms();
+    rebuildSweeperPatterns();
     // No auto-eval
   } else if (activeShape !== null) {
     if (activeShape.type === 'sweeper') {
@@ -774,16 +808,22 @@ function showSoundMenu(shape: CanvasShape): void {
     btn.classList.toggle('active', btn.dataset['instrument'] === shape.instrument),
   );
 
-  // Show/hide sweeper-specific controls and sync k-slider
+  // Show/hide sweeper-specific controls and sync sliders
   const sweeperControls = soundMenu.querySelector('#sweeper-controls');
   if (sweeperControls) {
     if (shape.type === 'sweeper') {
       sweeperControls.classList.remove('hidden');
-      const kSlider = soundMenu.querySelector('#sweeper-k-slider') as HTMLInputElement;
-      const kValue = soundMenu.querySelector('#sweeper-k-value');
-      if (kSlider && kValue) {
-        kSlider.value = shape.k.toString();
-        kValue.textContent = shape.k.toString();
+      const kSliderEl = soundMenu.querySelector('#sweeper-k-slider') as HTMLInputElement;
+      const kValueEl  = soundMenu.querySelector('#sweeper-k-value');
+      if (kSliderEl && kValueEl) {
+        kSliderEl.value      = shape.k.toString();
+        kValueEl.textContent = shape.k.toString();
+      }
+      const armsSliderEl = soundMenu.querySelector('#sweeper-arms-slider') as HTMLInputElement;
+      const armsValueEl  = soundMenu.querySelector('#sweeper-arms-value');
+      if (armsSliderEl && armsValueEl) {
+        armsSliderEl.value      = shape.sweepCount.toString();
+        armsValueEl.textContent = shape.sweepCount.toString();
       }
     } else {
       sweeperControls.classList.add('hidden');
@@ -824,6 +864,21 @@ if (kSlider && kValue) {
     kValue.textContent = k.toString();
     if (activeShape?.type === 'sweeper') {
       activeShape.k = k;
+      activeShape.rebuildSweepTicks(linkLines, ORBITAL_MAX_RADIUS);
+      updateTelemetry();
+      if (audioInitialized) playLiveCode(telemetryTextarea.value);
+    }
+  });
+}
+
+const armsSlider = document.getElementById('sweeper-arms-slider') as HTMLInputElement;
+const armsValue  = document.getElementById('sweeper-arms-value');
+if (armsSlider && armsValue) {
+  armsSlider.addEventListener('input', () => {
+    const arms = parseInt(armsSlider.value, 10);
+    armsValue.textContent = arms.toString();
+    if (activeShape?.type === 'sweeper') {
+      activeShape.sweepCount = arms;
       activeShape.rebuildSweepTicks(linkLines, ORBITAL_MAX_RADIUS);
       updateTelemetry();
       if (audioInitialized) playLiveCode(telemetryTextarea.value);

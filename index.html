@@ -11,6 +11,9 @@
       rel="stylesheet"
     />
   </head>
+  
+  <script data-goatcounter="https://lcchang.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+
   <body>
 
     <!-- ══ Audio-init overlay — browser policy requires user gesture ══ -->
@@ -240,7 +243,17 @@
       <div class="instrument-group">
         <span class="instrument-group-label">Keys</span>
         <div class="instrument-row">
-          <button class="instrument-pill" data-instrument="piano" role="menuitem" title="Piano">Piano</button>
+          <button class="instrument-pill" data-instrument="superpiano" role="menuitem" title="Piano (superpiano synth)">Piano</button>
+        </div>
+      </div>
+
+      <div class="instrument-sep" aria-hidden="true"></div>
+
+      <!-- ── Bass ── -->
+      <div class="instrument-group">
+        <span class="instrument-group-label">Bass</span>
+        <div class="instrument-row">
+          <button class="instrument-pill" data-instrument="gm_acoustic_bass" role="menuitem" title="Acoustic Bass">Acoustic</button>
         </div>
       </div>
 
@@ -263,6 +276,22 @@
             style="flex: 1;"
           />
           <span id="sweeper-k-value" style="font-size: 12px; min-width: 20px; text-align: right;">3</span>
+        </div>
+        <div style="margin-top: 10px; margin-bottom: 8px;">
+          <label for="sweeper-arms-slider" style="font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px;">
+            Arms
+          </label>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <input
+            id="sweeper-arms-slider"
+            type="range"
+            min="1"
+            max="8"
+            value="1"
+            style="flex: 1;"
+          />
+          <span id="sweeper-arms-value" style="font-size: 12px; min-width: 20px; text-align: right;">1</span>
         </div>
       </div>
 
