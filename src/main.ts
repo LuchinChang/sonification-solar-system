@@ -79,7 +79,10 @@ const sunPos = (): { x: number; y: number } => ({
 });
 
 function rebuildAllCaches(): void {
-  for (const s of shapes) s.rebuildIntersectionCache(linkLines);
+  for (const s of shapes) {
+    s.rebuildIntersectionCache(linkLines);
+    if (s.type === 'sweeper') s.rebuildSweepTicks(linkLines, ORBITAL_MAX_RADIUS);
+  }
 }
 
 function spawnShape(type: ShapeType): void {
@@ -89,9 +92,12 @@ function spawnShape(type: ShapeType): void {
   const s = new CanvasShape(x, y, type, size);
   shapes.push(s);
   s.rebuildIntersectionCache(linkLines);
+  if (s.type === 'sweeper') s.rebuildSweepTicks(linkLines, ORBITAL_MAX_RADIUS);
   setActiveShape(s);
   hideSoundMenu();
-  updateTelemetry();   // update textarea only — no auto-eval
+  updateTelemetry();
+  // Pre-warm Strudel compiler with the updated pattern so play starts instantly
+  if (audioInitialized) playLiveCode(telemetryTextarea.value);
 }
 
 function setActiveShape(s: CanvasShape | null): void {
@@ -114,19 +120,24 @@ function deleteActiveShape(): void {
 // SEQUENCER STATE
 // ═══════════════════════════════════════════════════════════════
 
-let CPM: number          = 60;
-const MIN_CPM            = 10;
-const MAX_CPM            = 120;
+let CPM: number          = 10;
+const MIN_CPM            = 5;
+const MAX_CPM            = 100;
 let playbackMode: PlaybackMode = 'constant-time';
-let isPlaying            = true;
+let isPlaying            = false;
 let lastFrameTime        = 0;
+
+// Sweeper AC-clock sync: drive playheadAngle from AudioContext.currentTime instead of
+// accumulated rAF deltaMs, eliminating clock drift vs. Strudel's WebAudio scheduler.
+let sweepAudioRefTime = 0;   // ac.currentTime captured when strudelRepl.start() is called
+let sweepPhaseAtRef   = 0;   // fractional cycle phase (0..1) accumulated up to that point
 
 // ═══════════════════════════════════════════════════════════════
 // THEME STATE — canvas colors tracked in JS, CSS vars for UI
 // ═══════════════════════════════════════════════════════════════
 
 type AppTheme = 'dark' | 'light';
-let currentTheme: AppTheme = 'dark';
+let currentTheme: AppTheme = 'light';
 
 interface CanvasThemeColors {
   bg: string;
@@ -144,7 +155,7 @@ const CANVAS_THEMES: Record<AppTheme, CanvasThemeColors> = {
     sunGlow1: 'rgba(230, 100, 30, 0.35)',
     sunGlow2: 'rgba(180,  60, 10, 0)',
     sunCore:  '#FFA030',
-    linkLine: 'rgba(194, 118, 46, 0.32)',
+    linkLine: 'rgba(194, 118, 46, 0.2)',
   },
   light: {
     bg:       '#F0EDE6',
@@ -152,7 +163,7 @@ const CANVAS_THEMES: Record<AppTheme, CanvasThemeColors> = {
     sunGlow1: 'rgba(240, 120, 20, 0.30)',
     sunGlow2: 'rgba(200,  80, 10, 0)',
     sunCore:  '#F08010',
-    linkLine: 'rgba(92, 58, 33, 0.40)',
+    linkLine: 'rgba(92, 58, 33, 0.2)',
   },
 };
 
@@ -176,19 +187,17 @@ function animate(now: number): void {
 
   if (isPlaying && dt > 0) {
     for (const shape of shapes) {
-      shape.stepPlayhead(dt, CPM, playbackMode);
-
       if (shape.type === 'sweeper') {
-        // Sweeper: recompute clusters from current angle and publish to globalThis
-        // so that signal() callbacks in the Strudel pattern read fresh values.
+        // Drive sweeper arm from AudioContext clock — stays in sync with Strudel's
+        // WebAudio scheduler and eliminates rAF delta accumulation drift.
+        const cycleS = 60 / CPM;
+        const phase  = (sweepPhaseAtRef +
+          (getAudioContext().currentTime - sweepAudioRefTime) / cycleS) % 1;
+        shape.prevPlayheadAngle = shape.playheadAngle;
+        shape.playheadAngle     = (shape.startAngle + phase * Math.PI * 2) % (Math.PI * 2);
         shape.computeSweepClusters(linkLines, ORBITAL_MAX_RADIUS);
-        const g = globalThis as unknown as Record<string, number>;
-        for (let i = 0; i < shape.k; i++) {
-          const c = shape.sweepClusters[i];
-          g[`__sw_${shape.id}_f${i}`] = c ? c.freq : 0;
-          g[`__sw_${shape.id}_g${i}`] = c ? c.gain : 0;
-        }
       } else {
+        shape.stepPlayhead(dt, CPM, playbackMode);
         const triggered = shape.checkAndFireCollisions();
         if (triggered.length > 0) {
           for (const int of triggered) shape.triggerAt(int.x, int.y);
@@ -435,8 +444,10 @@ async function initializeAudio(): Promise<void> {
 
     document.getElementById('audio-overlay')!.classList.add('hidden');
 
-    // Populate the textarea — press Ctrl+Enter or Sync to evaluate.
+    // Populate the textarea and pre-warm the Strudel compiler so the pattern
+    // is ready before the user hits play (avoids first-play compile delay).
     updateTelemetry();
+    playLiveCode(telemetryTextarea.value);
   } catch (err) {
     console.error('[audio] init failed:', err);
   }
@@ -530,6 +541,13 @@ cpmKnobEl.addEventListener('keydown', e => {
   if (e.key === 'ArrowDown' || e.key === 'ArrowLeft')  delta = -5;
   if (delta === 0) return;
   e.preventDefault();
+  // Re-anchor sweep phase at old CPM before changing tempo — prevents arm jump.
+  if (isPlaying && audioInitialized) {
+    const cycleS_old = 60 / CPM;
+    sweepPhaseAtRef  = (sweepPhaseAtRef +
+      (getAudioContext().currentTime - sweepAudioRefTime) / cycleS_old) % 1;
+    sweepAudioRefTime = getAudioContext().currentTime;
+  }
   CPM = clamp(CPM + delta, MIN_CPM, MAX_CPM);
   updateCpmKnobVisual();
   syncStrudelCps();
@@ -565,14 +583,38 @@ const playPauseBtn = document.getElementById('play-pause-btn') as HTMLButtonElem
 
 function togglePlayback(): void {
   isPlaying = !isPlaying;
-  if (isPlaying) lastFrameTime = 0;
   playPauseBtn.textContent = isPlaying ? '⏸' : '▶';
   playPauseBtn.setAttribute('aria-label', isPlaying ? 'Pause playback' : 'Resume playback');
   playPauseBtn.classList.toggle('playing', isPlaying);
 
-  if (strudelRepl !== null) {
-    if (isPlaying) strudelRepl.start();
-    else           strudelRepl.stop();
+  if (isPlaying) {
+    lastFrameTime = 0;
+    if (strudelRepl !== null) {
+      // Un-suspend the AudioContext (may have been suspended on pause)
+      try { void getAudioContext().resume(); } catch (_) { /* not yet initialized */ }
+      // Start the clock immediately — pattern was pre-warmed on spawn/init,
+      // so audio begins with minimal delay.  Evaluate runs in parallel to keep
+      // the compiled pattern up-to-date for any changes made while paused.
+      strudelRepl.start();
+      // Anchor sweeper arm to this exact audio moment.
+      // sweepPhaseAtRef is preserved from the last pause so the arm resumes
+      // from the same position without jumping.
+      try { sweepAudioRefTime = getAudioContext().currentTime; } catch (_) {}
+      strudelRepl.evaluate(telemetryTextarea.value)
+        .then(() => setEvalStatus('ok'))
+        .catch((err: unknown) => { console.warn('[strudel-eval async]', err); setEvalStatus('error'); });
+    }
+  } else {
+    // Accumulate phase before stopping so the arm resumes from the right position.
+    try {
+      const cycleS = 60 / CPM;
+      sweepPhaseAtRef = (sweepPhaseAtRef +
+        (getAudioContext().currentTime - sweepAudioRefTime) / cycleS) % 1;
+    } catch (_) { /* audio not yet initialized */ }
+    if (strudelRepl !== null) strudelRepl.stop();
+    // Suspend the AudioContext to kill any oscillators still running in the
+    // lookahead buffer — this is the only reliable way to stop them instantly.
+    try { void getAudioContext().suspend(); } catch (_) { /* not yet initialized */ }
   }
 }
 
@@ -614,8 +656,16 @@ window.addEventListener('mousemove', e => {
 
   // ── CPM knob ─────────────────────────────────────────────────
   if (cpmDragging) {
-    const dy = cpmDragStartY - e.clientY;
-    CPM = clamp(cpmDragStartCPM + Math.round(dy * CPM_SENSITIVITY), MIN_CPM, MAX_CPM);
+    const dy     = cpmDragStartY - e.clientY;
+    const newCPM = clamp(cpmDragStartCPM + Math.round(dy * CPM_SENSITIVITY), MIN_CPM, MAX_CPM);
+    // Re-anchor sweep phase at old CPM before changing tempo — prevents arm jump.
+    if (newCPM !== CPM && isPlaying && audioInitialized) {
+      const cycleS_old = 60 / CPM;
+      sweepPhaseAtRef  = (sweepPhaseAtRef +
+        (getAudioContext().currentTime - sweepAudioRefTime) / cycleS_old) % 1;
+      sweepAudioRefTime = getAudioContext().currentTime;
+    }
+    CPM = newCPM;
     updateCpmKnobVisual();
     syncStrudelCps();
     patchHeader();
@@ -682,12 +732,23 @@ canvas.addEventListener('wheel', e => {
     patchAllRhythms();
     // No auto-eval
   } else if (activeShape !== null) {
-    // Fine-grained step: +2/-2 px for precise control
-    activeShape.size = clamp(activeShape.size + (up ? +2 : -2), MIN_SHAPE_SIZE, MAX_SHAPE_SIZE);
-    activeShape.rebuildIntersectionCache(linkLines);
-    patchRhythm(activeShape);
-    patchHeader();
-    // No auto-eval
+    if (activeShape.type === 'sweeper') {
+      // Nudge 12 o'clock by 1° per scroll click; arm keeps rotating uninterrupted
+      const step  = Math.PI / 180;
+      const delta = up ? -step : step;
+      activeShape.startAngle = ((activeShape.startAngle + delta) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+      activeShape.rebuildSweepTicks(linkLines, ORBITAL_MAX_RADIUS);
+      drawScene();  // instant repaint — don't wait for next rAF frame
+      updateTelemetry();
+      if (audioInitialized) playLiveCode(telemetryTextarea.value);
+    } else {
+      // Fine-grained step: +2/-2 px for precise control
+      activeShape.size = clamp(activeShape.size + (up ? +2 : -2), MIN_SHAPE_SIZE, MAX_SHAPE_SIZE);
+      activeShape.rebuildIntersectionCache(linkLines);
+      patchRhythm(activeShape);
+      patchHeader();
+      // No auto-eval
+    }
   }
 }, { passive: false });
 
@@ -763,7 +824,9 @@ if (kSlider && kValue) {
     kValue.textContent = k.toString();
     if (activeShape?.type === 'sweeper') {
       activeShape.k = k;
-      updateTelemetry();  // regenerate Strudel code
+      activeShape.rebuildSweepTicks(linkLines, ORBITAL_MAX_RADIUS);
+      updateTelemetry();
+      if (audioInitialized) playLiveCode(telemetryTextarea.value);
     }
   });
 }
@@ -845,6 +908,11 @@ calculateLines();
 updateSampleKnobVisual();
 updateCpmKnobVisual();
 updateTelemetry();
-setTheme('dark');   // initialise button label + dataset attribute
+setTheme('light');   // initialise button label + dataset attribute
+
+// Sync play/pause button to match initial isPlaying state
+playPauseBtn.textContent = isPlaying ? '⏸' : '▶';
+playPauseBtn.setAttribute('aria-label', isPlaying ? 'Pause playback' : 'Resume playback');
+playPauseBtn.classList.toggle('playing', isPlaying);
 
 requestAnimationFrame(animate);
