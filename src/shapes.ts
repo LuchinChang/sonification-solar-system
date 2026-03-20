@@ -127,9 +127,11 @@ export class CanvasShape {
    * Default 3π/2 = UP.  Adjusted per 1° scroll steps on selected sweepers.
    */
   startAngle: number;
+  /** Number of discrete positions per full revolution (sweeper only). Default 60. */
+  ticks: number;
   /**
    * Pre-computed clusters indexed [armIdx][tickIdx].
-   * Rebuilt on geometry change (sample rate / resize / startAngle / k / sweepCount).
+   * Rebuilt on geometry change (sample rate / resize / startAngle / k / sweepCount / ticks).
    */
   sweepTicks: SweepCluster[][][];
 
@@ -150,6 +152,7 @@ export class CanvasShape {
     this.sweepCount          = 1;
     this.sweepClusters       = [];
     this.startAngle          = 3 * Math.PI / 2;  // 90° math = UP = 12 o'clock
+    this.ticks               = 60;
     this.sweepTicks          = [];
   }
 
@@ -196,7 +199,7 @@ export class CanvasShape {
     if (this.type === 'sweeper' && this.sweepTicks.length > 0) {
       ctx.save();
       ctx.shadowBlur = 0;
-      const TICKS      = 60;
+      const TICKS      = this.ticks;
       const step       = (Math.PI * 2) / TICKS;
       const armSpacing = (Math.PI * 2) / this.sweepCount;
       for (let arm = 0; arm < this.sweepCount; arm++) {
@@ -559,7 +562,7 @@ export class CanvasShape {
     linkLines: { p1: Point; p2: Point }[],
     maxR:      number,
   ): void {
-    const TICKS      = 60;
+    const TICKS      = this.ticks;
     const step       = (Math.PI * 2) / TICKS;
     const armSpacing = (Math.PI * 2) / this.sweepCount;
     this.sweepTicks  = Array.from({ length: this.sweepCount }, (_, arm) =>
