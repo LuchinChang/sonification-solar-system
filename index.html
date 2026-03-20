@@ -25,6 +25,23 @@
       </button>
     </div>
 
+    <!-- ══ Pattern selector overlay — shown after audio init ══ -->
+    <div id="pattern-selector" class="hidden">
+      <div class="pattern-band">
+        <h2 class="pattern-band-title">Choose a Planetary Pattern</h2>
+        <div class="pattern-cards" id="pattern-cards">
+          <!-- Cards injected by main.ts from PATTERNS array -->
+        </div>
+        <p class="pattern-band-hint">Press <kbd>P</kbd> to reopen anytime</p>
+      </div>
+    </div>
+
+    <!-- ══ Draw-animation caption bar ══ -->
+    <div id="draw-caption" class="draw-caption hidden" aria-live="polite"></div>
+
+    <!-- ══ Pattern-ready toast ══ -->
+    <div id="pattern-toast" class="pattern-toast hidden"></div>
+
     <!-- ══ Orbital canvas — driven entirely by main.ts ══ -->
     <canvas id="simCanvas"></canvas>
 
@@ -292,6 +309,22 @@
             style="flex: 1;"
           />
           <span id="sweeper-arms-value" style="font-size: 12px; min-width: 20px; text-align: right;">1</span>
+        </div>
+        <div style="margin-top: 10px; margin-bottom: 8px;">
+          <label for="sweeper-pos-slider" style="font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px;">
+            Positions
+          </label>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <input
+            id="sweeper-pos-slider"
+            type="range"
+            min="10"
+            max="180"
+            value="60"
+            style="flex: 1;"
+          />
+          <span id="sweeper-pos-value" style="font-size: 12px; min-width: 20px; text-align: right;">60</span>
         </div>
       </div>
 

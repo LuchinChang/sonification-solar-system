@@ -397,6 +397,9 @@ body.ui-hidden #foundry-panel {
 #sound-menu {
   position: fixed;
   z-index: 20;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
 
   display: flex;
   flex-direction: column;
@@ -413,9 +416,6 @@ body.ui-hidden #foundry-panel {
     0 8px 36px rgba(0, 0, 0, 0.65),
     0 1px 0 rgba(255, 200, 120, 0.05) inset;
 
-  /* JS sets left; this centres horizontally around the shape */
-  transform: translateX(-50%);
-
   opacity: 1;
   pointer-events: auto;
   transition:
@@ -426,7 +426,7 @@ body.ui-hidden #foundry-panel {
 #sound-menu.hidden {
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-50%) scale(0.90) translateY(6px);
+  transform: translateY(-50%) scale(0.90) translateX(-6px);
 }
 
 body.ui-hidden #sound-menu {
@@ -1081,4 +1081,179 @@ body.ui-hidden .theme-toggle-btn {
 .sync-audio-btn:focus-visible {
   outline: 2px solid var(--accent-copper);
   outline-offset: 2px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PATTERN SELECTOR OVERLAY
+   ══════════════════════════════════════════════════════════════ */
+
+#pattern-selector {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  opacity: 1;
+  transition: opacity 0.35s var(--ease-out-quart);
+}
+#pattern-selector.hidden {
+  display: none;
+}
+
+.pattern-band {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  max-width: 900px;
+  padding: 32px 40px;
+  border-radius: 20px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+.pattern-band-title {
+  font: 500 18px var(--font-mono);
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.pattern-cards {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.pattern-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  width: 148px;
+  border-radius: 14px;
+  background: var(--tile-bg);
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out-quart),
+    box-shadow   var(--dur-fast) var(--ease-out-quart),
+    transform    var(--dur-fast) var(--ease-out-quart);
+}
+
+.pattern-card:hover {
+  border-color: var(--glass-border-hover);
+  box-shadow: 0 0 16px rgba(194, 118, 46, 0.15);
+  transform: translateY(-2px);
+}
+[data-theme="light"] .pattern-card:hover {
+  box-shadow: 0 0 16px rgba(92, 58, 33, 0.12);
+}
+
+.pattern-card:active {
+  transform: translateY(0);
+}
+
+.pattern-thumb {
+  width: 120px;
+  height: 120px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.15);
+}
+[data-theme="light"] .pattern-thumb {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.pattern-card-planets {
+  font: 400 12px var(--font-mono);
+  color: var(--text-primary);
+  text-align: center;
+  letter-spacing: 0.3px;
+}
+
+.pattern-band-hint {
+  font: 300 11px var(--font-mono);
+  color: var(--text-dim);
+  margin: 0;
+}
+.pattern-band-hint kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--glass-border);
+  background: var(--tile-bg);
+  font: 500 11px var(--font-mono);
+  color: var(--text-secondary);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DRAW ANIMATION CAPTION BAR
+   ══════════════════════════════════════════════════════════════ */
+
+.draw-caption {
+  position: fixed;
+  bottom: 18%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 80;
+  padding: 10px 28px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font: 400 15px var(--font-mono);
+  color: rgba(235, 210, 180, 0.93);
+  text-align: center;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+}
+.draw-caption.visible {
+  opacity: 1;
+}
+.draw-caption.hidden {
+  display: none;
+}
+[data-theme="light"] .draw-caption {
+  background: rgba(255, 255, 255, 0.7);
+  color: rgba(35, 18, 6, 0.92);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PATTERN-READY TOAST
+   ══════════════════════════════════════════════════════════════ */
+
+.pattern-toast {
+  position: fixed;
+  top: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 85;
+  padding: 10px 24px;
+  border-radius: 10px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  font: 400 13px var(--font-mono);
+  color: var(--text-primary);
+  opacity: 1;
+  transition: opacity 0.6s ease;
+  pointer-events: none;
+}
+.pattern-toast.hidden {
+  display: none;
+}
+.pattern-toast.fade-out {
+  opacity: 0;
 }

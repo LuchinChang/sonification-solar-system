@@ -2,6 +2,8 @@
 import './style.css';
 import type { Point } from './geometry';
 import { CanvasShape, type ShapeType, type PlaybackMode } from './shapes';
+import { calculateLines as _calculateLines, clamp } from './engine';
+import { PATTERNS, computeAuScale, renderPatternThumbnail, type PlanetaryPattern } from './patterns';
 import { repl, evalScope } from '@strudel/core';
 import { initAudioOnFirstClick, initAudio, getAudioContext, webaudioOutput, registerSynthSounds } from '@strudel/webaudio';
 import { transpiler } from '@strudel/transpiler';
@@ -16,48 +18,226 @@ const ctx    = canvas.getContext('2d')!;
 function resize(): void {
   canvas.width  = window.innerWidth;
   canvas.height = window.innerHeight;
+  // Recompute AU scale for current pattern to fit new viewport
+  if (currentPattern) {
+    const minDim = Math.min(canvas.width, canvas.height);
+    currentAuScale = computeAuScale(currentPattern, minDim);
+    currentOuterR = Math.max(currentPattern.au1, currentPattern.au2) * currentAuScale;
+    currentInnerR = Math.min(currentPattern.au1, currentPattern.au2) * currentAuScale;
+    ORBITAL_MAX_RADIUS = currentOuterR * 1.05;
+  }
   calculateLines();
   drawScene();
 }
 window.addEventListener('resize', resize);
 
 // ═══════════════════════════════════════════════════════════════
-// ORBITAL ENGINE  (pre-calculated geometry)
+// ORBITAL ENGINE  (pattern-driven, mutable geometry)
 // ═══════════════════════════════════════════════════════════════
 
-const AU_SCALE     = 300;
-const EARTH_R      = 1.0   * AU_SCALE;
-const VENUS_R      = 0.723 * AU_SCALE;
-const EARTH_PERIOD = 365.25;
-const VENUS_PERIOD = 224.7;
-const SIM_YEARS    = 8;
+let currentPattern: PlanetaryPattern = PATTERNS[0];
+let currentAuScale   = 300;
+let currentOuterR    = 1.0   * 300;     // outer planet orbital radius (px)
+let currentInnerR    = 0.723 * 300;     // inner planet orbital radius (px)
+let currentOuterPeriod = 365.25;        // outer planet orbital period (days)
+let currentInnerPeriod = 224.7;         // inner planet orbital period (days)
+let currentSimYears    = 8;
 
 // Orbital bounds: furthest point from Sun (used for sweeper line length normalization)
-const ORBITAL_MAX_RADIUS = Math.max(EARTH_R, VENUS_R) * 1.05;  // ~315 px
+let ORBITAL_MAX_RADIUS = currentOuterR * 1.05;
 
 let SAMPLE_RATE   = 500;
 const MIN_SAMPLES = 10;
 const MAX_SAMPLES = 2000;
 
 let linkLines: { p1: Point; p2: Point }[] = [];
+let fullLinkLines: { p1: Point; p2: Point }[] = [];
 
 function calculateLines(): void {
-  linkLines = [];
-  const cx        = canvas.width  / 2;
-  const cy        = canvas.height / 2;
-  const totalDays = SIM_YEARS * EARTH_PERIOD;
+  const cx = canvas.width  / 2;
+  const cy = canvas.height / 2;
+  linkLines = _calculateLines(cx, cy, SAMPLE_RATE, currentOuterR, currentInnerR, currentOuterPeriod, currentInnerPeriod, currentSimYears);
+  fullLinkLines = linkLines;
+  rebuildAllCaches();
+}
 
-  for (let i = 0; i < SAMPLE_RATE; i++) {
-    const t  = (i / SAMPLE_RATE) * totalDays;
-    const ea = (t / EARTH_PERIOD) * 2 * Math.PI;
-    const va = (t / VENUS_PERIOD) * 2 * Math.PI;
-    linkLines.push({
-      p1: { x: cx + EARTH_R * Math.cos(ea), y: cy + EARTH_R * Math.sin(ea) },
-      p2: { x: cx + VENUS_R * Math.cos(va), y: cy + VENUS_R * Math.sin(va) },
-    });
+// ═══════════════════════════════════════════════════════════════
+// DRAW ANIMATION STATE
+// ═══════════════════════════════════════════════════════════════
+
+let drawAnimActive     = false;
+let drawAnimStartTime  = 0;
+let drawAnimDurationMs = 0;       // simYears * 1500ms, capped at 25s
+let drawAnimProgress   = 0;       // 0..1
+let drawLineCount      = 0;       // how many lines to render this frame
+
+// Caption state
+let currentCaptionText = '';
+let captionTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+const captionEl = document.getElementById('draw-caption')!;
+const toastEl   = document.getElementById('pattern-toast')!;
+
+function startDrawAnimation(): void {
+  drawAnimActive    = true;
+  drawAnimStartTime = performance.now();
+  drawAnimDurationMs = Math.min(currentPattern.simYears * 1500, 25000);
+  drawAnimProgress  = 0;
+  drawLineCount     = 0;
+  currentCaptionText = '';
+
+  // Show caption bar
+  captionEl.classList.remove('hidden');
+  captionEl.classList.remove('visible');
+  captionEl.textContent = '';
+
+  // Pause playback during animation
+  if (isPlaying) togglePlayback();
+}
+
+function updateCaption(progress: number): void {
+  const caps = currentPattern.captions;
+  // Find the latest caption whose atProgress <= current progress
+  let active: typeof caps[0] | null = null;
+  for (let i = caps.length - 1; i >= 0; i--) {
+    if (progress >= caps[i].atProgress) {
+      active = caps[i];
+      break;
+    }
   }
 
+  if (active && active.text !== currentCaptionText) {
+    currentCaptionText = active.text;
+    captionEl.textContent = active.text;
+    captionEl.classList.add('visible');
+    // Auto-hide after duration
+    if (captionTimeoutId) clearTimeout(captionTimeoutId);
+    captionTimeoutId = setTimeout(() => {
+      captionEl.classList.remove('visible');
+    }, active.duration * 1000);
+  }
+}
+
+function finishDrawAnimation(): void {
+  drawAnimActive = false;
+  drawAnimProgress = 1;
+  drawLineCount = fullLinkLines.length;
+  linkLines = fullLinkLines;
   rebuildAllCaches();
+
+  // Hide caption
+  captionEl.classList.remove('visible');
+  captionEl.classList.add('hidden');
+  if (captionTimeoutId) clearTimeout(captionTimeoutId);
+  currentCaptionText = '';
+
+  // Show ready toast
+  toastEl.textContent = 'Pattern ready \u2014 spawn shapes to explore';
+  toastEl.classList.remove('hidden', 'fade-out');
+  setTimeout(() => toastEl.classList.add('fade-out'), 2500);
+  setTimeout(() => toastEl.classList.add('hidden'), 3200);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PATTERN SELECTOR
+// ═══════════════════════════════════════════════════════════════
+
+const patternSelectorEl = document.getElementById('pattern-selector')!;
+const patternCardsEl    = document.getElementById('pattern-cards')!;
+
+function showPatternSelector(): void {
+  // Pause if playing
+  if (isPlaying) togglePlayback();
+
+  // Stop any running draw animation
+  if (drawAnimActive) {
+    drawAnimActive = false;
+    captionEl.classList.remove('visible');
+    captionEl.classList.add('hidden');
+    if (captionTimeoutId) clearTimeout(captionTimeoutId);
+  }
+
+  // Build cards
+  patternCardsEl.innerHTML = '';
+  const thumbColor = currentTheme === 'dark'
+    ? 'rgba(194, 118, 46, 0.4)'
+    : 'rgba(92, 58, 33, 0.35)';
+
+  for (const pattern of PATTERNS) {
+    const card = document.createElement('button');
+    card.className = 'pattern-card';
+    card.dataset['pattern'] = pattern.id;
+
+    const thumb = renderPatternThumbnail(pattern, 120, thumbColor);
+    thumb.className = 'pattern-thumb';
+    card.appendChild(thumb);
+
+    const planets = document.createElement('span');
+    planets.className = 'pattern-card-planets';
+    planets.textContent = `${pattern.planet1} \u2014 ${pattern.planet2}`;
+    card.appendChild(planets);
+
+    card.addEventListener('click', () => selectPattern(pattern.id));
+    patternCardsEl.appendChild(card);
+  }
+
+  patternSelectorEl.classList.remove('hidden');
+}
+
+function hidePatternSelector(): void {
+  patternSelectorEl.classList.add('hidden');
+}
+
+function selectPattern(patternId: string): void {
+  const pattern = PATTERNS.find(p => p.id === patternId);
+  if (!pattern) return;
+
+  currentPattern = pattern;
+
+  // Compute dynamic scale
+  const minDim = Math.min(canvas.width, canvas.height);
+  currentAuScale = computeAuScale(pattern, minDim);
+
+  // Determine inner/outer by AU radius
+  const au1 = Math.min(pattern.au1, pattern.au2);
+  const au2 = Math.max(pattern.au1, pattern.au2);
+  currentInnerR = au1 * currentAuScale;
+  currentOuterR = au2 * currentAuScale;
+
+  // Assign periods matching the inner/outer mapping
+  if (pattern.au1 < pattern.au2) {
+    currentInnerPeriod = pattern.period1;
+    currentOuterPeriod = pattern.period2;
+  } else {
+    currentInnerPeriod = pattern.period2;
+    currentOuterPeriod = pattern.period1;
+  }
+  currentSimYears = pattern.simYears;
+  ORBITAL_MAX_RADIUS = currentOuterR * 1.05;
+
+  // Calculate all link lines
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  fullLinkLines = _calculateLines(
+    cx, cy, SAMPLE_RATE,
+    currentOuterR, currentInnerR,
+    currentOuterPeriod, currentInnerPeriod,
+    currentSimYears,
+  );
+  linkLines = fullLinkLines;
+
+  // Clear existing shapes (scale changed, caches invalid)
+  while (shapes.length > 0) {
+    shapes.pop();
+  }
+  activeShape = null;
+  _flashCooldowns.clear();
+  hideSoundMenu();
+  updateTelemetry();
+
+  // Hide selector, start animation
+  hidePatternSelector();
+  startDrawAnimation();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -70,8 +250,6 @@ let   activeShape: CanvasShape | null = null;
 const MIN_SHAPE_SIZE = 20;
 const MAX_SHAPE_SIZE = 400;
 
-const clamp = (v: number, lo: number, hi: number): number =>
-  Math.max(lo, Math.min(hi, v));
 
 const sunPos = (): { x: number; y: number } => ({
   x: canvas.width  / 2,
@@ -175,6 +353,67 @@ let strudelRepl: any = null;
 let audioInitialized = false;
 
 // ═══════════════════════════════════════════════════════════════
+// AMBIENT DUST PARTICLES  (warm motes drifting through space)
+// ═══════════════════════════════════════════════════════════════
+
+interface DustMote {
+  x: number;      // 0..1 normalised position
+  y: number;
+  vx: number;     // normalised velocity
+  vy: number;
+  r: number;      // radius in px
+  baseAlpha: number;
+}
+
+const DUST_COUNT = 40;
+const dustMotes: DustMote[] = [];
+
+function initDust(): void {
+  for (let i = 0; i < DUST_COUNT; i++) {
+    dustMotes.push({
+      x: Math.random(),
+      y: Math.random(),
+      vx: (Math.random() - 0.5) * 0.00004,
+      vy: (Math.random() - 0.5) * 0.00004,
+      r: 0.8 + Math.random() * 1.5,
+      baseAlpha: 0.04 + Math.random() * 0.08,
+    });
+  }
+}
+initDust();
+
+function updateAndDrawDust(dt: number): void {
+  const w = canvas.width;
+  const h = canvas.height;
+  const { x: cx, y: cy } = sunPos();
+  const maxDist = Math.hypot(w, h) * 0.5;
+  const isDark = currentTheme === 'dark';
+
+  for (const m of dustMotes) {
+    // Drift
+    m.x += m.vx * dt;
+    m.y += m.vy * dt;
+    // Wrap
+    if (m.x < 0) m.x += 1; if (m.x > 1) m.x -= 1;
+    if (m.y < 0) m.y += 1; if (m.y > 1) m.y -= 1;
+
+    const px = m.x * w;
+    const py = m.y * h;
+    const dist = Math.hypot(px - cx, py - cy);
+    // Brighter near the sun
+    const sunProximity = 1 - Math.min(dist / maxDist, 1);
+    const alpha = m.baseAlpha + sunProximity * 0.10;
+
+    ctx.beginPath();
+    ctx.arc(px, py, m.r, 0, Math.PI * 2);
+    ctx.fillStyle = isDark
+      ? `rgba(194, 118, 46, ${alpha})`
+      : `rgba(120, 80, 40, ${alpha * 0.7})`;
+    ctx.fill();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // CONTINUOUS ANIMATION LOOP  (performance.now() via rAF)
 // ═══════════════════════════════════════════════════════════════
 
@@ -217,6 +456,15 @@ function animate(now: number): void {
     }
   }
 
+  // ── Progressive draw animation ──────────────────────────────
+  if (drawAnimActive) {
+    const elapsed = now - drawAnimStartTime;
+    drawAnimProgress = Math.min(elapsed / drawAnimDurationMs, 1);
+    drawLineCount = Math.floor(drawAnimProgress * fullLinkLines.length);
+    updateCaption(drawAnimProgress);
+    if (drawAnimProgress >= 1) finishDrawAnimation();
+  }
+
   drawScene();
   requestAnimationFrame(animate);
 }
@@ -232,13 +480,15 @@ function drawScene(): void {
 
   const { x: cx, y: cy } = sunPos();
 
-  // ── Sun (radial glow + solid core) ───────────────────────────
-  const sunGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, 34);
+  // ── Sun (radial glow + solid core + breathing pulse) ─────────
+  const breathPhase = Math.sin(performance.now() / 4000 * Math.PI * 2);
+  const glowRadius = 34 + breathPhase * 8;
+  const sunGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowRadius);
   sunGlow.addColorStop(0,   ct.sunGlow0);
   sunGlow.addColorStop(0.5, ct.sunGlow1);
   sunGlow.addColorStop(1,   ct.sunGlow2);
   ctx.beginPath();
-  ctx.arc(cx, cy, 34, 0, Math.PI * 2);
+  ctx.arc(cx, cy, glowRadius, 0, Math.PI * 2);
   ctx.fillStyle = sunGlow;
   ctx.fill();
 
@@ -247,10 +497,12 @@ function drawScene(): void {
   ctx.fillStyle = ct.sunCore;
   ctx.fill();
 
-  // ── Orbital link lines ────────────────────────────────────────
+  // ── Orbital link lines (progressive during draw animation) ───
   ctx.strokeStyle = ct.linkLine;
   ctx.lineWidth   = 1;
-  for (const line of linkLines) {
+  const linesToDraw = drawAnimActive ? drawLineCount : linkLines.length;
+  for (let i = 0; i < linesToDraw; i++) {
+    const line = linkLines[i];
     ctx.beginPath();
     ctx.moveTo(line.p1.x, line.p1.y);
     ctx.lineTo(line.p2.x, line.p2.y);
@@ -272,6 +524,19 @@ function drawScene(): void {
     shape.drawAnimations(ctx);
     shape.drawPlayhead(ctx);
   }
+
+  // ── Ambient dust particles ──────────────────────────────────
+  updateAndDrawDust(16);  // ~16ms per frame at 60fps
+
+  // ── LC signature monogram ──────────────────────────────────
+  ctx.save();
+  ctx.font = '500 10px "JetBrains Mono", monospace';
+  ctx.textBaseline = 'bottom';
+  ctx.fillStyle = currentTheme === 'dark'
+    ? 'rgba(120, 88, 55, 0.35)'
+    : 'rgba(92, 58, 33, 0.30)';
+  ctx.fillText('LC', 16, canvas.height - 12);
+  ctx.restore();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -288,7 +553,7 @@ function generateFullCode(): string {
   const header = [
     '// Solar System Sonification \u2014 Live Code',
     '// \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
-    `// Shapes: ${shapes.length}  |  Samples: ${SAMPLE_RATE}  |  CPM: ${CPM}`,
+    `// Pattern: ${currentPattern.name}  |  Shapes: ${shapes.length}  |  Samples: ${SAMPLE_RATE}  |  CPM: ${CPM}`,
     '',
   ].join('\n');
 
@@ -327,9 +592,9 @@ function patchShapeBlock(shape: CanvasShape): void {
 }
 
 function patchHeader(): void {
-  const newHeader = `// Shapes: ${shapes.length}  |  Samples: ${SAMPLE_RATE}  |  CPM: ${CPM}`;
+  const newHeader = `// Pattern: ${currentPattern.name}  |  Shapes: ${shapes.length}  |  Samples: ${SAMPLE_RATE}  |  CPM: ${CPM}`;
   telemetryTextarea.value = telemetryTextarea.value.replace(
-    /\/\/ Shapes: \d+  \|  Samples: \d+  \|  CPM: \d+/,
+    /\/\/ Pattern: .+  \|  Shapes: \d+  \|  Samples: \d+  \|  CPM: \d+/,
     newHeader,
   );
 }
@@ -479,6 +744,9 @@ async function initializeAudio(): Promise<void> {
     // is ready before the user hits play (avoids first-play compile delay).
     updateTelemetry();
     playLiveCode(telemetryTextarea.value);
+
+    // Show pattern selector for the user to choose a link-line pattern
+    showPatternSelector();
   } catch (err) {
     console.error('[audio] init failed:', err);
   }
@@ -825,14 +1093,18 @@ function showSoundMenu(shape: CanvasShape): void {
         armsSliderEl.value      = shape.sweepCount.toString();
         armsValueEl.textContent = shape.sweepCount.toString();
       }
+      const posSliderEl = soundMenu.querySelector('#sweeper-pos-slider') as HTMLInputElement;
+      const posValueEl  = soundMenu.querySelector('#sweeper-pos-value');
+      if (posSliderEl && posValueEl) {
+        posSliderEl.value      = shape.ticks.toString();
+        posValueEl.textContent = shape.ticks.toString();
+      }
     } else {
       sweeperControls.classList.add('hidden');
     }
   }
 
 
-  soundMenu.style.left = `${shape.x}px`;
-  soundMenu.style.top  = `${Math.max(10, shape.y - shape.size - 160)}px`;
   soundMenu.classList.remove('hidden');
 }
 
@@ -886,6 +1158,22 @@ if (armsSlider && armsValue) {
   });
 }
 
+// Positions slider: control tick count per revolution for sweepers
+const posSlider = document.getElementById('sweeper-pos-slider') as HTMLInputElement;
+const posValue  = document.getElementById('sweeper-pos-value');
+if (posSlider && posValue) {
+  posSlider.addEventListener('input', () => {
+    const ticks = parseInt(posSlider.value, 10);
+    posValue.textContent = ticks.toString();
+    if (activeShape?.type === 'sweeper') {
+      activeShape.ticks = ticks;
+      activeShape.rebuildSweepTicks(linkLines, ORBITAL_MAX_RADIUS);
+      updateTelemetry();
+      if (audioInitialized) playLiveCode(telemetryTextarea.value);
+    }
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════
 // SYNC AUDIO BUTTON  (#sync-audio-btn in telemetry footer)
 // ═══════════════════════════════════════════════════════════════
@@ -920,7 +1208,8 @@ themeToggleBtn.addEventListener('click', () => {
 //   Ctrl/Cmd+Enter → evaluate & flash (global, works from textarea too)
 //   D              → toggle dock + UI panels
 //   I              → toggle telemetry panel
-//   Space          → play / pause
+//   Space          → play / pause  (skip animation if drawing)
+//   P              → open pattern selector
 //   Backspace      → delete active shape
 // ═══════════════════════════════════════════════════════════════
 
@@ -944,7 +1233,16 @@ document.addEventListener('keydown', e => {
       break;
     case ' ':
       e.preventDefault();
-      togglePlayback();
+      if (drawAnimActive) {
+        finishDrawAnimation();
+      } else {
+        togglePlayback();
+      }
+      break;
+    case 'p':
+      if (!drawAnimActive && audioInitialized) {
+        showPatternSelector();
+      }
       break;
     case 'backspace':
       e.preventDefault();
