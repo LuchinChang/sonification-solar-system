@@ -898,6 +898,20 @@ body.ui-hidden #sound-menu {
   color: var(--text-dim);
 }
 
+.signature {
+  position: absolute;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 300;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  opacity: 0.4;
+  margin: 0;
+  white-space: nowrap;
+}
+
 /* ══════════════════════════════════════════════════════════════
    EVAL STATUS INDICATOR  (inside telemetry header)
    ══════════════════════════════════════════════════════════════ */
