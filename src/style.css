@@ -1201,7 +1201,7 @@ body.ui-hidden .theme-toggle-btn {
 
 .draw-caption {
   position: fixed;
-  bottom: 18%;
+  bottom: 4%;
   left: 50%;
   transform: translateX(-50%);
   z-index: 80;
