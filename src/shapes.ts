@@ -637,7 +637,7 @@ export class CanvasShape {
     const pat = DRUM_INSTRUMENTS.has(this.instrument)
       ? `s("${this.instrument}")\n  .struct(${v})\n  .gain(0.8)`
       : BASS_INSTRUMENTS.has(this.instrument)
-        ? `note("c1 e1 g1")\n  .s("${this.instrument}")\n  .struct(${v})\n  .decay(1.8)\n  .sustain(0.7)\n  .gain(0.9)`
+        ? `note("c1 e1 g1")\n  .s("${this.instrument}")\n  .struct(${v})\n  .octave(1)\n  .decay(1.8)\n  .sustain(0.7)\n  .gain(0.9)`
         : KEY_INSTRUMENTS.has(this.instrument)
           ? `note("c4 e4 g4 b4")\n  .s("${this.instrument}")\n  .struct(${v})\n  .velocity(0.6)\n  .decay(.5)\n  .sustain(.2)`
           : `note("c3 e3 g3 b3")\n  .s("${this.instrument}")\n  .struct(${v})\n  .lpf(1200)\n  .decay(.3)\n  .sustain(.1)\n  .gain(0.5)`;

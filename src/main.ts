@@ -300,7 +300,7 @@ function spawnShape(type: ShapeType): void {
   hideSoundMenu();
   updateTelemetry();
   // Pre-warm Strudel compiler with the updated pattern so play starts instantly
-  if (audioInitialized) playLiveCode(telemetryTextarea.value);
+  if (audioInitialized) playLiveCode(telemetryTextarea.value, false);
 }
 
 function setActiveShape(s: CanvasShape | null): void {
@@ -654,10 +654,10 @@ function updateTelemetry(): void {
 
 // ── Strudel evaluation (manual only via evaluateAndFlash) ─────
 
-function playLiveCode(codeString: string): void {
+function playLiveCode(codeString: string, autostart = true): void {
   if (!strudelRepl) return;
   try {
-    strudelRepl.evaluate(codeString).then(() => {
+    strudelRepl.evaluate(codeString, autostart).then(() => {
       setEvalStatus('ok');
     }).catch((err: unknown) => {
       console.warn('[strudel-eval async]', err);
@@ -752,6 +752,13 @@ async function initializeAudio(): Promise<void> {
         gm_acoustic_bass: ['A1','C2','E2','G2','A2','C3','E3','G3','A3','C4']
           .map(n => bassBase + n + '.mp3'),
       }).catch(() => console.warn('[audio] Bass samples unavailable (offline?)'));
+
+      // Piano — pitch-mapped MP3s from midi-js-soundfonts CDN.
+      const pianoBase = 'https://gleitz.github.io/midi-js-soundfonts/MusyngKite/acoustic_grand_piano-mp3/';
+      (globalSamples as (obj: Record<string, string[]>) => Promise<void>)({
+        superpiano: ['C3','E3','G3','C4','E4','G4','C5','E5','G5','C6']
+          .map(n => pianoBase + n + '.mp3'),
+      }).catch(() => console.warn('[audio] Piano samples unavailable (offline?)'));
     }
 
     strudelRepl = repl({
@@ -768,7 +775,7 @@ async function initializeAudio(): Promise<void> {
     // Populate the textarea and pre-warm the Strudel compiler so the pattern
     // is ready before the user hits play (avoids first-play compile delay).
     updateTelemetry();
-    playLiveCode(telemetryTextarea.value);
+    playLiveCode(telemetryTextarea.value, false);
 
     // Show pattern selector for the user to choose a link-line pattern
     showPatternSelector();
