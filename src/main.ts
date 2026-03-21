@@ -2,7 +2,7 @@
 import './style.css';
 import type { Point } from './geometry';
 import { CanvasShape, type ShapeType, type PlaybackMode } from './shapes';
-import { calculateLines as _calculateLines, clamp } from './engine';
+import { calculateGeocentricLines, calculateEllipticalLines, clamp } from './engine';
 import { PATTERNS, computeAuScale, renderPatternThumbnail, type PlanetaryPattern } from './patterns';
 import { repl, evalScope } from '@strudel/core';
 import { initAudioOnFirstClick, initAudio, getAudioContext, webaudioOutput, registerSynthSounds } from '@strudel/webaudio';
@@ -56,7 +56,22 @@ let fullLinkLines: { p1: Point; p2: Point }[] = [];
 function calculateLines(): void {
   const cx = canvas.width  / 2;
   const cy = canvas.height / 2;
-  linkLines = _calculateLines(cx, cy, SAMPLE_RATE, currentOuterR, currentInnerR, currentOuterPeriod, currentInnerPeriod, currentSimYears);
+  if (currentPattern.geocentric) {
+    linkLines = calculateGeocentricLines(
+      cx, cy, SAMPLE_RATE,
+      currentOuterR, currentInnerR,
+      currentOuterPeriod, currentInnerPeriod,
+      currentSimYears,
+      currentPattern.eccentricity1 ?? 0,
+      currentPattern.precessionPeriodYears1 ?? 1000,
+    );
+  } else {
+    linkLines = calculateEllipticalLines(
+      cx, cy, SAMPLE_RATE,
+      currentPattern.planet1, currentPattern.planet2,
+      currentSimYears, currentAuScale,
+    );
+  }
   fullLinkLines = linkLines;
   rebuildAllCaches();
 }
@@ -218,12 +233,22 @@ function selectPattern(patternId: string): void {
   // Calculate all link lines
   const cx = canvas.width / 2;
   const cy = canvas.height / 2;
-  fullLinkLines = _calculateLines(
-    cx, cy, SAMPLE_RATE,
-    currentOuterR, currentInnerR,
-    currentOuterPeriod, currentInnerPeriod,
-    currentSimYears,
-  );
+  if (pattern.geocentric) {
+    fullLinkLines = calculateGeocentricLines(
+      cx, cy, SAMPLE_RATE,
+      currentOuterR, currentInnerR,
+      currentOuterPeriod, currentInnerPeriod,
+      currentSimYears,
+      pattern.eccentricity1 ?? 0,
+      pattern.precessionPeriodYears1 ?? 1000,
+    );
+  } else {
+    fullLinkLines = calculateEllipticalLines(
+      cx, cy, SAMPLE_RATE,
+      pattern.planet1, pattern.planet2,
+      currentSimYears, currentAuScale,
+    );
+  }
   linkLines = fullLinkLines;
 
   // Clear existing shapes (scale changed, caches invalid)

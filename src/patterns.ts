@@ -4,7 +4,7 @@
 // Each pattern describes two planets whose orbital link lines
 // trace a spirograph-like curve over a full resonance cycle.
 
-import { calculateLines, type LinkLine } from './engine';
+import { calculateGeocentricLines, calculateEllipticalLines, type LinkLine } from './engine';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -26,6 +26,9 @@ export interface PlanetaryPattern {
   simYears: number;     // years for one full pattern cycle
   petals: number;       // approximate petal count (visual descriptor)
   captions: PatternCaption[];
+  geocentric?: boolean;              // true = Earth at center (default: heliocentric)
+  eccentricity1?: number;            // inner body orbital eccentricity
+  precessionPeriodYears1?: number;   // perigee precession period (years)
 }
 
 // ─── Pattern Catalogue ────────────────────────────────────────
@@ -131,6 +134,30 @@ export const PATTERNS: PlanetaryPattern[] = [
       { atProgress: 0.97, text: 'The pattern is complete. The canvas is yours.', duration: 3 },
     ],
   },
+  {
+    id: 'lunar-hexagon',
+    name: 'Lunar Hexagon',
+    planet1: 'Moon',
+    planet2: 'Sun',
+    au1: 0.00257,
+    au2: 1.0,
+    period1: 27.32,
+    period2: 365.25,
+    simYears: 17.9,
+    petals: 6,
+    geocentric: true,
+    eccentricity1: 0.0549,
+    precessionPeriodYears1: 8.85,
+    captions: [
+      { atProgress: 0.00, text: 'The Moon and Sun, as seen from Earth...', duration: 4 },
+      { atProgress: 0.06, text: 'A line connects the Moon to the Sun at each moment.', duration: 5 },
+      { atProgress: 0.15, text: 'Every two New Moons, the alignment rotates about 60 degrees.', duration: 5 },
+      { atProgress: 0.35, text: '12.37 synodic months per year — nearly 2 per sixth of a turn.', duration: 5 },
+      { atProgress: 0.60, text: 'A hexagonal symmetry emerges from this near-integer ratio.', duration: 5 },
+      { atProgress: 0.85, text: 'The Lunar Hexagon — hidden geometry of our sky.', duration: 4 },
+      { atProgress: 0.97, text: 'The pattern is complete. The canvas is yours.', duration: 3 },
+    ],
+  },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -165,12 +192,23 @@ export function renderPatternThumbnail(
   const r1 = pattern.au1 * scale;
   const r2 = pattern.au2 * scale;
 
-  const lines: LinkLine[] = calculateLines(
-    cx, cy, 300,       // 300 samples is enough for a thumbnail
-    r2, r1,            // outer first, then inner (matches engine.ts param order: earthR, venusR)
-    pattern.period2, pattern.period1,
-    pattern.simYears,
-  );
+  let lines: LinkLine[];
+  if (pattern.geocentric) {
+    lines = calculateGeocentricLines(
+      cx, cy, 300,
+      r2, r1,
+      pattern.period2, pattern.period1,
+      pattern.simYears,
+      pattern.eccentricity1 ?? 0,
+      pattern.precessionPeriodYears1 ?? 1000,
+    );
+  } else {
+    lines = calculateEllipticalLines(
+      cx, cy, 300,
+      pattern.planet1, pattern.planet2,
+      pattern.simYears, scale,
+    );
+  }
 
   g.strokeStyle = lineColor;
   g.lineWidth = 0.5;
