@@ -1271,3 +1271,158 @@ body.ui-hidden .theme-toggle-btn {
 .pattern-toast.fade-out {
   opacity: 0;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   INTRO TOUR  (first-time guided walkthrough)
+   ══════════════════════════════════════════════════════════════ */
+
+#intro-tour {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  /* Let clicks pass through to target elements underneath */
+  pointer-events: none;
+}
+#intro-tour.hidden {
+  display: none;
+}
+
+/* Dark scrim — click to dismiss the tour */
+#intro-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: auto;
+}
+
+/* Spotlight cutout — sized/positioned dynamically by JS */
+#intro-spotlight {
+  position: absolute;
+  z-index: 1;
+  border-radius: 14px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+  transition: all 0.4s var(--ease-out-quart);
+  pointer-events: none;
+}
+
+/* Pulse ring animation on spotlight */
+#intro-spotlight::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  border: 2px solid var(--accent-amber);
+  opacity: 0;
+  animation: intro-pulse 1.8s ease-out infinite;
+}
+
+@keyframes intro-pulse {
+  0%   { opacity: 0.7; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.08); }
+}
+
+/* Tooltip card */
+#intro-tooltip {
+  position: absolute;
+  z-index: 2;
+  max-width: 320px;
+  padding: 18px 22px 14px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.50),
+    0 1px 0 rgba(255, 200, 120, 0.05) inset;
+  transition: all 0.4s var(--ease-out-quart);
+  pointer-events: auto;
+}
+
+.intro-step-counter {
+  display: block;
+  font: 600 9px var(--font-mono);
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.intro-text {
+  font: 400 14px/1.55 var(--font-mono);
+  color: var(--text-primary);
+  margin-bottom: 14px;
+}
+
+.intro-text kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  font: 600 11px var(--font-mono);
+  background: rgba(194, 118, 46, 0.15);
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  color: var(--accent-amber);
+}
+
+.intro-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.intro-got-it {
+  padding: 6px 16px;
+  font: 500 12px var(--font-mono);
+  color: var(--text-primary);
+  background: rgba(194, 118, 46, 0.18);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all var(--dur-fast) ease;
+}
+.intro-got-it:hover {
+  background: rgba(194, 118, 46, 0.32);
+  border-color: var(--glass-border-hover);
+}
+.intro-got-it.hidden {
+  display: none;
+}
+
+.intro-skip {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  font: 400 10px var(--font-mono);
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color var(--dur-fast) ease;
+}
+.intro-skip:hover {
+  color: var(--text-secondary);
+}
+
+/* "Tour skipped" toast */
+#intro-tour-toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 96;
+  padding: 8px 20px;
+  border-radius: 8px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  font: 400 12px var(--font-mono);
+  color: var(--text-secondary);
+  opacity: 1;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+}
+#intro-tour-toast.fade-out {
+  opacity: 0;
+}
