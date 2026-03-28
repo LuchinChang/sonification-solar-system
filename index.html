@@ -12,7 +12,6 @@
     />
   </head>
   
-  <script data-goatcounter="https://lcchang.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 
   <body class="ui-hidden">
 
@@ -23,7 +22,7 @@
         <span class="engine-label">Start Engine</span>
         <span class="engine-hint">Enable audio synthesis</span>
       </button>
-      <p class="signature">Designed by Lu-Chin Chang 張律勤 & Kelly Snook</p>
+      <p class="signature">Solar System Sonification</p>
     </div>
 
     <!-- ══ Pattern selector overlay — shown after audio init ══ -->
@@ -42,6 +41,20 @@
 
     <!-- ══ Pattern-ready toast ══ -->
     <div id="pattern-toast" class="pattern-toast hidden"></div>
+
+    <!-- ══ Intro Tour overlay — first-time guided walkthrough ══ -->
+    <div id="intro-tour" class="hidden" aria-label="Introduction tour">
+      <div id="intro-scrim"></div>
+      <div id="intro-spotlight"></div>
+      <div id="intro-tooltip">
+        <span id="intro-step-counter" class="intro-step-counter"></span>
+        <p id="intro-text" class="intro-text"></p>
+        <div id="intro-actions" class="intro-actions">
+          <button id="intro-got-it" class="intro-got-it hidden" type="button">Got it</button>
+        </div>
+        <button id="intro-skip" class="intro-skip" type="button">Skip tour</button>
+      </div>
+    </div>
 
     <!-- ══ Orbital canvas — driven entirely by main.ts ══ -->
     <canvas id="simCanvas"></canvas>

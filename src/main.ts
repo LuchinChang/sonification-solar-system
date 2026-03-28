@@ -151,6 +151,9 @@ function finishDrawAnimation(): void {
   toastEl.classList.remove('hidden', 'fade-out');
   setTimeout(() => toastEl.classList.add('fade-out'), 2500);
   setTimeout(() => toastEl.classList.add('hidden'), 3200);
+
+  // Start intro tour for first-time users (after a brief delay for toast to appear)
+  setTimeout(() => startTour(), 800);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -301,6 +304,7 @@ function spawnShape(type: ShapeType): void {
   updateTelemetry();
   // Pre-warm Strudel compiler with the updated pattern so play starts instantly
   if (audioInitialized) playLiveCode(telemetryTextarea.value, false);
+  notifyTour('shape-spawned');
 }
 
 function setActiveShape(s: CanvasShape | null): void {
@@ -920,6 +924,7 @@ function togglePlayback(): void {
   playPauseBtn.classList.toggle('playing', isPlaying);
 
   if (isPlaying) {
+    notifyTour('play-pressed');
     lastFrameTime = 0;
     if (strudelRepl !== null) {
       // Un-suspend the AudioContext (may have been suspended on pause)
@@ -1156,6 +1161,7 @@ instrumentBtns.forEach(btn => {
     patchShapeBlock(activeShape);
     patchHeader();
     // No auto-eval — press Ctrl+Enter to sync
+    notifyTour('instrument-picked');
   });
 });
 
@@ -1280,6 +1286,237 @@ document.addEventListener('keydown', e => {
       e.preventDefault();
       deleteActiveShape();
       break;
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// INTRO TOUR  (first-time guided walkthrough)
+// ═══════════════════════════════════════════════════════════════
+
+const TOUR_DONE_KEY = 'intro-tour-done';
+
+interface TourStep {
+  target: () => HTMLElement | null;
+  text: string;
+  /** 'action' = wait for user action; 'gotit' = show "Got it" button; 'auto' = auto-advance */
+  trigger: 'action' | 'gotit' | 'auto';
+  autoMs?: number;
+  tooltipSide?: 'top' | 'bottom' | 'left' | 'right';
+}
+
+const tourSteps: TourStep[] = [
+  {
+    target: () => document.getElementById('foundry-shapes'),
+    text: 'Click any shape to spawn it on the canvas. Shapes create sound when their edges cross the orbital lines.',
+    trigger: 'action',
+    tooltipSide: 'top',
+  },
+  {
+    target: () => document.getElementById('sound-menu'),
+    text: 'Pick an instrument for your shape. Each category sounds different — try a few!',
+    trigger: 'action',
+    tooltipSide: 'right',
+  },
+  {
+    target: () => document.getElementById('play-pause-btn'),
+    text: 'Press Play (or Space) to start the orbital engine and hear your creation.',
+    trigger: 'action',
+    tooltipSide: 'top',
+  },
+  {
+    target: () => document.body, // fullscreen — no specific target
+    text: 'You made music from planetary orbits!',
+    trigger: 'auto',
+    autoMs: 2000,
+  },
+  {
+    target: () => document.getElementById('foundry-panel'),
+    text: 'Keep exploring: <kbd>Scroll</kbd> to resize shapes, <kbd>Backspace</kbd> to delete, <kbd>D</kbd> toggle dock, <kbd>I</kbd> live code, <kbd>P</kbd> change pattern.',
+    trigger: 'gotit',
+    tooltipSide: 'top',
+  },
+];
+
+let tourActive = false;
+let tourStepIdx = 0;
+let tourLiftedEl: HTMLElement | null = null;
+
+const tourEl       = document.getElementById('intro-tour')!;
+const tourScrim    = document.getElementById('intro-scrim')!;
+const tourSpot     = document.getElementById('intro-spotlight')!;
+const tourTooltip  = document.getElementById('intro-tooltip')!;
+const tourCounter  = document.getElementById('intro-step-counter')!;
+const tourText     = document.getElementById('intro-text')!;
+const tourGotIt    = document.getElementById('intro-got-it')!;
+const tourSkip     = document.getElementById('intro-skip')!;
+
+function shouldShowTour(): boolean {
+  if (new URLSearchParams(window.location.search).has('tour')) return true;
+  return !localStorage.getItem(TOUR_DONE_KEY);
+}
+
+function startTour(): void {
+  if (!shouldShowTour()) return;
+  tourActive = true;
+  tourStepIdx = 0;
+  // Ensure dock is visible for the tour
+  document.body.classList.remove('ui-hidden');
+  tourEl.classList.remove('hidden');
+  showTourStep();
+}
+
+function endTour(skipped = false): void {
+  tourActive = false;
+  tourEl.classList.add('hidden');
+  // Restore any lifted element's z-index
+  if (tourLiftedEl) {
+    tourLiftedEl.style.zIndex = '';
+    tourLiftedEl = null;
+  }
+  localStorage.setItem(TOUR_DONE_KEY, 'true');
+  if (skipped) showTourToast('Tour skipped — add ?tour=1 to URL to replay');
+}
+
+function showTourToast(msg: string): void {
+  const toast = document.createElement('div');
+  toast.id = 'intro-tour-toast';
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.classList.add('fade-out'), 1500);
+  setTimeout(() => toast.remove(), 2200);
+}
+
+function showTourStep(): void {
+  const step = tourSteps[tourStepIdx];
+  const target = step.target();
+
+  // Restore previously lifted element's z-index
+  if (tourLiftedEl) {
+    tourLiftedEl.style.zIndex = '';
+    tourLiftedEl = null;
+  }
+
+  tourCounter.textContent = `Step ${tourStepIdx + 1} of ${tourSteps.length}`;
+  tourText.innerHTML = step.text;
+
+  // "Got it" button visibility
+  if (step.trigger === 'gotit') {
+    tourGotIt.classList.remove('hidden');
+  } else {
+    tourGotIt.classList.add('hidden');
+  }
+
+  // Position spotlight and lift target above the scrim
+  if (target && target !== document.body) {
+    const rect = target.getBoundingClientRect();
+    const pad = 8;
+    tourSpot.style.left   = `${rect.left - pad}px`;
+    tourSpot.style.top    = `${rect.top - pad}px`;
+    tourSpot.style.width  = `${rect.width + pad * 2}px`;
+    tourSpot.style.height = `${rect.height + pad * 2}px`;
+    tourSpot.style.display = 'block';
+
+    // Lift the interactive ancestor (the panel containing the target) above the tour overlay
+    // so clicks pass through to it. These elements already have position: fixed.
+    const liftTarget = target.closest('#foundry-panel, #sound-menu') as HTMLElement ?? target;
+    if (step.trigger === 'action' || step.trigger === 'gotit') {
+      liftTarget.style.zIndex = '96';
+      tourLiftedEl = liftTarget;
+    }
+  } else {
+    // No specific target — hide spotlight, center tooltip
+    tourSpot.style.display = 'none';
+  }
+
+  // Position tooltip relative to spotlight
+  positionTooltip(step, target);
+
+  // Auto-advance
+  if (step.trigger === 'auto' && step.autoMs) {
+    setTimeout(() => {
+      if (tourActive && tourStepIdx === tourSteps.indexOf(step)) advanceTour();
+    }, step.autoMs);
+  }
+}
+
+function positionTooltip(step: TourStep, target: HTMLElement | null): void {
+  // Reset
+  tourTooltip.style.left = '';
+  tourTooltip.style.top = '';
+  tourTooltip.style.right = '';
+  tourTooltip.style.bottom = '';
+
+  if (!target || target === document.body) {
+    // Center on screen
+    tourTooltip.style.left = '50%';
+    tourTooltip.style.top = '50%';
+    tourTooltip.style.transform = 'translate(-50%, -50%)';
+    return;
+  }
+
+  tourTooltip.style.transform = '';
+  const rect = target.getBoundingClientRect();
+  const side = step.tooltipSide ?? 'top';
+  const gap = 16;
+
+  switch (side) {
+    case 'top':
+      tourTooltip.style.left = `${rect.left + rect.width / 2 - 160}px`;
+      tourTooltip.style.bottom = `${window.innerHeight - rect.top + gap}px`;
+      break;
+    case 'bottom':
+      tourTooltip.style.left = `${rect.left + rect.width / 2 - 160}px`;
+      tourTooltip.style.top = `${rect.bottom + gap}px`;
+      break;
+    case 'right':
+      tourTooltip.style.left = `${rect.right + gap}px`;
+      tourTooltip.style.top = `${rect.top + rect.height / 2 - 60}px`;
+      break;
+    case 'left':
+      tourTooltip.style.right = `${window.innerWidth - rect.left + gap}px`;
+      tourTooltip.style.top = `${rect.top + rect.height / 2 - 60}px`;
+      break;
+  }
+}
+
+function advanceTour(): void {
+  tourStepIdx++;
+  if (tourStepIdx >= tourSteps.length) {
+    endTour();
+  } else {
+    showTourStep();
+  }
+}
+
+/** Called from other event handlers to notify the tour that an action happened. */
+function notifyTour(action: 'shape-spawned' | 'instrument-picked' | 'play-pressed'): void {
+  if (!tourActive) return;
+  const stepIdx = tourStepIdx;
+  if (action === 'shape-spawned' && stepIdx === 0) {
+    // Show the sound menu for the just-spawned shape so step 1 can spotlight it
+    if (activeShape) showSoundMenu(activeShape);
+    advanceTour();
+  }
+  else if (action === 'instrument-picked' && stepIdx === 1) advanceTour();
+  else if (action === 'play-pressed' && stepIdx === 2) advanceTour();
+}
+
+// Skip button
+tourSkip.addEventListener('click', () => endTour(true));
+
+// Scrim click = skip
+tourScrim.addEventListener('click', () => endTour(true));
+
+// "Got it" button (step 5)
+tourGotIt.addEventListener('click', () => {
+  if (tourActive) advanceTour();
+});
+
+// ESC to dismiss
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && tourActive) {
+    e.preventDefault();
+    endTour(true);
   }
 });
 
