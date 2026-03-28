@@ -7,7 +7,7 @@ declare module '@strudel/core' {
   export function repl(options: {
     defaultOutput: any;
     getTime: () => number;
-    transpiler?: (code: string) => string;
+    transpiler?: (code: string, options?: unknown) => { output: string; [key: string]: unknown };
     [key: string]: unknown;
   }): {
     evaluate(code: string, autostart?: boolean, shouldHush?: boolean): Promise<unknown>;
@@ -40,6 +40,16 @@ declare module '@strudel/mini' {
 }
 
 declare module '@strudel/transpiler' {
-  export function transpiler(code: string): string;
+  /** Transpiles mini-notation strings to executable JS. */
+  export function transpiler(code: string, options?: unknown): { output: string; [key: string]: unknown };
   export function evaluate(code: string): Promise<any>;
+}
+
+declare module '@strudel/core/evaluate.mjs' {
+  export function evalScope(...modules: unknown[]): Promise<unknown[]>;
+  export function evaluate(
+    code: string,
+    transpiler?: (code: string) => { output: string; [key: string]: unknown },
+    transpilerOptions?: unknown,
+  ): Promise<{ pattern: unknown; mode: string; meta: unknown }>;
 }
