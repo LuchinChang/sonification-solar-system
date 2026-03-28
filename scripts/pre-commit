@@ -1,0 +1,10 @@
+#!/bin/sh
+# Pre-commit hook: type-check + test before allowing commits
+
+echo "Pre-commit: type-checking..."
+npx tsc --noEmit || exit 1
+
+echo "Pre-commit: running tests..."
+npx vitest run || exit 1
+
+echo "Pre-commit: all checks passed."
