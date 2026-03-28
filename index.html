@@ -10,13 +10,12 @@
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&display=swap"
       rel="stylesheet"
     />
-    <script type="module" crossorigin src="/sonification-solar-system/assets/index-CxThMfkj.js"></script>
-    <link rel="stylesheet" crossorigin href="/sonification-solar-system/assets/index-Vzv1Wk08.css">
+    <script type="module" crossorigin src="/assets/index-C6Xzt87i.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BLc4X5G2.css">
   </head>
   
-  <script data-goatcounter="https://lcchang.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 
-  <body>
+  <body class="ui-hidden">
 
     <!-- ══ Audio-init overlay — browser policy requires user gesture ══ -->
     <div id="audio-overlay">
@@ -25,6 +24,38 @@
         <span class="engine-label">Start Engine</span>
         <span class="engine-hint">Enable audio synthesis</span>
       </button>
+      <p class="signature">Solar System Sonification</p>
+    </div>
+
+    <!-- ══ Pattern selector overlay — shown after audio init ══ -->
+    <div id="pattern-selector" class="hidden">
+      <div class="pattern-band">
+        <h2 class="pattern-band-title">Choose a Planetary Pattern</h2>
+        <div class="pattern-cards" id="pattern-cards">
+          <!-- Cards injected by main.ts from PATTERNS array -->
+        </div>
+        <p class="pattern-band-hint">Press <kbd>P</kbd> to reopen anytime</p>
+      </div>
+    </div>
+
+    <!-- ══ Draw-animation caption bar ══ -->
+    <div id="draw-caption" class="draw-caption hidden" aria-live="polite"></div>
+
+    <!-- ══ Pattern-ready toast ══ -->
+    <div id="pattern-toast" class="pattern-toast hidden"></div>
+
+    <!-- ══ Intro Tour overlay — first-time guided walkthrough ══ -->
+    <div id="intro-tour" class="hidden" aria-label="Introduction tour">
+      <div id="intro-scrim"></div>
+      <div id="intro-spotlight"></div>
+      <div id="intro-tooltip">
+        <span id="intro-step-counter" class="intro-step-counter"></span>
+        <p id="intro-text" class="intro-text"></p>
+        <div id="intro-actions" class="intro-actions">
+          <button id="intro-got-it" class="intro-got-it hidden" type="button">Got it</button>
+        </div>
+        <button id="intro-skip" class="intro-skip" type="button">Skip tour</button>
+      </div>
     </div>
 
     <!-- ══ Orbital canvas — driven entirely by main.ts ══ -->
@@ -294,6 +325,22 @@
             style="flex: 1;"
           />
           <span id="sweeper-arms-value" style="font-size: 12px; min-width: 20px; text-align: right;">1</span>
+        </div>
+        <div style="margin-top: 10px; margin-bottom: 8px;">
+          <label for="sweeper-pos-slider" style="font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px;">
+            Positions
+          </label>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <input
+            id="sweeper-pos-slider"
+            type="range"
+            min="10"
+            max="180"
+            value="60"
+            style="flex: 1;"
+          />
+          <span id="sweeper-pos-value" style="font-size: 12px; min-width: 20px; text-align: right;">60</span>
         </div>
       </div>
 
