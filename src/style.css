@@ -1108,9 +1108,9 @@ body.ui-hidden .theme-toggle-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--overlay-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+  background: rgba(18, 15, 14, 0.45);
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
   opacity: 1;
   transition: opacity 0.35s var(--ease-out-quart);
 }
@@ -1287,12 +1287,12 @@ body.ui-hidden .theme-toggle-btn {
   display: none;
 }
 
-/* Dark scrim — click to dismiss the tour */
+/* Dark scrim — visual dimming only, clicks pass through to the UI */
 #intro-scrim {
   position: absolute;
   inset: 0;
   z-index: 0;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 /* Spotlight cutout — sized/positioned dynamically by JS */
@@ -1321,12 +1321,15 @@ body.ui-hidden .theme-toggle-btn {
   100% { opacity: 0; transform: scale(1.08); }
 }
 
-/* Tooltip card */
+/* Tooltip banner — fixed at top-center, never blocked by panels */
 #intro-tooltip {
-  position: absolute;
-  z-index: 2;
-  max-width: 320px;
-  padding: 18px 22px 14px;
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 96;
+  max-width: 420px;
+  padding: 18px 28px 14px;
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
@@ -1335,7 +1338,7 @@ body.ui-hidden .theme-toggle-btn {
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.50),
     0 1px 0 rgba(255, 200, 120, 0.05) inset;
-  transition: all 0.4s var(--ease-out-quart);
+  transition: opacity 0.3s var(--ease-out-quart);
   pointer-events: auto;
 }
 

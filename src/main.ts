@@ -106,6 +106,10 @@ function startDrawAnimation(): void {
   captionEl.classList.remove('visible');
   captionEl.textContent = '';
 
+  // Show skip hint toast
+  toastEl.textContent = 'Press Space to skip animation';
+  toastEl.classList.remove('hidden', 'fade-out');
+
   // Pause playback during animation
   if (isPlaying) togglePlayback();
 }
@@ -210,6 +214,12 @@ function selectPattern(patternId: string): void {
   const pattern = PATTERNS.find(p => p.id === patternId);
   if (!pattern) return;
 
+  // If same pattern re-selected, just close the selector without resetting
+  if (pattern.id === currentPattern.id) {
+    hidePatternSelector();
+    return;
+  }
+
   currentPattern = pattern;
 
   // Compute dynamic scale
@@ -300,7 +310,7 @@ function spawnShape(type: ShapeType): void {
   s.rebuildIntersectionCache(linkLines);
   if (s.type === 'sweeper') s.rebuildSweepTicks(linkLines, ORBITAL_MAX_RADIUS);
   setActiveShape(s);
-  hideSoundMenu();
+  showSoundMenu(s);
   updateTelemetry();
   // Pre-warm Strudel compiler with the updated pattern so play starts instantly
   if (audioInitialized) playLiveCode(telemetryTextarea.value, false);
@@ -693,6 +703,7 @@ function flashTelemBlock(shape: CanvasShape, now: number): void {
 function toggleTelemetry(): void {
   const collapsed = telemetryPanel.classList.toggle('collapsed');
   telemetryTab.setAttribute('aria-expanded', String(!collapsed));
+  if (!collapsed) notifyTour('telemetry-toggled');
 }
 telemetryTab.addEventListener('click', toggleTelemetry);
 
@@ -722,6 +733,7 @@ function evaluateAndFlash(): void {
     document.body.classList.add('global-flash');
     setTimeout(() => document.body.classList.remove('global-flash'), 450);
   }
+  notifyTour('eval-pressed');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1265,6 +1277,7 @@ document.addEventListener('keydown', e => {
   switch (e.key.toLowerCase()) {
     case 'd':
       document.body.classList.toggle('ui-hidden');
+      if (!document.body.classList.contains('ui-hidden')) notifyTour('dock-shown');
       break;
     case 'i':
       toggleTelemetry();
@@ -1279,7 +1292,13 @@ document.addEventListener('keydown', e => {
       break;
     case 'p':
       if (!drawAnimActive && audioInitialized) {
-        showPatternSelector();
+        // Toggle: hide if visible, show if hidden
+        if (!patternSelectorEl.classList.contains('hidden')) {
+          hidePatternSelector();
+        } else {
+          showPatternSelector();
+          notifyTour('pattern-opened');
+        }
       }
       break;
     case 'backspace':
@@ -1301,39 +1320,67 @@ interface TourStep {
   /** 'action' = wait for user action; 'gotit' = show "Got it" button; 'auto' = auto-advance */
   trigger: 'action' | 'gotit' | 'auto';
   autoMs?: number;
-  tooltipSide?: 'top' | 'bottom' | 'left' | 'right';
 }
 
+// Flow: dock → spawn → instrument → play → celebrate → re-pick → sync → listen → livecode → patterns → done
+// The tour ONLY instructs — it never opens menus or toggles panels for the user.
 const tourSteps: TourStep[] = [
-  {
+  { // 0 — Show the dock
+    target: () => document.body,
+    text: 'Press <kbd>D</kbd> to reveal the control dock.',
+    trigger: 'action',
+  },
+  { // 1 — Spawn a shape
     target: () => document.getElementById('foundry-shapes'),
-    text: 'Click any shape to spawn it on the canvas. Shapes create sound when their edges cross the orbital lines.',
+    text: 'Click a shape in the dock to place it on the canvas.',
     trigger: 'action',
-    tooltipSide: 'top',
   },
-  {
+  { // 2 — Pick an instrument
     target: () => document.getElementById('sound-menu'),
-    text: 'Pick an instrument for your shape. Each category sounds different — try a few!',
+    text: 'Pick an instrument from the menu that just appeared!',
     trigger: 'action',
-    tooltipSide: 'right',
   },
-  {
+  { // 3 — Press Play
     target: () => document.getElementById('play-pause-btn'),
-    text: 'Press Play (or Space) to start the orbital engine and hear your creation.',
+    text: 'Press <kbd>Space</kbd> or click Play to hear your creation.',
     trigger: 'action',
-    tooltipSide: 'top',
   },
-  {
-    target: () => document.body, // fullscreen — no specific target
+  { // 4 — Celebrate
+    target: () => document.body,
     text: 'You made music from planetary orbits!',
     trigger: 'auto',
     autoMs: 2000,
   },
-  {
-    target: () => document.getElementById('foundry-panel'),
-    text: 'Keep exploring: <kbd>Scroll</kbd> to resize shapes, <kbd>Backspace</kbd> to delete, <kbd>D</kbd> toggle dock, <kbd>I</kbd> live code, <kbd>P</kbd> change pattern.',
+  { // 5 — Re-pick instrument
+    target: () => document.body,
+    text: 'Try changing your shape\'s instrument — click it to select, then pick a new one. Press <kbd>Space</kbd> to pause if the shape is moving. (The instrument menu only appears when the dock is visible.)',
+    trigger: 'action',
+  },
+  { // 6 — Sync changes
+    target: () => document.body,
+    text: 'Press <kbd>⌘/Ctrl+Enter</kbd> to sync your changes. Look for the green flash — it confirms the sound has been updated!',
+    trigger: 'action',
+  },
+  { // 7 — Listen to the change
+    target: () => document.body,
+    text: 'Listen to the difference!',
+    trigger: 'auto',
+    autoMs: 3000,
+  },
+  { // 8 — Live code panel
+    target: () => document.getElementById('telemetry-panel'),
+    text: 'Press <kbd>I</kbd> to open the live code panel. Watch how code changes as you add shapes — you can edit it directly!',
+    trigger: 'action',
+  },
+  { // 9 — Change patterns
+    target: () => document.getElementById('pattern-selector'),
+    text: 'Press <kbd>P</kbd> to toggle the pattern selector — you can browse patterns without losing your shapes!',
+    trigger: 'action',
+  },
+  { // 10 — Done
+    target: () => document.body,
+    text: 'You\'re all set! Explore freely.',
     trigger: 'gotit',
-    tooltipSide: 'top',
   },
 ];
 
@@ -1342,9 +1389,7 @@ let tourStepIdx = 0;
 let tourLiftedEl: HTMLElement | null = null;
 
 const tourEl       = document.getElementById('intro-tour')!;
-const tourScrim    = document.getElementById('intro-scrim')!;
 const tourSpot     = document.getElementById('intro-spotlight')!;
-const tourTooltip  = document.getElementById('intro-tooltip')!;
 const tourCounter  = document.getElementById('intro-step-counter')!;
 const tourText     = document.getElementById('intro-text')!;
 const tourGotIt    = document.getElementById('intro-got-it')!;
@@ -1359,8 +1404,7 @@ function startTour(): void {
   if (!shouldShowTour()) return;
   tourActive = true;
   tourStepIdx = 0;
-  // Ensure dock is visible for the tour
-  document.body.classList.remove('ui-hidden');
+  // Keep dock hidden — step 0 teaches the user to press D
   tourEl.classList.remove('hidden');
   showTourStep();
 }
@@ -1418,7 +1462,7 @@ function showTourStep(): void {
 
     // Lift the interactive ancestor (the panel containing the target) above the tour overlay
     // so clicks pass through to it. These elements already have position: fixed.
-    const liftTarget = target.closest('#foundry-panel, #sound-menu') as HTMLElement ?? target;
+    const liftTarget = target.closest('#foundry-panel, #sound-menu, #telemetry-panel') as HTMLElement ?? target;
     if (step.trigger === 'action' || step.trigger === 'gotit') {
       liftTarget.style.zIndex = '96';
       tourLiftedEl = liftTarget;
@@ -1428,54 +1472,11 @@ function showTourStep(): void {
     tourSpot.style.display = 'none';
   }
 
-  // Position tooltip relative to spotlight
-  positionTooltip(step, target);
-
   // Auto-advance
   if (step.trigger === 'auto' && step.autoMs) {
     setTimeout(() => {
       if (tourActive && tourStepIdx === tourSteps.indexOf(step)) advanceTour();
     }, step.autoMs);
-  }
-}
-
-function positionTooltip(step: TourStep, target: HTMLElement | null): void {
-  // Reset
-  tourTooltip.style.left = '';
-  tourTooltip.style.top = '';
-  tourTooltip.style.right = '';
-  tourTooltip.style.bottom = '';
-
-  if (!target || target === document.body) {
-    // Center on screen
-    tourTooltip.style.left = '50%';
-    tourTooltip.style.top = '50%';
-    tourTooltip.style.transform = 'translate(-50%, -50%)';
-    return;
-  }
-
-  tourTooltip.style.transform = '';
-  const rect = target.getBoundingClientRect();
-  const side = step.tooltipSide ?? 'top';
-  const gap = 16;
-
-  switch (side) {
-    case 'top':
-      tourTooltip.style.left = `${rect.left + rect.width / 2 - 160}px`;
-      tourTooltip.style.bottom = `${window.innerHeight - rect.top + gap}px`;
-      break;
-    case 'bottom':
-      tourTooltip.style.left = `${rect.left + rect.width / 2 - 160}px`;
-      tourTooltip.style.top = `${rect.bottom + gap}px`;
-      break;
-    case 'right':
-      tourTooltip.style.left = `${rect.right + gap}px`;
-      tourTooltip.style.top = `${rect.top + rect.height / 2 - 60}px`;
-      break;
-    case 'left':
-      tourTooltip.style.right = `${window.innerWidth - rect.left + gap}px`;
-      tourTooltip.style.top = `${rect.top + rect.height / 2 - 60}px`;
-      break;
   }
 }
 
@@ -1488,24 +1489,22 @@ function advanceTour(): void {
   }
 }
 
-/** Called from other event handlers to notify the tour that an action happened. */
-function notifyTour(action: 'shape-spawned' | 'instrument-picked' | 'play-pressed'): void {
+/** Called from other event handlers to notify the tour that an action happened.
+ *  Steps: 0=dock 1=spawn 2=instrument 3=play 4=celebrate 5=re-pick 6=sync 7=listen 8=livecode 9=patterns 10=done */
+function notifyTour(action: 'dock-shown' | 'shape-spawned' | 'instrument-picked' | 'play-pressed' | 'eval-pressed' | 'telemetry-toggled' | 'pattern-opened'): void {
   if (!tourActive) return;
-  const stepIdx = tourStepIdx;
-  if (action === 'shape-spawned' && stepIdx === 0) {
-    // Show the sound menu for the just-spawned shape so step 1 can spotlight it
-    if (activeShape) showSoundMenu(activeShape);
-    advanceTour();
-  }
-  else if (action === 'instrument-picked' && stepIdx === 1) advanceTour();
-  else if (action === 'play-pressed' && stepIdx === 2) advanceTour();
+  const idx = tourStepIdx;
+  if (action === 'dock-shown' && idx === 0) advanceTour();
+  else if (action === 'shape-spawned' && idx === 1) advanceTour();
+  else if (action === 'instrument-picked' && (idx === 2 || idx === 5)) advanceTour();
+  else if (action === 'play-pressed' && idx === 3) advanceTour();
+  else if (action === 'eval-pressed' && idx === 6) advanceTour();
+  else if (action === 'telemetry-toggled' && idx === 8) advanceTour();
+  else if (action === 'pattern-opened' && idx === 9) advanceTour();
 }
 
-// Skip button
+// Skip button (only way to skip besides ESC)
 tourSkip.addEventListener('click', () => endTour(true));
-
-// Scrim click = skip
-tourScrim.addEventListener('click', () => endTour(true));
 
 // "Got it" button (step 5)
 tourGotIt.addEventListener('click', () => {
