@@ -7,6 +7,7 @@
 
 import type { Point } from './geometry';
 import { getLineCircleIntersections, getRaySegmentDist, pointToSegmentDist } from './geometry';
+import type { ShapeConfig } from './config-snapshot';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -66,6 +67,9 @@ const SWEEP_COLOR = '#2DD4BF';  // teal
 // ── Module-level ID counter ───────────────────────────────────────────────────
 let _nextId = 0;
 
+/** Reset the auto-increment ID counter (used when restoring a saved config). */
+export function resetNextId(n: number): void { _nextId = n; }
+
 // ── Internal geometry helpers ─────────────────────────────────────────────────
 
 /** Finite line-segment intersection, or null when parallel/non-overlapping. */
@@ -88,11 +92,16 @@ function segmentIntersect(
 // ── CanvasShape ───────────────────────────────────────────────────────────────
 
 export class CanvasShape {
+  // ═══ PERSISTENT (saved in ConfigSnapshot via ShapeConfig) ═══════════════════
+  // Adding a new persistent property? Update:
+  //   1. ShapeConfig interface in config-snapshot.ts
+  //   2. toConfig() below
+  //   3. fromConfig() below
+  //   4. Round-trip test in config-snapshot.test.ts
   readonly id: number;
   x: number;
   y: number;
   readonly type: ShapeType;
-
   /**
    * Active instrument — determines both the Strudel sound and the template.
    * Drums:  bd | sd | hh | cp
@@ -100,12 +109,23 @@ export class CanvasShape {
    * Keys:   piano
    */
   instrument: string;
-
   /** Radius for circles; half-span for triangles / rectangles. */
   size: number;
-  isSelected: boolean;
+  /** Top-K clusters to track (sweeper only). */
+  k: number;
+  /** Number of evenly-spaced arms (sweeper only). Default 1, range 1–8. */
+  sweepCount: number;
+  /**
+   * Absolute angle of the 12 o'clock position (tick 0) in canvas radians [0, 2π).
+   * Default 3π/2 = UP.  Adjusted per 1° scroll steps on selected sweepers.
+   */
+  startAngle: number;
+  /** Number of discrete positions per full revolution (sweeper only). Default 60. */
+  ticks: number;
 
-  // ── Playhead sequencer state ──────────────────────────────────
+  // ═══ DERIVED (recomputed, never serialized) ═════════════════════════════════
+  // Adding here? Add to DERIVED_PROPS in config-snapshot.test.ts
+  isSelected: boolean;
   /** Current playhead angle in [0, 2π). */
   playheadAngle: number;
   /** Playhead angle from the previous animation frame. Used for collision sweep. */
@@ -116,19 +136,8 @@ export class CanvasShape {
   activeAnimations: TriggerAnimation[];
   /** Intersection count — kept up-to-date by rebuildIntersectionCache(). */
   intersectionCount: number;
-  /** Top-K clusters to track (sweeper only). */
-  k: number;
-  /** Number of evenly-spaced arms (sweeper only). Default 1, range 1–8. */
-  sweepCount: number;
   /** Live clusters recomputed every frame (sweeper only). Flat across all arms. */
   sweepClusters: SweepCluster[];
-  /**
-   * Absolute angle of the 12 o'clock position (tick 0) in canvas radians [0, 2π).
-   * Default 3π/2 = UP.  Adjusted per 1° scroll steps on selected sweepers.
-   */
-  startAngle: number;
-  /** Number of discrete positions per full revolution (sweeper only). Default 60. */
-  ticks: number;
   /**
    * Pre-computed clusters indexed [armIdx][tickIdx].
    * Rebuilt on geometry change (sample rate / resize / startAngle / k / sweepCount / ticks).
@@ -154,6 +163,36 @@ export class CanvasShape {
     this.startAngle          = 3 * Math.PI / 2;  // 90° math = UP = 12 o'clock
     this.ticks               = 60;
     this.sweepTicks          = [];
+  }
+
+  // ── Serialization ──────────────────────────────────────────────────────────
+
+  /** Serialize to the portable config format (ShapeConfig). */
+  toConfig(): ShapeConfig {
+    const base: ShapeConfig = {
+      id: this.id, type: this.type, x: this.x, y: this.y,
+      size: this.size, instrument: this.instrument,
+    };
+    if (this.type === 'sweeper') {
+      base.k          = this.k;
+      base.sweepCount = this.sweepCount;
+      base.startAngle = this.startAngle;
+      base.ticks      = this.ticks;
+    }
+    return base;
+  }
+
+  /** Reconstruct from a portable config. Caches must be rebuilt after. */
+  static fromConfig(cfg: ShapeConfig): CanvasShape {
+    const s = new CanvasShape(cfg.x, cfg.y, cfg.type, cfg.size);
+    // Override the auto-assigned ID with the saved one
+    (s as { id: number }).id = cfg.id;
+    s.instrument = cfg.instrument;
+    if (cfg.k          !== undefined) s.k          = cfg.k;
+    if (cfg.sweepCount !== undefined) s.sweepCount = cfg.sweepCount;
+    if (cfg.startAngle !== undefined) s.startAngle = cfg.startAngle;
+    if (cfg.ticks      !== undefined) s.ticks      = cfg.ticks;
+    return s;
   }
 
   // ── Rendering ─────────────────────────────────────────────────────────────
