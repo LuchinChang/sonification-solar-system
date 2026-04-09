@@ -1,7 +1,8 @@
 // src/main.ts
 import './style.css';
 import type { Point } from './geometry';
-import { CanvasShape, type ShapeType, type PlaybackMode } from './shapes';
+import { CanvasShape, resetNextId, type ShapeType, type PlaybackMode } from './shapes';
+import { type ConfigSnapshot, validateSnapshot, downloadSnapshot } from './config-snapshot';
 import { calculateGeocentricLines, calculateEllipticalLines, clamp } from './engine';
 import { PATTERNS, computeAuScale, renderPatternThumbnail, type PlanetaryPattern } from './patterns';
 import { repl, evalScope } from '@strudel/core';
@@ -1391,8 +1392,155 @@ themeToggleBtn.addEventListener('click', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════
+// SAVE / LOAD CONFIG SNAPSHOT
+// ═══════════════════════════════════════════════════════════════
+
+function buildSnapshot(): ConfigSnapshot {
+  return {
+    version: 1,
+    patternId:    currentPattern.id,
+    sampleRate:   SAMPLE_RATE,
+    cpm:          CPM,
+    playbackMode: playbackMode,
+    theme:        currentTheme,
+    shapes:       shapes.map(s => s.toConfig()),
+  };
+}
+
+function saveConfig(): void {
+  downloadSnapshot(buildSnapshot());
+  showToast('Configuration saved');
+}
+
+function restoreFromSnapshot(snap: ConfigSnapshot): void {
+  // 1 — Pattern (must be first: rebuilds linkLines)
+  const pat = PATTERNS.find(p => p.id === snap.patternId);
+  if (!pat) { showToast('Unknown pattern: ' + snap.patternId); return; }
+
+  // Set pattern without triggering the draw animation
+  currentPattern = pat;
+  const minDim = Math.min(canvas.width, canvas.height);
+  currentAuScale = computeAuScale(pat, minDim);
+  const au1 = Math.min(pat.au1, pat.au2);
+  const au2 = Math.max(pat.au1, pat.au2);
+  currentInnerR = au1 * currentAuScale;
+  currentOuterR = au2 * currentAuScale;
+  if (pat.au1 < pat.au2) {
+    currentInnerPeriod = pat.period1;
+    currentOuterPeriod = pat.period2;
+  } else {
+    currentInnerPeriod = pat.period2;
+    currentOuterPeriod = pat.period1;
+  }
+  currentSimYears = pat.simYears;
+  ORBITAL_MAX_RADIUS = currentOuterR * 1.05;
+
+  // Rebuild link lines with restored sample rate
+  SAMPLE_RATE = snap.sampleRate;
+  calculateLines();   // uses SAMPLE_RATE + currentPattern
+
+  // 2 — Global params
+  CPM          = snap.cpm;
+  playbackMode = snap.playbackMode;
+  setPlaybackMode(snap.playbackMode);
+  setTheme(snap.theme);
+  updateSampleKnobVisual();
+  updateCpmKnobVisual();
+  syncStrudelCps();
+
+  // 3 — Clear existing shapes
+  shapes.length = 0;
+  activeShape = null;
+  _flashCooldowns.clear();
+  hideSoundMenu();
+
+  // 4 — Recreate shapes from config
+  let maxId = 0;
+  for (const cfg of snap.shapes) {
+    const s = CanvasShape.fromConfig(cfg);
+    s.rebuildIntersectionCache(linkLines);
+    if (s.type === 'sweeper') s.rebuildSweepTicks(linkLines, ORBITAL_MAX_RADIUS);
+    shapes.push(s);
+    if (s.id > maxId) maxId = s.id;
+  }
+  resetNextId(maxId);
+
+  // 5 — Regenerate Strudel code
+  updateTelemetry();
+  if (audioInitialized) playLiveCode(telemetryTextarea.value, false);
+
+  showToast(`Restored: ${pat.name} — ${snap.shapes.length} shape(s)`);
+}
+
+function handleConfigFile(file: File): void {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result as string);
+      if (!validateSnapshot(data)) {
+        showToast('Invalid config file');
+        return;
+      }
+      restoreFromSnapshot(data);
+    } catch {
+      showToast('Could not parse config file');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ── Toast notification (reuses caption element) ─────────────────
+
+function showToast(msg: string): void {
+  toastEl.textContent = msg;
+  toastEl.classList.remove('hidden');
+  toastEl.classList.add('config-toast');
+  setTimeout(() => {
+    toastEl.classList.add('hidden');
+    toastEl.classList.remove('config-toast');
+  }, 2500);
+}
+
+// ── Drag-and-drop on canvas ─────────────────────────────────────
+
+const dropOverlay = document.getElementById('drop-overlay')!;
+
+canvas.addEventListener('dragover', e => {
+  e.preventDefault();
+  e.stopPropagation();
+  dropOverlay.classList.remove('hidden');
+});
+
+dropOverlay.addEventListener('dragleave', e => {
+  e.preventDefault();
+  dropOverlay.classList.add('hidden');
+});
+
+dropOverlay.addEventListener('drop', e => {
+  e.preventDefault();
+  dropOverlay.classList.add('hidden');
+  const file = e.dataTransfer?.files[0];
+  if (file) handleConfigFile(file);
+});
+
+// ── Save/Load buttons ───────────────────────────────────────────
+
+const saveBtn = document.getElementById('save-config-btn')!;
+const loadBtn = document.getElementById('load-config-btn')!;
+const loadInput = document.getElementById('load-config-input') as HTMLInputElement;
+
+saveBtn.addEventListener('click', saveConfig);
+loadBtn.addEventListener('click', () => loadInput.click());
+loadInput.addEventListener('change', () => {
+  const file = loadInput.files?.[0];
+  if (file) handleConfigFile(file);
+  loadInput.value = '';  // allow re-selecting same file
+});
+
+// ═══════════════════════════════════════════════════════════════
 // KEYBOARD SHORTCUTS
 //   Ctrl/Cmd+Enter → evaluate & flash (global, works from textarea too)
+//   Ctrl/Cmd+S     → save config snapshot
 //   D              → toggle dock + UI panels
 //   I              → toggle telemetry panel
 //   Space          → play / pause  (skip animation if drawing)
@@ -1405,6 +1553,13 @@ document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
     e.preventDefault();
     evaluateAndFlash();
+    return;
+  }
+
+  // Ctrl/Cmd+S: save config snapshot
+  if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+    e.preventDefault();
+    saveConfig();
     return;
   }
 

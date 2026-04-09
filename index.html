@@ -230,9 +230,24 @@
             title="Daylight theme"
           >☀</button>
 
+          <!-- Save / Load config -->
+          <button
+            id="save-config-btn"
+            class="config-btn"
+            aria-label="Save configuration"
+            title="Save config  [ ⌘S ]"
+          >⬇</button>
+          <button
+            id="load-config-btn"
+            class="config-btn"
+            aria-label="Load configuration"
+            title="Load config"
+          >⬆</button>
+          <input id="load-config-input" type="file" accept=".json" style="display:none" />
+
         </div><!-- /sequencer-controls -->
 
-        <p class="dock-hint">⌘ / Ctrl + Scroll → Samples</p>
+        <p class="dock-hint">⌘ / Ctrl + Scroll → Samples  |  ⌘S → Save</p>
       </section>
 
     </aside>
@@ -441,6 +456,11 @@
         </footer>
       </div>
 
+    </div>
+
+    <!-- Drag-and-drop overlay (shown on dragover canvas) -->
+    <div id="drop-overlay" class="hidden">
+      <span>Drop config file to restore</span>
     </div>
 
     <script type="module" src="/src/main.ts"></script>
