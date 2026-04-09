@@ -60,8 +60,16 @@ interface TriggerAnimation {
 // ── Sweeper constants ─────────────────────────────────────────────────────────
 /** Max gap (px) between sorted distances before starting a new cluster. */
 const SWEEP_CLUSTER_THRESHOLD = 2;
-/** Accent colour for sweeper shapes. */
-const SWEEP_COLOR = '#2DD4BF';  // teal
+/** Accent colour palette for sweeper shapes — each sweeper gets a distinct hue. */
+const SWEEP_PALETTE = ['#2DD4BF', '#C084FC', '#F472B6', '#60A5FA', '#FACC15', '#FB923C', '#34D399', '#A78BFA'];
+
+/** Convert a hex colour (#RRGGBB) to an rgba() string with the given alpha. */
+function hexRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 // ── Module-level ID counter ───────────────────────────────────────────────────
 let _nextId = 0;
@@ -134,6 +142,16 @@ export class CanvasShape {
    * Rebuilt on geometry change (sample rate / resize / startAngle / k / sweepCount / ticks).
    */
   sweepTicks: SweepCluster[][][];
+  /** Lower frequency bound for sweeper distance mapping (Hz). */
+  freqLow: number;
+  /** Upper frequency bound for sweeper distance mapping (Hz). */
+  freqHigh: number;
+  /** Palette index for sweeper accent colour. */
+  colorIndex: number;
+  /** AudioContext.currentTime captured when playback starts (sweeper phase sync). */
+  sweepAudioRefTime: number;
+  /** Fractional cycle phase (0..1) accumulated up to the last ref anchor (sweeper phase sync). */
+  sweepPhaseAtRef: number;
 
   constructor(x: number, y: number, type: ShapeType, size = 60) {
     this.id                  = ++_nextId;
@@ -154,6 +172,11 @@ export class CanvasShape {
     this.startAngle          = 3 * Math.PI / 2;  // 90° math = UP = 12 o'clock
     this.ticks               = 60;
     this.sweepTicks          = [];
+    this.freqLow             = 100;
+    this.freqHigh            = 1000;
+    this.colorIndex          = 0;
+    this.sweepAudioRefTime   = 0;
+    this.sweepPhaseAtRef     = 0;
   }
 
   // ── Rendering ─────────────────────────────────────────────────────────────
@@ -214,7 +237,7 @@ export class CanvasShape {
             const ty = this.y + sin * c.distance;
             ctx.beginPath();
             ctx.arc(tx, ty, 2, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(45, 212, 191, ${Math.min(c.gain * 0.35, 0.28)})`;
+            ctx.fillStyle = hexRgba(this.sweepColor, Math.min(c.gain * 0.35, 0.28));
             ctx.fill();
           }
         }
@@ -230,7 +253,7 @@ export class CanvasShape {
 
       for (const c of this.sweepClusters) {
         const alpha = Math.min(c.density / maxDensity, 1.0);
-        const color = `rgba(45, 212, 191, ${Math.max(0.5, alpha)})`;
+        const color = hexRgba(this.sweepColor, Math.max(0.5, alpha));
 
         ctx.beginPath();
         ctx.arc(c.x, c.y, 5, 0, Math.PI * 2);
@@ -292,8 +315,13 @@ export class CanvasShape {
 
   // ── Accent colour — derived from instrument type ──────────────────────────
 
+  /** Sweeper accent colour from the palette, based on colorIndex. */
+  get sweepColor(): string {
+    return SWEEP_PALETTE[this.colorIndex % SWEEP_PALETTE.length];
+  }
+
   get accentColor(): string {
-    if (this.type === 'sweeper')               return SWEEP_COLOR;  // violet — sweeper
+    if (this.type === 'sweeper')               return this.sweepColor;
     if (DRUM_INSTRUMENTS.has(this.instrument)) return '#E8472C';    // coral  — drums
     if (KEY_INSTRUMENTS.has(this.instrument))  return '#E8A050';    // amber  — keys
     return '#C87A2E';                                               // copper — synths
@@ -528,7 +556,7 @@ export class CanvasShape {
         density:  group.length,
         x:        this.x + cos * avgDist,
         y:        this.y + sin * avgDist,
-        freq:     100 + (avgDist / maxR) * 900,            // 100–1000 Hz
+        freq:     this.freqLow + (avgDist / maxR) * (this.freqHigh - this.freqLow),
         gain:     0.6 + Math.min(group.length / 20, 1.0) * 0.3,  // 0.6–0.9
       };
     });

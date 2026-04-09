@@ -306,6 +306,12 @@ function spawnShape(type: ShapeType): void {
   // Sweepers extend to MAX_SHAPE_SIZE; other shapes use the constructor default
   const size = type === 'sweeper' ? MAX_SHAPE_SIZE : undefined;
   const s = new CanvasShape(x, y, type, size);
+  if (type === 'sweeper') {
+    // Auto-offset startAngle and assign distinct colour for each new sweeper
+    const existing = shapes.filter(sh => sh.type === 'sweeper');
+    s.startAngle = (3 * Math.PI / 2 + existing.length * Math.PI / 4) % (Math.PI * 2);
+    s.colorIndex = existing.length;
+  }
   shapes.push(s);
   s.rebuildIntersectionCache(linkLines);
   if (s.type === 'sweeper') s.rebuildSweepTicks(linkLines, ORBITAL_MAX_RADIUS);
@@ -344,10 +350,8 @@ let playbackMode: PlaybackMode = 'constant-time';
 let isPlaying            = false;
 let lastFrameTime        = 0;
 
-// Sweeper AC-clock sync: drive playheadAngle from AudioContext.currentTime instead of
-// accumulated rAF deltaMs, eliminating clock drift vs. Strudel's WebAudio scheduler.
-let sweepAudioRefTime = 0;   // ac.currentTime captured when strudelRepl.start() is called
-let sweepPhaseAtRef   = 0;   // fractional cycle phase (0..1) accumulated up to that point
+// Sweeper AC-clock sync: per-shape sweepAudioRefTime / sweepPhaseAtRef on CanvasShape
+// (removed global singletons — each sweeper tracks its own phase independently).
 
 // ═══════════════════════════════════════════════════════════════
 // THEME STATE — canvas colors tracked in JS, CSS vars for UI
@@ -470,10 +474,10 @@ function animate(now: number): void {
         // WebAudio scheduler and eliminates rAF delta accumulation drift.
         // Guard: fall back to stepPlayhead if AC not yet running or ref not set.
         try {
-          if (audioInitialized && sweepAudioRefTime > 0) {
+          if (audioInitialized && shape.sweepAudioRefTime > 0) {
             const cycleS = 60 / CPM;
-            const phase  = (sweepPhaseAtRef +
-              (getAudioContext().currentTime - sweepAudioRefTime) / cycleS) % 1;
+            const phase  = (shape.sweepPhaseAtRef +
+              (getAudioContext().currentTime - shape.sweepAudioRefTime) / cycleS) % 1;
             shape.prevPlayheadAngle = shape.playheadAngle;
             shape.playheadAngle     = (shape.startAngle + phase * Math.PI * 2) % (Math.PI * 2);
           } else {
@@ -746,8 +750,31 @@ async function initializeAudio(): Promise<void> {
     const ac = getAudioContext();
     if (ac.state === 'suspended') await ac.resume();
 
+    // Insert a master compressor between Strudel's output and ac.destination
+    // to prevent clipping when multiple shapes play simultaneously.
+    const compressor = ac.createDynamicsCompressor();
+    compressor.threshold.value = -24;
+    compressor.knee.value      = 12;
+    compressor.ratio.value     = 4;
+    compressor.attack.value    = 0.003;
+    compressor.release.value   = 0.1;
+    compressor.connect(ac.destination);
+
+    // Monkey-patch connect() so Strudel's internal destinationGain → ac.destination
+    // routes through the compressor instead.  Restored immediately after initAudio().
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const _realConnect = AudioNode.prototype.connect as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (AudioNode.prototype as any).connect = function (this: AudioNode, dest: AudioNode, ...args: any[]) {
+      const target = dest === ac.destination ? compressor : dest;
+      return _realConnect.apply(this, [target, ...args]);
+    };
+
     await initAudio();
     registerSynthSounds();
+
+    // Restore original connect — the compressor is now wired in permanently.
+    (AudioNode.prototype as any).connect = _realConnect;
 
     await evalScope(
       import('@strudel/core'),
@@ -889,12 +916,17 @@ cpmKnobEl.addEventListener('keydown', e => {
   if (e.key === 'ArrowDown' || e.key === 'ArrowLeft')  delta = -5;
   if (delta === 0) return;
   e.preventDefault();
-  // Re-anchor sweep phase at old CPM before changing tempo — prevents arm jump.
+  // Re-anchor sweep phase for each sweeper at old CPM before changing tempo.
   if (isPlaying && audioInitialized) {
     const cycleS_old = 60 / CPM;
-    sweepPhaseAtRef  = (sweepPhaseAtRef +
-      (getAudioContext().currentTime - sweepAudioRefTime) / cycleS_old) % 1;
-    sweepAudioRefTime = getAudioContext().currentTime;
+    const t = getAudioContext().currentTime;
+    for (const s of shapes) {
+      if (s.type === 'sweeper') {
+        s.sweepPhaseAtRef  = (s.sweepPhaseAtRef +
+          (t - s.sweepAudioRefTime) / cycleS_old) % 1;
+        s.sweepAudioRefTime = t;
+      }
+    }
   }
   CPM = clamp(CPM + delta, MIN_CPM, MAX_CPM);
   updateCpmKnobVisual();
@@ -945,20 +977,28 @@ function togglePlayback(): void {
       // so audio begins with minimal delay.  Evaluate runs in parallel to keep
       // the compiled pattern up-to-date for any changes made while paused.
       strudelRepl.start();
-      // Anchor sweeper arm to this exact audio moment.
-      // sweepPhaseAtRef is preserved from the last pause so the arm resumes
+      // Anchor each sweeper arm to this exact audio moment.
+      // Per-shape sweepPhaseAtRef is preserved from the last pause so arms resume
       // from the same position without jumping.
-      try { sweepAudioRefTime = getAudioContext().currentTime; } catch (_) {}
+      try {
+        const t = getAudioContext().currentTime;
+        for (const s of shapes) if (s.type === 'sweeper') s.sweepAudioRefTime = t;
+      } catch (_) {}
       strudelRepl.evaluate(telemetryTextarea.value)
         .then(() => setEvalStatus('ok'))
         .catch((err: unknown) => { console.warn('[strudel-eval async]', err); setEvalStatus('error'); });
     }
   } else {
-    // Accumulate phase before stopping so the arm resumes from the right position.
+    // Accumulate phase for each sweeper before stopping so arms resume correctly.
     try {
       const cycleS = 60 / CPM;
-      sweepPhaseAtRef = (sweepPhaseAtRef +
-        (getAudioContext().currentTime - sweepAudioRefTime) / cycleS) % 1;
+      const t = getAudioContext().currentTime;
+      for (const s of shapes) {
+        if (s.type === 'sweeper') {
+          s.sweepPhaseAtRef = (s.sweepPhaseAtRef +
+            (t - s.sweepAudioRefTime) / cycleS) % 1;
+        }
+      }
     } catch (_) { /* audio not yet initialized */ }
     if (strudelRepl !== null) strudelRepl.stop();
     // Suspend the AudioContext to kill any oscillators still running in the
@@ -1008,12 +1048,17 @@ window.addEventListener('mousemove', e => {
   if (cpmDragging) {
     const dy     = cpmDragStartY - e.clientY;
     const newCPM = clamp(cpmDragStartCPM + Math.round(dy * CPM_SENSITIVITY), MIN_CPM, MAX_CPM);
-    // Re-anchor sweep phase at old CPM before changing tempo — prevents arm jump.
+    // Re-anchor sweep phase for each sweeper at old CPM before changing tempo.
     if (newCPM !== CPM && isPlaying && audioInitialized) {
       const cycleS_old = 60 / CPM;
-      sweepPhaseAtRef  = (sweepPhaseAtRef +
-        (getAudioContext().currentTime - sweepAudioRefTime) / cycleS_old) % 1;
-      sweepAudioRefTime = getAudioContext().currentTime;
+      const t = getAudioContext().currentTime;
+      for (const s of shapes) {
+        if (s.type === 'sweeper') {
+          s.sweepPhaseAtRef  = (s.sweepPhaseAtRef +
+            (t - s.sweepAudioRefTime) / cycleS_old) % 1;
+          s.sweepAudioRefTime = t;
+        }
+      }
     }
     CPM = newCPM;
     updateCpmKnobVisual();
@@ -1089,6 +1134,14 @@ canvas.addEventListener('wheel', e => {
       const delta = up ? -step : step;
       activeShape.startAngle = ((activeShape.startAngle + delta) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
       activeShape.rebuildSweepTicks(linkLines, ORBITAL_MAX_RADIUS);
+      // Keep angle slider in sync with scroll-wheel changes
+      const aSlider = document.getElementById('sweeper-angle-slider') as HTMLInputElement | null;
+      const aValue  = document.getElementById('sweeper-angle-value');
+      if (aSlider && aValue) {
+        const deg = Math.round((activeShape.startAngle * 180 / Math.PI) % 360);
+        aSlider.value      = deg.toString();
+        aValue.textContent  = deg + '°';
+      }
       drawScene();  // instant repaint — don't wait for next rAF frame
       updateTelemetry();
       if (audioInitialized) playLiveCode(telemetryTextarea.value);
@@ -1147,6 +1200,25 @@ function showSoundMenu(shape: CanvasShape): void {
       if (posSliderEl && posValueEl) {
         posSliderEl.value      = shape.ticks.toString();
         posValueEl.textContent = shape.ticks.toString();
+      }
+      const freqLowSliderEl = soundMenu.querySelector('#sweeper-freq-low-slider') as HTMLInputElement;
+      const freqLowValueEl  = soundMenu.querySelector('#sweeper-freq-low-value');
+      if (freqLowSliderEl && freqLowValueEl) {
+        freqLowSliderEl.value      = shape.freqLow.toString();
+        freqLowValueEl.textContent = shape.freqLow.toString();
+      }
+      const freqHighSliderEl = soundMenu.querySelector('#sweeper-freq-high-slider') as HTMLInputElement;
+      const freqHighValueEl  = soundMenu.querySelector('#sweeper-freq-high-value');
+      if (freqHighSliderEl && freqHighValueEl) {
+        freqHighSliderEl.value      = shape.freqHigh.toString();
+        freqHighValueEl.textContent = shape.freqHigh.toString();
+      }
+      const angleSliderEl = soundMenu.querySelector('#sweeper-angle-slider') as HTMLInputElement;
+      const angleValueEl  = soundMenu.querySelector('#sweeper-angle-value');
+      if (angleSliderEl && angleValueEl) {
+        const deg = Math.round((shape.startAngle * 180 / Math.PI) % 360);
+        angleSliderEl.value      = deg.toString();
+        angleValueEl.textContent = deg + '°';
       }
     } else {
       sweeperControls.classList.add('hidden');
@@ -1218,6 +1290,71 @@ if (posSlider && posValue) {
     if (activeShape?.type === 'sweeper') {
       activeShape.ticks = ticks;
       activeShape.rebuildSweepTicks(linkLines, ORBITAL_MAX_RADIUS);
+      updateTelemetry();
+      if (audioInitialized) playLiveCode(telemetryTextarea.value);
+    }
+  });
+}
+
+// Freq Low slider: control lower frequency bound for sweepers
+const freqLowSlider = document.getElementById('sweeper-freq-low-slider') as HTMLInputElement;
+const freqLowValue  = document.getElementById('sweeper-freq-low-value');
+if (freqLowSlider && freqLowValue) {
+  freqLowSlider.addEventListener('input', () => {
+    const hz = parseInt(freqLowSlider.value, 10);
+    freqLowValue.textContent = hz.toString();
+    if (activeShape?.type === 'sweeper') {
+      activeShape.freqLow = hz;
+      activeShape.rebuildSweepTicks(linkLines, ORBITAL_MAX_RADIUS);
+      updateTelemetry();
+      if (audioInitialized) playLiveCode(telemetryTextarea.value);
+    }
+  });
+}
+
+// Freq High slider: control upper frequency bound for sweepers
+const freqHighSlider = document.getElementById('sweeper-freq-high-slider') as HTMLInputElement;
+const freqHighValue  = document.getElementById('sweeper-freq-high-value');
+if (freqHighSlider && freqHighValue) {
+  freqHighSlider.addEventListener('input', () => {
+    const hz = parseInt(freqHighSlider.value, 10);
+    freqHighValue.textContent = hz.toString();
+    if (activeShape?.type === 'sweeper') {
+      activeShape.freqHigh = hz;
+      activeShape.rebuildSweepTicks(linkLines, ORBITAL_MAX_RADIUS);
+      updateTelemetry();
+      if (audioInitialized) playLiveCode(telemetryTextarea.value);
+    }
+  });
+}
+
+// Start Angle slider: control sweeper starting angle
+const angleSlider = document.getElementById('sweeper-angle-slider') as HTMLInputElement;
+const angleValue  = document.getElementById('sweeper-angle-value');
+if (angleSlider && angleValue) {
+  angleSlider.addEventListener('input', () => {
+    const deg = parseInt(angleSlider.value, 10);
+    angleValue.textContent = deg + '°';
+    if (activeShape?.type === 'sweeper') {
+      activeShape.startAngle = (deg * Math.PI / 180) % (Math.PI * 2);
+      activeShape.rebuildSweepTicks(linkLines, ORBITAL_MAX_RADIUS);
+      drawScene();
+      updateTelemetry();
+      if (audioInitialized) playLiveCode(telemetryTextarea.value);
+    }
+  });
+}
+
+// Start Angle reset button
+const angleReset = document.getElementById('sweeper-angle-reset');
+if (angleReset) {
+  angleReset.addEventListener('click', () => {
+    if (activeShape?.type === 'sweeper') {
+      activeShape.startAngle = 3 * Math.PI / 2;
+      if (angleSlider) angleSlider.value = '270';
+      if (angleValue)  angleValue.textContent = '270°';
+      activeShape.rebuildSweepTicks(linkLines, ORBITAL_MAX_RADIUS);
+      drawScene();
       updateTelemetry();
       if (audioInitialized) playLiveCode(telemetryTextarea.value);
     }
