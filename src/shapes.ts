@@ -130,6 +130,12 @@ export class CanvasShape {
   startAngle: number;
   /** Number of discrete positions per full revolution (sweeper only). Default 60. */
   ticks: number;
+  /** Lower frequency bound for sweeper distance mapping (Hz). */
+  freqLow: number;
+  /** Upper frequency bound for sweeper distance mapping (Hz). */
+  freqHigh: number;
+  /** Palette index for sweeper accent colour. */
+  colorIndex: number;
 
   // ═══ DERIVED (recomputed, never serialized) ═════════════════════════════════
   // Adding here? Add to DERIVED_PROPS in config-snapshot.test.ts
@@ -151,15 +157,9 @@ export class CanvasShape {
    * Rebuilt on geometry change (sample rate / resize / startAngle / k / sweepCount / ticks).
    */
   sweepTicks: SweepCluster[][][];
-  /** Lower frequency bound for sweeper distance mapping (Hz). */
-  freqLow: number;
-  /** Upper frequency bound for sweeper distance mapping (Hz). */
-  freqHigh: number;
-  /** Palette index for sweeper accent colour. */
-  colorIndex: number;
-  /** AudioContext.currentTime captured when playback starts (sweeper phase sync). */
+  /** AudioContext.currentTime captured when playback starts (sweeper phase sync, runtime-only). */
   sweepAudioRefTime: number;
-  /** Fractional cycle phase (0..1) accumulated up to the last ref anchor (sweeper phase sync). */
+  /** Fractional cycle phase (0..1) accumulated up to the last ref anchor (sweeper phase sync, runtime-only). */
   sweepPhaseAtRef: number;
 
   constructor(x: number, y: number, type: ShapeType, size = 60) {
@@ -201,6 +201,9 @@ export class CanvasShape {
       base.sweepCount = this.sweepCount;
       base.startAngle = this.startAngle;
       base.ticks      = this.ticks;
+      base.freqLow    = this.freqLow;
+      base.freqHigh   = this.freqHigh;
+      base.colorIndex = this.colorIndex;
     }
     return base;
   }
@@ -215,6 +218,9 @@ export class CanvasShape {
     if (cfg.sweepCount !== undefined) s.sweepCount = cfg.sweepCount;
     if (cfg.startAngle !== undefined) s.startAngle = cfg.startAngle;
     if (cfg.ticks      !== undefined) s.ticks      = cfg.ticks;
+    if (cfg.freqLow    !== undefined) s.freqLow    = cfg.freqLow;
+    if (cfg.freqHigh   !== undefined) s.freqHigh   = cfg.freqHigh;
+    if (cfg.colorIndex !== undefined) s.colorIndex = cfg.colorIndex;
     return s;
   }
 

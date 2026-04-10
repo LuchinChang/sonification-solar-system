@@ -37,9 +37,15 @@ describe('ConfigSnapshot round-trip', () => {
     original.sweepCount = 4;
     original.startAngle = Math.PI;
     original.ticks = 120;
+    original.freqLow = 200;
+    original.freqHigh = 3000;
+    original.colorIndex = 5;
     const cfg = original.toConfig();
     const restored = CanvasShape.fromConfig(cfg);
     expect(restored.toConfig()).toEqual(cfg);
+    expect(restored.freqLow).toBe(200);
+    expect(restored.freqHigh).toBe(3000);
+    expect(restored.colorIndex).toBe(5);
   });
 
   it('preserves shape ID through round-trip', () => {
@@ -56,6 +62,9 @@ describe('ConfigSnapshot round-trip', () => {
     expect(cfg.sweepCount).toBeUndefined();
     expect(cfg.startAngle).toBeUndefined();
     expect(cfg.ticks).toBeUndefined();
+    expect(cfg.freqLow).toBeUndefined();
+    expect(cfg.freqHigh).toBeUndefined();
+    expect(cfg.colorIndex).toBeUndefined();
   });
 });
 
@@ -76,6 +85,8 @@ describe('ShapeConfig property coverage', () => {
     'intersectionCount',
     'sweepClusters',
     'sweepTicks',
+    'sweepAudioRefTime',
+    'sweepPhaseAtRef',
   ]);
 
   it('every CanvasShape property is in ShapeConfig or DERIVED_PROPS', () => {

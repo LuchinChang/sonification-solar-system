@@ -27,6 +27,9 @@ export interface ShapeConfig {
   sweepCount?: number;
   startAngle?: number;
   ticks?: number;
+  freqLow?: number;
+  freqHigh?: number;
+  colorIndex?: number;
 }
 
 // ── ConfigSnapshot — full scene state ────────────────────────────────────────
@@ -67,6 +70,10 @@ export function validateSnapshot(data: unknown): data is ConfigSnapshot {
     if (typeof sh['x'] !== 'number' || typeof sh['y'] !== 'number') return false;
     if (typeof sh['size'] !== 'number' || sh['size'] < 10 || sh['size'] > 500) return false;
     if (typeof sh['instrument'] !== 'string') return false;
+    // Sweeper-only optional fields: validate if present
+    if (sh['freqLow']    !== undefined && (typeof sh['freqLow']    !== 'number' || sh['freqLow']    < 20 || sh['freqLow']    > 20000)) return false;
+    if (sh['freqHigh']   !== undefined && (typeof sh['freqHigh']   !== 'number' || sh['freqHigh']   < 20 || sh['freqHigh']   > 20000)) return false;
+    if (sh['colorIndex'] !== undefined && (typeof sh['colorIndex'] !== 'number' || sh['colorIndex'] < 0  || sh['colorIndex'] > 64))    return false;
   }
 
   return true;
