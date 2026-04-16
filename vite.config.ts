@@ -2,8 +2,7 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  // REPLACE this with the exact name of your GitHub repository
-  base: '/',
+  base: '/sonification-solar-system/',
   test: {
     include: ['src/__tests__/**/*.test.ts'],
     globals: true,
