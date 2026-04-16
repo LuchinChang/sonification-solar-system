@@ -1059,6 +1059,79 @@ body.ui-hidden .theme-toggle-btn {
   pointer-events: none;
 }
 
+/* ── Save / Load config buttons ─────────────────────────────── */
+
+.config-btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: var(--tile-bg);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    border-color var(--dur-fast) var(--ease-out-quart),
+    color        var(--dur-fast) var(--ease-out-quart),
+    box-shadow   var(--dur-fast) var(--ease-out-quart);
+}
+
+.config-btn:hover {
+  border-color: var(--accent-amber);
+  color: var(--accent-amber);
+  box-shadow: 0 0 10px rgba(232, 160, 80, 0.22);
+}
+
+.config-btn:focus-visible {
+  outline: 2px solid var(--accent-copper);
+  outline-offset: 3px;
+}
+
+body.ui-hidden .config-btn {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── Drag-and-drop overlay ──────────────────────────────────── */
+
+#drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  border: 3px dashed var(--accent-amber);
+  pointer-events: auto;
+}
+
+#drop-overlay.hidden {
+  display: none;
+}
+
+#drop-overlay span {
+  font: 600 18px var(--font-mono);
+  color: var(--accent-amber);
+  padding: 16px 32px;
+  border-radius: 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+/* ── Config toast (reuses pattern-toast positioning) ────────── */
+
+.config-toast {
+  z-index: 210 !important;
+}
+
 /* ══════════════════════════════════════════════════════════════
    SYNC AUDIO BUTTON  (in telemetry footer)
    ══════════════════════════════════════════════════════════════ */

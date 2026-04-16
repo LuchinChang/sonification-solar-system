@@ -1,6 +1,6 @@
 # Project: Solar System Sonification Game
 
-## gstack
+### gstack
 Use /browse from gstack for all web browsing. Never use mcp__claude-in-chrome__* tools.
 Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-design-review,
 /design-consultation, /design-shotgun, /design-html, /review, /ship, /land-and-deploy,
@@ -8,7 +8,7 @@ Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-desig
 /setup-browser-cookies, /setup-deploy, /retro, /investigate, /document-release, /codex,
 /cso, /autoplan, /pair-agent, /careful, /freeze, /guard, /unfreeze, /gstack-upgrade, /learn.
 
-### Core Philosophy: The one and only guideline of the interface, the game, and the mappings is that they should enable and encourage users to explore more of the dataset (Solar System planet motions). Every UI choice and audio mapping should reward curiosity.
+### Core Philosophy: The one and only guideline of the interface, the game, and the mappings is that they should enable and encourage users to explore more of the dataset (Solar System planet motions). Every UI choice and audio mapping should reward curiosity. This is an instantiation of the Sonification PLayground as detailed in the ICAD_2026_SonificationPlayground.pdf paper. You should make sure you have 
 
 ### Architecture Rules:
 
@@ -44,3 +44,4 @@ Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-desig
 ### Commit your changes at the end
 
 1. The final step of your plan is to commit all the changes after all tests were passed
+

@@ -230,9 +230,24 @@
             title="Daylight theme"
           >☀</button>
 
+          <!-- Save / Load config -->
+          <button
+            id="save-config-btn"
+            class="config-btn"
+            aria-label="Save configuration"
+            title="Save config  [ ⌘S ]"
+          >⬇</button>
+          <button
+            id="load-config-btn"
+            class="config-btn"
+            aria-label="Load configuration"
+            title="Load config"
+          >⬆</button>
+          <input id="load-config-input" type="file" accept=".json" style="display:none" />
+
         </div><!-- /sequencer-controls -->
 
-        <p class="dock-hint">⌘ / Ctrl + Scroll → Samples</p>
+        <p class="dock-hint">⌘ / Ctrl + Scroll → Samples  |  ⌘S → Save</p>
       </section>
 
     </aside>
@@ -340,6 +355,60 @@
           />
           <span id="sweeper-pos-value" style="font-size: 12px; min-width: 20px; text-align: right;">60</span>
         </div>
+
+        <div style="margin-top: 10px; margin-bottom: 8px;">
+          <label for="sweeper-freq-low-slider" style="font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px;">
+            Freq Low (Hz)
+          </label>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <input
+            id="sweeper-freq-low-slider"
+            type="range"
+            min="20"
+            max="2000"
+            value="100"
+            style="flex: 1;"
+          />
+          <span id="sweeper-freq-low-value" style="font-size: 12px; min-width: 36px; text-align: right;">100</span>
+        </div>
+        <div style="margin-top: 10px; margin-bottom: 8px;">
+          <label for="sweeper-freq-high-slider" style="font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px;">
+            Freq High (Hz)
+          </label>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <input
+            id="sweeper-freq-high-slider"
+            type="range"
+            min="20"
+            max="2000"
+            value="1000"
+            style="flex: 1;"
+          />
+          <span id="sweeper-freq-high-value" style="font-size: 12px; min-width: 36px; text-align: right;">1000</span>
+        </div>
+
+        <div style="margin-top: 10px; margin-bottom: 8px;">
+          <label for="sweeper-angle-slider" style="font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px;">
+            Start Angle
+          </label>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <input
+            id="sweeper-angle-slider"
+            type="range"
+            min="0"
+            max="359"
+            value="270"
+            step="1"
+            style="flex: 1;"
+          />
+          <span id="sweeper-angle-value" style="font-size: 12px; min-width: 30px; text-align: right;">270°</span>
+          <button id="sweeper-angle-reset" title="Reset to 12 o'clock" style="font-size: 11px; padding: 2px 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #999; cursor: pointer;">
+            &#x21BA;
+          </button>
+        </div>
       </div>
 
     </div>
@@ -387,6 +456,11 @@
         </footer>
       </div>
 
+    </div>
+
+    <!-- Drag-and-drop overlay (shown on dragover canvas) -->
+    <div id="drop-overlay" class="hidden">
+      <span>Drop config file to restore</span>
     </div>
 
     <script type="module" src="/src/main.ts"></script>
