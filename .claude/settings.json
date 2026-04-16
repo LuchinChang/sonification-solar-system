@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "command": "npx tsc --noEmit 2>&1 | head -20",
+        "description": "Type-check after edits"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "command": "case \"$CLAUDE_FILE_PATH\" in *package-lock*|*node_modules*) echo 'BLOCK: Protected file — do not edit lock files or node_modules' && exit 1;; esac",
+        "description": "Block edits to lock files and node_modules"
+      }
+    ]
+  }
+}
