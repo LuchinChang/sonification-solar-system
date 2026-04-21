@@ -31,7 +31,8 @@ import { setTheme } from './theme';
 import { drawScene } from './renderer';
 import {
   type ConfigSnapshot,
-  validateSnapshot,
+  SNAPSHOT_VERSION,
+  inspectSnapshot,
   downloadSnapshot,
 } from './config-snapshot';
 
@@ -333,7 +334,7 @@ export function handleResize(state: AppState, dom: DomElements): void {
 
 function buildSnapshot(state: AppState): ConfigSnapshot {
   return {
-    version: 1,
+    version: SNAPSHOT_VERSION,
     patternId:    state.currentPattern.id,
     sampleRate:   state.sampleRate,
     cpm:          state.cpm,
@@ -425,11 +426,15 @@ function handleConfigFile(state: AppState, dom: DomElements, file: File): void {
   reader.onload = () => {
     try {
       const data = JSON.parse(reader.result as string);
-      if (!validateSnapshot(data)) {
-        showToast(dom, 'Invalid config file');
+      const rejection = inspectSnapshot(data);
+      if (rejection !== null) {
+        const msg = rejection.kind === 'legacy-version'
+          ? 'Legacy v1 config — please recreate your scene (no migration)'
+          : `Invalid config: ${rejection.message}`;
+        showToast(dom, msg);
         return;
       }
-      restoreFromSnapshot(state, dom, data);
+      restoreFromSnapshot(state, dom, data as ConfigSnapshot);
     } catch {
       showToast(dom, 'Could not parse config file');
     }
