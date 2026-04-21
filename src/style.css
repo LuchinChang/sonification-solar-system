@@ -5,6 +5,8 @@
             coral/vermilion intersections · glassmorphism UI
    ═══════════════════════════════════════════════════════════ */
 
+@import './node-editor/styles.css';
+
 /* ── Design Tokens ─────────────────────────────────────────── */
 :root {
   /* Canvas palette */
