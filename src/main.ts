@@ -11,7 +11,8 @@ import { initDust } from './renderer';
 import { drawScene } from './renderer';
 import { setTheme } from './theme';
 import { createTourController } from './tour';
-import { updateTelemetry, flashTelemBlock } from './telemetry';
+// LEGACY: flashTelemBlock was only used in the non-sweeper rAF branch.
+import { updateTelemetry } from './telemetry';
 import {
   setupEventHandlers, calculateLines,
   finishDrawAnimation, updateCaption,
@@ -53,26 +54,31 @@ function animate(now: number): void {
 
   if (state.isPlaying && dt > 0) {
     for (const shape of state.shapes) {
-      if (shape.type === 'sweeper') {
-        // Drive sweeper arm from AudioContext clock — per-shape phase
-        // (sweepAudioRefTime / sweepPhaseAtRef live on each CanvasShape so
-        // multiple sweepers can run independently).
-        try {
-          if (state.audioInitialized && shape.sweepAudioRefTime > 0) {
-            const cycleS = 60 / state.cpm;
-            const phase  = (shape.sweepPhaseAtRef +
-              (getAudioContext().currentTime - shape.sweepAudioRefTime) / cycleS) % 1;
-            shape.prevPlayheadAngle = shape.playheadAngle;
-            shape.playheadAngle     = (shape.startAngle + phase * Math.PI * 2) % (Math.PI * 2);
-          } else {
-            shape.stepPlayhead(dt, state.cpm, state.playbackMode);
-          }
-        } catch (e) {
-          console.debug('[audio] AC clock fallback:', e);
+      // Sweeper-only (Unit 1 quarantine): ShapeType is narrowed to 'sweeper'.
+      // Drive sweeper arm from AudioContext clock — per-shape phase
+      // (sweepAudioRefTime / sweepPhaseAtRef live on each CanvasShape so
+      // multiple sweepers can run independently).
+      try {
+        if (state.audioInitialized && shape.sweepAudioRefTime > 0) {
+          const cycleS = 60 / state.cpm;
+          const phase  = (shape.sweepPhaseAtRef +
+            (getAudioContext().currentTime - shape.sweepAudioRefTime) / cycleS) % 1;
+          shape.prevPlayheadAngle = shape.playheadAngle;
+          shape.playheadAngle     = (shape.startAngle + phase * Math.PI * 2) % (Math.PI * 2);
+        } else {
           shape.stepPlayhead(dt, state.cpm, state.playbackMode);
         }
-        shape.computeSweepClusters(state.linkLines, state.orbitalMaxRadius);
-      } else {
+      } catch (e) {
+        console.debug('[audio] AC clock fallback:', e);
+        shape.stepPlayhead(dt, state.cpm, state.playbackMode);
+      }
+      shape.computeSweepClusters(state.linkLines, state.orbitalMaxRadius);
+      // LEGACY: disabled 2026-04-21 — non-sweeper rAF branch (stepPlayhead +
+      // checkAndFireCollisions + triggerAt + stepAnimations + telem flash).
+      // Sweepers do not produce angle-crossing events; they use cluster signals.
+      // To re-enable: un-comment this block and restore non-sweeper ShapeTypes.
+      /*
+      else {
         shape.stepPlayhead(dt, state.cpm, state.playbackMode);
         const triggered = shape.checkAndFireCollisions();
         if (triggered.length > 0) {
@@ -81,6 +87,7 @@ function animate(now: number): void {
         }
         shape.stepAnimations();
       }
+      */
     }
   }
 
