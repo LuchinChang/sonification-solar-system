@@ -9,14 +9,18 @@ import { PATTERNS, computeAuScale, renderPatternThumbnail } from './patterns';
 import type { AppState } from './state';
 import {
   MIN_SAMPLES, MAX_SAMPLES, MIN_CPM, MAX_CPM,
-  MIN_SHAPE_SIZE, MAX_SHAPE_SIZE,
+  // LEGACY: MIN_SHAPE_SIZE only used by the non-sweeper wheel-resize branch.
+  // MIN_SHAPE_SIZE,
+  MAX_SHAPE_SIZE,
   KNOB_SENSITIVITY, CPM_SENSITIVITY, DRAG_THRESHOLD,
   sunPos,
 } from './state';
 import type { DomElements } from './dom';
 import type { TourController } from './tour';
 import {
-  patchRhythm, patchShapeBlock, patchHeader,
+  // LEGACY: patchRhythm was only used for the non-sweeper wheel-to-resize branch.
+  // patchRhythm,
+  patchShapeBlock, patchHeader,
   patchAllRhythms, rebuildSweeperPatterns, updateTelemetry,
   setEvalStatus, toggleTelemetry,
 } from './telemetry';
@@ -723,6 +727,18 @@ export function setupEventHandlers(
       const hasSweeper = rebuildSweeperPatterns(dom.telemetryTextarea, state.shapes, state.currentPattern.name, state.sampleRate, state.cpm);
       if (hasSweeper && state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value);
     } else if (state.activeShape !== null) {
+      // Sweeper-only: wheel rotates the 12 o'clock start angle by 1°.
+      // LEGACY: disabled 2026-04-21 — non-sweeper wheel-to-resize branch
+      // (clamped size + rhythm re-patch). To re-enable: restore the else
+      // branch and non-sweeper ShapeTypes.
+      /*
+      if (state.activeShape.type !== 'sweeper') {
+        state.activeShape.size = clamp(state.activeShape.size + (up ? +2 : -2), MIN_SHAPE_SIZE, MAX_SHAPE_SIZE);
+        state.activeShape.rebuildIntersectionCache(state.linkLines);
+        patchRhythm(dom.telemetryTextarea, state.activeShape);
+        patchHeader(dom.telemetryTextarea, state.currentPattern.name, state.shapes.length, state.sampleRate, state.cpm);
+      } else {
+      */
       if (state.activeShape.type === 'sweeper') {
         const step  = Math.PI / 180;
         const delta = up ? -step : step;
@@ -731,19 +747,22 @@ export function setupEventHandlers(
         drawScene(dom.ctx, state);
         updateTelemetry(dom, state);
         if (state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value);
-      } else {
-        state.activeShape.size = clamp(state.activeShape.size + (up ? +2 : -2), MIN_SHAPE_SIZE, MAX_SHAPE_SIZE);
-        state.activeShape.rebuildIntersectionCache(state.linkLines);
-        patchRhythm(dom.telemetryTextarea, state.activeShape);
-        patchHeader(dom.telemetryTextarea, state.currentPattern.name, state.shapes.length, state.sampleRate, state.cpm);
       }
     }
   }, { passive: false });
 
-  // Dock — click-to-spawn
+  // Dock — click-to-spawn.
+  // Unit 3 will strip legacy shape tiles from the dock entirely. For now we
+  // ignore clicks from any non-'sweeper' tile so legacy tiles are a no-op
+  // (no runtime errors). ShapeType is narrowed to 'sweeper' in shapes.ts.
   document.querySelectorAll<HTMLButtonElement>('.shape-tile').forEach(tile => {
     tile.addEventListener('click', () => {
-      spawnShape(state, dom, (tile.dataset['shape'] ?? 'circle') as ShapeType, tour);
+      const requested = tile.dataset['shape'] ?? 'sweeper';
+      // LEGACY: previously passed requested value cast as ShapeType (allowing
+      // 'circle' | 'triangle' | 'rectangle'). Now we short-circuit to a no-op
+      // for any non-sweeper tile.
+      if (requested !== 'sweeper') return;
+      spawnShape(state, dom, 'sweeper' as ShapeType, tour);
     });
   });
 

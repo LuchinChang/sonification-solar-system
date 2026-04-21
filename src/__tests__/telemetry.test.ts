@@ -6,13 +6,15 @@ import { describe, it, expect } from 'vitest';
 import { CanvasShape } from '../shapes';
 import {
   generateFullCode,
-  patchRhythm,
   patchShapeBlock,
   patchHeader,
-  patchAllRhythms,
   setEvalStatus,
   flashTelemBlock,
 } from '../telemetry';
+// LEGACY: disabled 2026-04-21 — patchRhythm + patchAllRhythms are surgical-patch
+// helpers targeting the non-sweeper @rhythm-N markers, which no sweeper emits.
+// To re-enable: re-import alongside restoring non-sweeper ShapeType arms.
+// import { patchRhythm, patchAllRhythms } from '../telemetry';
 
 // Helper: create a mock textarea
 function mockTextarea(value = ''): HTMLTextAreaElement {
@@ -32,18 +34,17 @@ describe('generateFullCode', () => {
   });
 
   it('generates code with one shape', () => {
-    const shape = new CanvasShape(400, 300, 'circle', 80);
+    const shape = new CanvasShape(400, 300, 'sweeper', 80);
     shape.rebuildIntersectionCache([]);
     const code = generateFullCode([shape], 'Venus', 500, 60);
     expect(code).toContain('Shapes: 1');
     expect(code).toContain('@shape-start-');
-    expect(code).toContain('@rhythm-');
     expect(code).toContain('@shape-end-');
   });
 
   it('generates code with multiple shapes', () => {
-    const s1 = new CanvasShape(400, 300, 'circle', 80);
-    const s2 = new CanvasShape(400, 300, 'triangle', 60);
+    const s1 = new CanvasShape(400, 300, 'sweeper', 80);
+    const s2 = new CanvasShape(400, 300, 'sweeper', 60);
     s1.rebuildIntersectionCache([]);
     s2.rebuildIntersectionCache([]);
     const code = generateFullCode([s1, s2], 'Mars', 1000, 30);
@@ -60,6 +61,9 @@ describe('generateFullCode', () => {
   });
 });
 
+// LEGACY: disabled 2026-04-21 — patchRhythm + patchAllRhythms only operate on
+// non-sweeper shapes' @rhythm-N markers. Sweepers have no rhythm grid.
+/*
 describe('patchRhythm', () => {
   it('replaces the rhythm string for a specific shape', () => {
     const shape = new CanvasShape(400, 300, 'circle', 80);
@@ -67,12 +71,10 @@ describe('patchRhythm', () => {
     const original = generateFullCode([shape], 'Test', 500, 60);
     const textarea = mockTextarea(original);
 
-    // Change shape size to get a different rhythm string
     shape.size = 120;
     shape.rebuildIntersectionCache([]);
     patchRhythm(textarea, shape);
 
-    // Verify rhythm marker still present
     expect(textarea.value).toContain(`// @rhythm-${shape.id}`);
   });
 
@@ -89,10 +91,11 @@ describe('patchRhythm', () => {
     expect(textarea.value).toBe(afterFirst);
   });
 });
+*/
 
 describe('patchShapeBlock', () => {
   it('replaces entire block when markers are present', () => {
-    const shape = new CanvasShape(400, 300, 'circle', 80);
+    const shape = new CanvasShape(400, 300, 'sweeper', 80);
     shape.rebuildIntersectionCache([]);
     const original = generateFullCode([shape], 'Test', 500, 60);
     const textarea = mockTextarea(original);
@@ -105,7 +108,7 @@ describe('patchShapeBlock', () => {
   });
 
   it('falls back to full regeneration when markers are missing', () => {
-    const shape = new CanvasShape(400, 300, 'circle', 80);
+    const shape = new CanvasShape(400, 300, 'sweeper', 80);
     shape.rebuildIntersectionCache([]);
     const textarea = mockTextarea('// no markers here');
 
@@ -117,7 +120,7 @@ describe('patchShapeBlock', () => {
 
 describe('patchHeader', () => {
   it('updates the header line with new values', () => {
-    const shape = new CanvasShape(400, 300, 'circle', 80);
+    const shape = new CanvasShape(400, 300, 'sweeper', 80);
     shape.rebuildIntersectionCache([]);
     const original = generateFullCode([shape], 'Old', 500, 60);
     const textarea = mockTextarea(original);
@@ -131,6 +134,8 @@ describe('patchHeader', () => {
   });
 });
 
+// LEGACY: disabled 2026-04-21 — patchAllRhythms is non-sweeper-only.
+/*
 describe('patchAllRhythms', () => {
   it('patches all shapes without disturbing non-rhythm content', () => {
     const s1 = new CanvasShape(400, 300, 'circle', 80);
@@ -142,14 +147,13 @@ describe('patchAllRhythms', () => {
 
     patchAllRhythms(textarea, [s1, s2], 'Test', 500, 60);
 
-    // Both rhythm markers still present
     expect(textarea.value).toContain(`// @rhythm-${s1.id}`);
     expect(textarea.value).toContain(`// @rhythm-${s2.id}`);
-    // Both shape blocks still present
     expect(textarea.value).toContain(`@shape-start-${s1.id}`);
     expect(textarea.value).toContain(`@shape-start-${s2.id}`);
   });
 });
+*/
 
 describe('setEvalStatus', () => {
   it('sets ok class and synced text', () => {

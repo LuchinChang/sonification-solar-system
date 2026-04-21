@@ -50,16 +50,7 @@ async function compileAndQuery(code: string): Promise<{
   error?: string;
 }> {
   try {
-    // Strip the @shape-start/end markers (comments are fine, but strip .p() calls).
-    // .p() is a REPL-only method for pattern multiplexing — not available headlessly.
-    // Everything before .p() IS the actual Pattern we want to validate.
     const cleaned = code.replace(/\.p\(\(\d+\)\.toString\(\)\)/g, '');
-
-    // evaluate() from @strudel/core/evaluate.mjs:
-    // 1. Passes code through transpiler (mini-notation → JS)
-    // 2. Wraps in async IIFE via safeEval
-    // 3. Executes against globalThis (where evalScope placed all Strudel functions)
-    // 4. Returns { pattern, mode, meta }
     const result = await evaluate(cleaned, transpiler);
     return { compiled: true, pattern: result.pattern };
   } catch (e: unknown) {
@@ -71,6 +62,10 @@ async function compileAndQuery(code: string): Promise<{
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe('Strudel code compilation', () => {
+  // LEGACY: disabled 2026-04-21 — non-sweeper drum/synth/key/bass compile tests.
+  // The matching toStrudelCode templates are quarantined in shapes.ts.
+  // To re-enable: un-comment alongside restoring the non-sweeper ShapeType arms.
+  /*
   it('drum shape (bd) compiles without error', async () => {
     const s = new CanvasShape(0, 0, 'circle', 50);
     s.instrument = 'bd';
@@ -111,31 +106,9 @@ describe('Strudel code compilation', () => {
     expect(result.compiled).toBe(true);
   });
 
-  it('sweeper shape compiles without error', async () => {
-    const s = new CanvasShape(0, 0, 'sweeper', 400);
-    s.k = 4;
-    s.rebuildSweepTicks(makeCrossLines(0, 0, 100), 315);
-    const code = s.toStrudelCode();
-    const result = await compileAndQuery(code);
-    expect(result.error).toBeUndefined();
-    expect(result.compiled).toBe(true);
-  });
-
-  it('multi-arm sweeper compiles without error', async () => {
-    const s = new CanvasShape(0, 0, 'sweeper', 400);
-    s.k = 3;
-    s.sweepCount = 3;
-    s.rebuildSweepTicks(makeCrossLines(0, 0, 100), 315);
-    const code = s.toStrudelCode();
-    const result = await compileAndQuery(code);
-    expect(result.error).toBeUndefined();
-    expect(result.compiled).toBe(true);
-  });
-
   it('shape with zero intersections compiles (graceful silence)', async () => {
     const s = new CanvasShape(0, 0, 'circle', 50);
     s.instrument = 'bd';
-    // No rebuildIntersectionCache → empty intersections → all-silence rhythm
     const code = s.toStrudelCode();
     const result = await compileAndQuery(code);
     expect(result.error).toBeUndefined();
@@ -156,6 +129,28 @@ describe('Strudel code compilation', () => {
     const s = new CanvasShape(0, 0, 'rectangle', 50);
     s.instrument = 'fm';
     s.rebuildIntersectionCache(makeCrossLines(0, 0, 50));
+    const code = s.toStrudelCode();
+    const result = await compileAndQuery(code);
+    expect(result.error).toBeUndefined();
+    expect(result.compiled).toBe(true);
+  });
+  */
+
+  it('sweeper shape compiles without error', async () => {
+    const s = new CanvasShape(0, 0, 'sweeper', 400);
+    s.k = 4;
+    s.rebuildSweepTicks(makeCrossLines(0, 0, 100), 315);
+    const code = s.toStrudelCode();
+    const result = await compileAndQuery(code);
+    expect(result.error).toBeUndefined();
+    expect(result.compiled).toBe(true);
+  });
+
+  it('multi-arm sweeper compiles without error', async () => {
+    const s = new CanvasShape(0, 0, 'sweeper', 400);
+    s.k = 3;
+    s.sweepCount = 3;
+    s.rebuildSweepTicks(makeCrossLines(0, 0, 100), 315);
     const code = s.toStrudelCode();
     const result = await compileAndQuery(code);
     expect(result.error).toBeUndefined();

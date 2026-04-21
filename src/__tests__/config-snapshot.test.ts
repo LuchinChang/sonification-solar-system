@@ -6,6 +6,9 @@ import { validateSnapshot, type ConfigSnapshot } from '../config-snapshot';
 describe('ConfigSnapshot round-trip', () => {
   beforeEach(() => resetNextId(0));
 
+  // LEGACY: disabled 2026-04-21 — non-sweeper round-trip coverage
+  // (circle/triangle/rectangle). To re-enable: restore non-sweeper ShapeTypes.
+  /*
   it('circle survives round-trip', () => {
     const original = new CanvasShape(100, 200, 'circle', 80);
     original.instrument = 'sine';
@@ -29,6 +32,7 @@ describe('ConfigSnapshot round-trip', () => {
     const restored = CanvasShape.fromConfig(cfg);
     expect(restored.toConfig()).toEqual(cfg);
   });
+  */
 
   it('sweeper survives round-trip with all params', () => {
     const original = new CanvasShape(50, 50, 'sweeper', 400);
@@ -49,12 +53,15 @@ describe('ConfigSnapshot round-trip', () => {
   });
 
   it('preserves shape ID through round-trip', () => {
-    const original = new CanvasShape(0, 0, 'circle', 60);
+    const original = new CanvasShape(0, 0, 'sweeper', 60);
     const savedId = original.id;
     const restored = CanvasShape.fromConfig(original.toConfig());
     expect(restored.id).toBe(savedId);
   });
 
+  // LEGACY: disabled 2026-04-21 — sweeper-field-omission check assumed a
+  // non-sweeper shape existed. Now every shape is a sweeper.
+  /*
   it('sweeper-only fields are omitted for non-sweeper shapes', () => {
     const circle = new CanvasShape(0, 0, 'circle', 60);
     const cfg = circle.toConfig();
@@ -66,6 +73,7 @@ describe('ConfigSnapshot round-trip', () => {
     expect(cfg.freqHigh).toBeUndefined();
     expect(cfg.colorIndex).toBeUndefined();
   });
+  */
 });
 
 // ── Property coverage: ensures new CanvasShape fields are classified ──────────
@@ -124,7 +132,9 @@ describe('validateSnapshot', () => {
     playbackMode: 'constant-time',
     theme: 'dark',
     shapes: [
-      { id: 1, type: 'circle', x: 100, y: 200, size: 60, instrument: 'bd' },
+      // LEGACY: previously included a 'circle' shape here; non-sweeper types are
+      // still accepted by validateSnapshot's runtime Set to preserve loading of
+      // pre-quarantine snapshots. Only 'sweeper' actively renders in this unit.
       { id: 2, type: 'sweeper', x: 50, y: 50, size: 400, instrument: 'sine', k: 4, sweepCount: 2, startAngle: 4.71, ticks: 60 },
     ],
   };
@@ -160,10 +170,13 @@ describe('validateSnapshot', () => {
     })).toBe(false);
   });
 
+  // LEGACY: disabled 2026-04-21 — this test used type: 'circle' in the
+  // shape-with-missing-fields case. We keep it as a sweeper to still exercise
+  // the missing-field rejection path.
   it('rejects shape with missing fields', () => {
     expect(validateSnapshot({
       ...VALID,
-      shapes: [{ id: 1, type: 'circle' }],
+      shapes: [{ id: 1, type: 'sweeper' }],
     })).toBe(false);
   });
 });
