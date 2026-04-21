@@ -7,7 +7,7 @@
 
 import type { Point } from './geometry';
 import { getLineCircleIntersections, getRaySegmentDist, pointToSegmentDist } from './geometry';
-import type { ShapeConfig } from './config-snapshot';
+import type { ShapeConfig, NodeGraphSnapshot } from './config-snapshot';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -136,6 +136,13 @@ export class CanvasShape {
   freqHigh: number;
   /** Palette index for sweeper accent colour. */
   colorIndex: number;
+  /**
+   * Per-sweeper node-graph snapshot (sweeper only). `null` until the user opens
+   * the node editor on this sweeper; only persisted to/from ShapeConfig when set.
+   * TODO(Unit 14): replace with a reference to the live NodeGraph instance once
+   * Unit 4's src/node-editor/ lands.
+   */
+  graph: NodeGraphSnapshot | null;
 
   // ═══ DERIVED (recomputed, never serialized) ═════════════════════════════════
   // Adding here? Add to DERIVED_PROPS in config-snapshot.test.ts
@@ -184,6 +191,7 @@ export class CanvasShape {
     this.freqLow             = 100;
     this.freqHigh            = 1000;
     this.colorIndex          = 0;
+    this.graph               = null;
     this.sweepAudioRefTime   = 0;
     this.sweepPhaseAtRef     = 0;
   }
@@ -204,6 +212,7 @@ export class CanvasShape {
       base.freqLow    = this.freqLow;
       base.freqHigh   = this.freqHigh;
       base.colorIndex = this.colorIndex;
+      if (this.graph !== null) base.graph = this.graph;
     }
     return base;
   }
@@ -221,6 +230,7 @@ export class CanvasShape {
     if (cfg.freqLow    !== undefined) s.freqLow    = cfg.freqLow;
     if (cfg.freqHigh   !== undefined) s.freqHigh   = cfg.freqHigh;
     if (cfg.colorIndex !== undefined) s.colorIndex = cfg.colorIndex;
+    if (cfg.graph      !== undefined) s.graph      = cfg.graph;
     return s;
   }
 
