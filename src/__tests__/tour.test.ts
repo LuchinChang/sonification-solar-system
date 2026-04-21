@@ -70,8 +70,6 @@ function mockDomElements(): DomElements {
     ctx: {} as CanvasRenderingContext2D,
     captionEl: el() as unknown as HTMLElement,
     toastEl: el() as unknown as HTMLElement,
-    patternSelectorEl: el() as unknown as HTMLElement,
-    patternCardsEl: el() as unknown as HTMLElement,
     telemetryTextarea: el() as unknown as HTMLTextAreaElement,
     telemetryPanel: el() as unknown as HTMLElement,
     telemetryTab: el() as unknown as HTMLButtonElement,
@@ -85,8 +83,6 @@ function mockDomElements(): DomElements {
     modeToggle: el() as unknown as HTMLElement,
     modeOptions: [] as unknown as NodeListOf<HTMLElement>,
     playPauseBtn: el() as unknown as HTMLButtonElement,
-    soundMenu: el() as unknown as HTMLElement,
-    instrumentBtns: [] as unknown as NodeListOf<HTMLButtonElement>,
     themeToggleBtn: el() as unknown as HTMLButtonElement,
     audioOverlay: el() as unknown as HTMLElement,
     syncAudioBtn: el() as unknown as HTMLElement,
@@ -172,22 +168,12 @@ describe('TourController', () => {
     expect(tour.isActive).toBe(false);
   });
 
-  it('instrument-picked advances from step 2 or step 5', () => {
+  it('play-pressed advances from step 2', () => {
     const tour = createTourController(dom);
     tour.start();
-    tour.notify('dock-shown');       // 0 → 1
-    tour.notify('shape-spawned');    // 1 → 2
-    tour.notify('instrument-picked'); // 2 → 3
+    tour.notify('dock-shown');    // 0 → 1
+    tour.notify('shape-spawned'); // 1 → 2
+    tour.notify('play-pressed');  // 2 → 3
     expect(tour.currentStep).toBe(3);
-  });
-
-  it('play-pressed advances from step 3', () => {
-    const tour = createTourController(dom);
-    tour.start();
-    tour.notify('dock-shown');        // 0 → 1
-    tour.notify('shape-spawned');     // 1 → 2
-    tour.notify('instrument-picked'); // 2 → 3
-    tour.notify('play-pressed');      // 3 → 4
-    expect(tour.currentStep).toBe(4);
   });
 });
