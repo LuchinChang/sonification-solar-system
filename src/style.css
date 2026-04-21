@@ -88,9 +88,6 @@
 }
 
 /* Light-theme component overrides that reference hardcoded rgba values */
-[data-theme="light"] .shape-tile:hover {
-  background: rgba(224, 60, 49, 0.09);
-}
 [data-theme="light"] .instrument-pill:hover {
   background: rgba(224, 60, 49, 0.12);
 }
