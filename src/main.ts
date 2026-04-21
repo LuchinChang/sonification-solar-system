@@ -16,6 +16,7 @@ import {
   setupEventHandlers, calculateLines,
   finishDrawAnimation, updateCaption,
 } from './controls';
+import { initNodeEditor, openEditor, closeEditor, isEditorOpen } from './node-editor';
 
 // ── Initialise ───────────────────────────────────────────────────────────────
 
@@ -28,6 +29,41 @@ initDust(state.dustMotes);
 
 // Wire up all event handlers
 setupEventHandlers(state, dom, tour);
+
+// ── Node editor (Unit 4 scaffolding) ─────────────────────────────────────────
+// Opens when a sweeper is clicked on the canvas, or when 'E' is pressed with a
+// sweeper selected. Escape closes (handled inside panel.ts). Codegen is
+// DEFERRED — Unit 14 will hook into closeEditor().
+initNodeEditor({
+  resolveSweeper: id => state.shapes.find(s => s.id === id && s.type === 'sweeper') ?? null,
+});
+
+// Canvas click → open editor for sweeper. This runs AFTER controls.ts's
+// existing click handler (which selects the shape); both fire on the same
+// click because we attach with addEventListener — order matches registration.
+dom.canvas.addEventListener('click', e => {
+  for (let i = state.shapes.length - 1; i >= 0; i--) {
+    const s = state.shapes[i];
+    if (s.type === 'sweeper' && s.containsPoint(e.clientX, e.clientY)) {
+      openEditor(s.id);
+      return;
+    }
+  }
+});
+
+// 'E' opens the editor for the active sweeper. Guarded against inputs so it
+// doesn't collide with typing in the Strudel textarea.
+document.addEventListener('keydown', e => {
+  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key.toLowerCase() !== 'e') return;
+  if (isEditorOpen()) { closeEditor(); return; }
+  const s = state.activeShape;
+  if (s !== null && s.type === 'sweeper') {
+    e.preventDefault();
+    openEditor(s.id);
+  }
+});
 
 // Size canvas + compute initial link lines
 dom.canvas.width  = window.innerWidth;
