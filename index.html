@@ -221,6 +221,23 @@
 
     </div>
 
+    <!-- ══ Shape-options sidebar — shape-specific chips never wired via cables ══ -->
+    <!--
+      Opened alongside the node-editor panel (see src/node-editor/sidebar.ts).
+      Houses shape-scoped controls (playback mode, arm length, cluster count,
+      fineness, generator) that mutate the sweeper directly without participating
+      in the cable graph. Content is built dynamically by sidebar.ts from the
+      'sweeper' + 'playback' NodeDefinitions registered in the registry.
+    -->
+    <aside
+      id="shape-options-sidebar"
+      class="node-editor-sidebar hidden"
+      aria-hidden="true"
+      inert
+      role="complementary"
+      aria-label="Sweeper shape options"
+    ></aside>
+
     <!-- Drag-and-drop overlay (shown on dragover canvas) -->
     <div id="drop-overlay" class="hidden">
       <span>Drop config file to restore</span>

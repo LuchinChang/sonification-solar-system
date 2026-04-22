@@ -49,6 +49,14 @@ export {
 } from './panel';
 
 export {
+  initSidebar,
+  openSidebar,
+  closeSidebar,
+  isSidebarOpen,
+} from './sidebar';
+export type { SidebarCallbacks } from './sidebar';
+
+export {
   compileGraphToStrudel,
   inboundSignalExpr,
   signalRefRaw,

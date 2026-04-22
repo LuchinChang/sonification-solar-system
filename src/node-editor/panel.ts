@@ -22,6 +22,7 @@ import { initCables } from './cables';
 import { compileGraphToStrudel } from './codegen';
 import { addEdge, addNode, createGraph } from './graph';
 import { getNodeDef } from './registry';
+import { openSidebar, closeSidebar } from './sidebar';
 import { mountToolbox, refreshToolbox } from './toolbox';
 import type { Node, NodeDefinition, NodeGraph } from './types';
 // Side-effect import: registers the four sound-basic NodeDefinitions so the
@@ -138,6 +139,8 @@ export function openEditor(sweeperId: number): void {
   refs.root.classList.remove('hidden');
   refs.root.removeAttribute('aria-hidden');
   refs.root.removeAttribute('inert');
+  // Unit 2 — open the shape-options sidebar alongside the editor.
+  openSidebar(sweeperId);
   attachKeyHandler();
 }
 
@@ -235,6 +238,8 @@ export function closeEditor(): void {
   refs.root.classList.add('hidden');
   refs.root.setAttribute('aria-hidden', 'true');
   refs.root.setAttribute('inert', '');
+  // Unit 2 — hide the shape-options sidebar.
+  closeSidebar();
 
   // Unit 14 — DEFERRED COMMIT. Compile the in-memory graph to a full sweeper
   // block, persist the snapshot onto the shape, and hand the fresh block to

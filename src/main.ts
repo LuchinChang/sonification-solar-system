@@ -18,7 +18,7 @@ import {
   finishDrawAnimation, updateCaption,
 } from './controls';
 import {
-  initNodeEditor, openEditor, registerDataNodes,
+  initNodeEditor, openEditor, registerDataNodes, initSidebar,
 } from './node-editor';
 import './node-editor/nodes/sound-basic';     // side-effect register: pitch, freq-range, lpf, gain
 import './node-editor/nodes/sweeper';          // side-effect register: 4 sweeper-self nodes
@@ -49,6 +49,16 @@ setupEventHandlers(state, dom, tour);
 registerDataNodes();
 registerPlaybackModeNode();
 setSweeperResolver(id => state.shapes.find(s => s.id === id && s.type === 'sweeper') ?? null);
+// Unit 2 — Shape-options sidebar. Houses sweeper-self + playback controls
+// that never participate in the cable graph (playback mode, arm length,
+// fineness, cluster count, generator). Opens/closes with the editor.
+const sidebarHost = document.getElementById('shape-options-sidebar');
+if (sidebarHost !== null) {
+  initSidebar(sidebarHost, {
+    resolveSweeper: id => state.shapes.find(s => s.id === id && s.type === 'sweeper') ?? null,
+  });
+}
+
 initNodeEditor({
   resolveSweeper: id => state.shapes.find(s => s.id === id && s.type === 'sweeper') ?? null,
   // Unit 14 — DEFERRED commit. The panel hands us the freshly-compiled sweeper

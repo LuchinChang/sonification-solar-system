@@ -461,6 +461,139 @@
   .ne-toolbox-chip.ne-bounce { animation: none; }
 }
 
+/* ── Shape-options sidebar (Unit 2 — post-ship UX) ───────────────────────
+   Left-edge glass panel that houses sweeper-self + playback controls which
+   are NEVER wired via cables. Kept visually distinct from the main panel so
+   users don't confuse "shape knob" with "mappable rule chip". */
+
+.node-editor-sidebar {
+  position: fixed;
+  top: 40px;
+  bottom: 40px;
+  left: 40px;
+  width: 240px;
+  z-index: 121;  /* above panel so clicks don't leak through */
+
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 14px 18px;
+  overflow-y: auto;
+
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  box-shadow:
+    0 6px 32px rgba(0, 0, 0, 0.60),
+    0 1px 0 rgba(255, 200, 120, 0.04) inset;
+
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+  transition:
+    opacity var(--dur-base) var(--ease-out-quart),
+    transform var(--dur-base) var(--ease-out-quart);
+}
+
+.node-editor-sidebar.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-24px);
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px 10px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.sidebar-header .sidebar-title {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.sidebar-header .sidebar-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 0 8px currentColor;
+  flex-shrink: 0;
+}
+
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 2px 0;
+}
+
+.sidebar-section-title {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+/* Compact form row — not a draggable chip, no port dots. */
+.sidebar-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 10px 12px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  font-family: var(--font-mono);
+}
+
+.sidebar-chip-title {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: var(--accent-amber);
+}
+
+.sidebar-chip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Fallback inputs when a NodeDefinition has no custom ui(). */
+.sidebar-chip .sidebar-fallback-label {
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.sidebar-chip select,
+.sidebar-chip input[type="number"],
+.sidebar-chip input[type="range"] {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-primary);
+  background: rgba(20, 13, 11, 0.55);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+.sidebar-chip input[type="range"] {
+  padding: 0;
+}
+
 /* ── Cables (Unit 11) — rendered into <g id="edges"> inside the SVG ─────── */
 
 .node-editor-cable-layer .edge {
