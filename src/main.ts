@@ -69,7 +69,12 @@ initNodeEditor({
 // existing click handler (which selects the shape); both fire on the same
 // click because we attach with addEventListener — order matches registration.
 // The 'E' hotkey is owned by controls.ts (toggle semantics).
+//
+// Unit 5: Shift+click bypasses the editor, preserving the pre-editor habit of
+// "click to select, then Backspace to delete" without forcing the user to
+// close the editor first.
 dom.canvas.addEventListener('click', e => {
+  if (e.shiftKey) return;
   for (let i = state.shapes.length - 1; i >= 0; i--) {
     const s = state.shapes[i];
     if (s.type === 'sweeper' && s.containsPoint(e.clientX, e.clientY)) {

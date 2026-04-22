@@ -37,6 +37,26 @@ import {
   downloadSnapshot,
 } from './config-snapshot';
 
+// ── Unit 5: Selection / delete reconciliation ────────────────────────────────
+//
+// The canvas Backspace hotkey must defer to the node-editor's own cable-delete
+// handler when (a) the editor panel is open and (b) a cable is currently
+// selected. Otherwise Backspace should continue to delete the selected shape,
+// preserving the pre-editor user habit.
+//
+// Duck-typed on `.edge.selected` in the live DOM so this works independently
+// of Unit 3's `hasSelectedEdge()` export — if/when that lands, this function
+// can switch over without touching callers.
+//
+// Exported for unit tests — not part of the public module surface.
+export function editorShouldConsumeDeleteKey(): boolean {
+  if (typeof document === 'undefined') return false;
+  const panel = document.getElementById('node-editor-panel');
+  const panelOpen = panel !== null && !panel.classList.contains('hidden');
+  if (!panelOpen) return false;
+  return document.querySelector('.edge.selected') !== null;
+}
+
 // ── Orbital line computation ─────────────────────────────────────────────────
 
 export function calculateLines(state: AppState, canvas: HTMLCanvasElement): void {
@@ -726,6 +746,10 @@ export function setupEventHandlers(
         }
         break;
       case 'backspace':
+        // Unit 5 — Selection / delete reconciliation (#13).
+        // If the node editor is open AND has a selected cable, let its own
+        // Backspace handler delete the cable instead of the shape.
+        if (editorShouldConsumeDeleteKey()) break;
         e.preventDefault();
         deleteActiveShape(state, dom);
         break;
