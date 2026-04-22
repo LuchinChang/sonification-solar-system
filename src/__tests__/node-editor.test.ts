@@ -15,6 +15,7 @@ import {
   addNode,
   addEdge,
   removeEdge,
+  removeNode,
   incomingEdges,
   graphFromSnapshot,
   initNodeEditor,
@@ -144,6 +145,51 @@ describe('node-editor graph', () => {
     expect(removeEdge(g, edge.id)).toBe(true);
     expect(g.edges).toHaveLength(0);
     expect(removeEdge(g, edge.id)).toBe(false);
+  });
+
+  it('removeNode cascades to incident edges', () => {
+    registerNodeDef(makeDef({
+      type:    'data.src',
+      side:    'data',
+      outputs: [{ id: 'out', label: 'out', kind: 'signal' }],
+    }));
+    registerNodeDef(makeDef({
+      type:    'sound.mid',
+      side:    'sound',
+      inputs:  [{ id: 'in',  label: 'in',  kind: 'signal' }],
+      outputs: [{ id: 'out', label: 'out', kind: 'signal' }],
+    }));
+    registerNodeDef(makeDef({
+      type:   'sound.sink',
+      side:   'sound',
+      inputs: [{ id: 'in', label: 'in', kind: 'signal' }],
+    }));
+
+    const g = createGraph(1);
+    const src  = addNode(g, { type: 'data.src',   side: 'data',  x: 0, y: 0 });
+    const mid  = addNode(g, { type: 'sound.mid',  side: 'sound', x: 0, y: 0 });
+    const sink = addNode(g, { type: 'sound.sink', side: 'sound', x: 0, y: 0 });
+
+    addEdge(g, { from: { nodeId: src.id, portId: 'out', dir: 'out' }, to: { nodeId: mid.id,  portId: 'in', dir: 'in' } });
+    addEdge(g, { from: { nodeId: mid.id, portId: 'out', dir: 'out' }, to: { nodeId: sink.id, portId: 'in', dir: 'in' } });
+    expect(g.nodes).toHaveLength(3);
+    expect(g.edges).toHaveLength(2);
+
+    // Remove the middle node — both incident edges must be dropped.
+    expect(removeNode(g, mid.id)).toBe(true);
+    expect(g.nodes).toHaveLength(2);
+    expect(g.nodes.some(n => n.id === mid.id)).toBe(false);
+    expect(g.edges).toHaveLength(0);
+
+    // Unknown id is a no-op.
+    expect(removeNode(g, 'never-existed')).toBe(false);
+
+    // Surviving (unrelated) nodes / edges are untouched.
+    const src2 = addNode(g, { type: 'data.src',   side: 'data',  x: 0, y: 0 });
+    const sink2 = addNode(g, { type: 'sound.sink', side: 'sound', x: 0, y: 0 });
+    const keep = addEdge(g, { from: { nodeId: src2.id, portId: 'out', dir: 'out' }, to: { nodeId: sink2.id, portId: 'in', dir: 'in' } });
+    expect(removeNode(g, src.id)).toBe(true); // src had no edges left
+    expect(g.edges).toContain(keep);
   });
 
   it('rejects incompatible port kinds', () => {

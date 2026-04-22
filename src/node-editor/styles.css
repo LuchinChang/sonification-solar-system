@@ -232,6 +232,54 @@
   letter-spacing: 0.17em;
   text-transform: uppercase;
   color: var(--ne-side-accent, var(--accent-amber));
+  /* Reserve space for the × delete button in the top-right corner. */
+  padding-right: 16px;
+}
+
+.ne-node-delete-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--accent-coral);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0.55;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity var(--dur-fast) var(--ease-out-quart),
+              background var(--dur-fast) var(--ease-out-quart),
+              color var(--dur-fast) var(--ease-out-quart),
+              border-color var(--dur-fast) var(--ease-out-quart);
+}
+.ne-node:hover .ne-node-delete-btn,
+.ne-node:focus-within .ne-node-delete-btn {
+  opacity: 1;
+}
+.ne-node-delete-btn:hover,
+.ne-node-delete-btn:focus {
+  opacity: 1;
+  background: var(--accent-coral);
+  color: #fff;
+  border-color: var(--accent-coral);
+  outline: none;
+}
+
+/* Keyboard focus ring — signals which chip will receive Delete/Backspace. */
+.ne-node:focus,
+.ne-node:focus-visible {
+  outline: none;
+  border-color: var(--ne-side-accent, var(--accent-amber));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ne-side-accent, var(--accent-amber)) 30%, transparent),
+              0 4px 14px rgba(0, 0, 0, 0.45);
 }
 
 .ne-node-ports {
