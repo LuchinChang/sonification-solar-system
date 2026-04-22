@@ -48,25 +48,12 @@ function activeSweeper(): CanvasShape | null {
 
 const UI_FONT_MONO = 'var(--font-mono)';
 
-function labelEl(text: string): HTMLSpanElement {
-  const el = document.createElement('span');
-  el.textContent = text;
-  el.style.fontSize       = '9.5px';
-  el.style.fontWeight     = '600';
-  el.style.letterSpacing  = '0.17em';
-  el.style.textTransform  = 'uppercase';
-  el.style.fontFamily     = UI_FONT_MONO;
-  el.style.color          = 'var(--text-secondary)';
-  return el;
-}
-
-function containerEl(labelText: string): HTMLDivElement {
+function containerEl(): HTMLDivElement {
   const box = document.createElement('div');
   box.style.display        = 'flex';
   box.style.flexDirection  = 'column';
   box.style.gap            = '4px';
   box.style.minWidth       = '180px';
-  box.append(labelEl(labelText));
   return box;
 }
 
@@ -122,7 +109,7 @@ registerNodeDef({
   codegen: () => '',
   ui(node: Node, onChange: (patch: Partial<Node>) => void): HTMLElement {
     const k = Number(node.params.k ?? 3);
-    const root = containerEl('Cluster Count (k)');
+    const root = containerEl();
     const { row, slider, readout } = buildSliderRow({ min: 1, max: 12, value: k });
 
     slider.addEventListener('input', () => {
@@ -148,7 +135,7 @@ registerNodeDef({
   codegen: () => '',
   ui(node: Node, onChange: (patch: Partial<Node>) => void): HTMLElement {
     const steps = Number(node.params.steps ?? 120);
-    const root = containerEl('Fineness (steps/rev)');
+    const root = containerEl();
     const { row, slider, readout } = buildSliderRow({ min: 12, max: 360, value: steps });
 
     slider.addEventListener('input', () => {
@@ -174,7 +161,7 @@ registerNodeDef({
   codegen: () => '',
   ui(node: Node, onChange: (patch: Partial<Node>) => void): HTMLElement {
     const current = String(node.params.waveform ?? 'sine');
-    const root = containerEl('Waveform');
+    const root = containerEl();
 
     const row = document.createElement('div');
     row.style.display    = 'flex';
@@ -218,7 +205,7 @@ registerNodeDef({
   codegen: () => '',
   ui(node: Node, onChange: (patch: Partial<Node>) => void): HTMLElement {
     const radius = Number(node.params.radius ?? MAX_SHAPE_SIZE);
-    const root = containerEl('Arm Length');
+    const root = containerEl();
     const { row, slider, readout } = buildSliderRow({
       min: MIN_SHAPE_SIZE,
       max: MAX_SHAPE_SIZE,

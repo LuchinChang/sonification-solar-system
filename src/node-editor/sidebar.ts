@@ -95,8 +95,16 @@ export function isSidebarOpen(): boolean {
 function buildChrome(host: HTMLElement): SidebarRefs {
   host.replaceChildren();
 
+  // Header doubles as a collapse control — clicking it hides the sidebar.
+  // This is needed because when the sidebar is expanded it covers the
+  // panel-header's own toggle button, so users need a way to collapse from
+  // within the sidebar. The panel-header button handles the expand path
+  // (when sidebar is hidden it's the only visible affordance).
   const header = document.createElement('div');
   header.className = 'sidebar-header';
+  header.setAttribute('role', 'button');
+  header.setAttribute('tabindex', '0');
+  header.title = 'Collapse shape options';
 
   const swatch = document.createElement('span');
   swatch.className = 'sidebar-swatch';
@@ -110,6 +118,20 @@ function buildChrome(host: HTMLElement): SidebarRefs {
 
   const body = document.createElement('div');
   body.className = 'sidebar-body';
+
+  const collapse = (): void => {
+    host.classList.add('collapsed');
+    // Keep the panel-header toggle's aria-expanded in sync.
+    document.querySelector('.node-editor-sidebar-toggle')
+      ?.setAttribute('aria-expanded', 'false');
+  };
+  header.addEventListener('click', collapse);
+  header.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' || ev.key === ' ') {
+      ev.preventDefault();
+      collapse();
+    }
+  });
 
   host.append(header, body);
 

@@ -43,10 +43,6 @@ function buildUi(node: Node, onChange: (patch: Partial<Node>) => void): HTMLElem
   const wrap  = document.createElement('label');
   wrap.className = 'node-editor-param';
 
-  const caption   = document.createElement('span');
-  caption.className = 'node-editor-param-label';
-  caption.textContent = 'mode';
-
   const select = document.createElement('select');
   select.className = 'node-editor-param-select';
   for (const m of PLAYBACK_MODES) {
@@ -61,7 +57,7 @@ function buildUi(node: Node, onChange: (patch: Partial<Node>) => void): HTMLElem
     onChange({ params: { ...node.params, mode: coercePlaybackMode(select.value) } });
   });
 
-  wrap.append(caption, select);
+  wrap.append(select);
   return wrap;
 }
 
