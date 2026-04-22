@@ -40,3 +40,5 @@ export {
   currentSweeperId,
   currentGraph,
 } from './panel';
+
+export { registerDataNodes } from './nodes/data';

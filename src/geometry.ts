@@ -59,6 +59,34 @@ export function getRaySegmentDist(
 }
 
 /**
+ * Circular standard deviation of a set of angles (radians).
+ *
+ * Line angles are direction-agnostic (a line and its 180° flip are the same
+ * line), so each angle is folded onto the [0, π) half-circle and doubled
+ * before taking its unit-vector mean. The returned stdev is in radians on the
+ * half-circle and lies in [0, π/2).  Empty / single-element inputs return 0.
+ *
+ * This is pure math — no allocations beyond two accumulators — so it lives
+ * in geometry.ts per CLAUDE.md modularity rules.
+ */
+export function angleStdev(angles: readonly number[]): number {
+  const n = angles.length;
+  if (n <= 1) return 0;
+  let sumCos = 0, sumSin = 0;
+  for (const a of angles) {
+    // Fold to [0, π) then double so the circular mean is well-defined.
+    const folded = ((a % Math.PI) + Math.PI) % Math.PI;
+    const doubled = 2 * folded;
+    sumCos += Math.cos(doubled);
+    sumSin += Math.sin(doubled);
+  }
+  const r = Math.hypot(sumCos, sumSin) / n;      // mean resultant length, [0, 1]
+  if (r >= 1) return 0;                          // perfectly aligned
+  // Circular stdev (Mardia) of doubled angles → halve to return to half-circle.
+  return Math.sqrt(-2 * Math.log(r)) / 2;
+}
+
+/**
  * Shortest distance from point (px, py) to the finite line segment
  * from (x1, y1) to (x2, y2).  Used for sweeper hit-testing.
  */
