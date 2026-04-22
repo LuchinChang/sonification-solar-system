@@ -17,6 +17,7 @@
 // marked hook below.
 
 import type { CanvasShape } from '../shapes';
+import { initCables } from './cables';
 import { createGraph } from './graph';
 import { mountToolbox, refreshToolbox } from './toolbox';
 import type { NodeGraph } from './types';
@@ -198,6 +199,10 @@ function ensureMounted(): void {
 
   // Unit 13: drop-in toolbox drawer along the bottom of the panel.
   mountToolbox(toolboxHost(refs), toolboxCallbacks());
+
+  // Unit 11: cable drag + connect interactions. Attaches delegated pointer
+  // handlers to `root`, so future units can add ports without re-wiring.
+  initCables(root, cableLayer);
 }
 
 function toolboxHost(r: EditorRefs): { root: HTMLElement; leftCol: HTMLElement; center: HTMLElement; rightCol: HTMLElement } {

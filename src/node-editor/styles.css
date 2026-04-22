@@ -405,3 +405,33 @@
   .ne-poof,
   .ne-toolbox-chip.ne-bounce { animation: none; }
 }
+
+/* ── Cables (Unit 11) — rendered into <g id="edges"> inside the SVG ─────── */
+
+.node-editor-cable-layer .edge {
+  fill: none;
+  stroke: var(--accent-copper);
+  stroke-width: 2;
+  stroke-linecap: round;
+  cursor: pointer;
+  transition: stroke var(--dur-fast) var(--ease-out-quart),
+              stroke-width var(--dur-fast) var(--ease-out-quart);
+}
+.node-editor-cable-layer .edge:hover {
+  stroke: var(--accent-amber);
+}
+.node-editor-cable-layer .edge.selected {
+  stroke: var(--accent-amber);
+  stroke-width: 3;
+  filter: drop-shadow(0 0 4px var(--accent-amber));
+}
+.node-editor-cable-layer .edge-preview {
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+/* Amber highlight on compatible drop-targets during a cable drag. */
+.port.valid-target {
+  border-color: var(--accent-amber) !important;
+  box-shadow: 0 0 10px var(--accent-amber);
+}
