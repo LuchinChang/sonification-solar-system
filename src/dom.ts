@@ -52,6 +52,10 @@ export interface DomElements {
   saveConfigBtn: HTMLElement;
   loadConfigBtn: HTMLElement;
   loadConfigInput: HTMLInputElement;
+
+  // Pattern selector (P hotkey modal)
+  patternSelectorEl: HTMLElement;
+  patternCardsEl: HTMLElement;
 }
 
 function getEl(id: string): HTMLElement {
@@ -105,5 +109,8 @@ export function resolveDomElements(): DomElements {
     saveConfigBtn: getEl('save-config-btn'),
     loadConfigBtn: getEl('load-config-btn'),
     loadConfigInput: getEl('load-config-input') as HTMLInputElement,
+
+    patternSelectorEl: getEl('pattern-selector'),
+    patternCardsEl: getEl('pattern-cards'),
   };
 }

@@ -1293,3 +1293,125 @@ body.ui-hidden .config-btn {
 #intro-tour-toast.fade-out {
   opacity: 0;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   PATTERN SELECTOR OVERLAY  (toggled with the P hotkey)
+   ══════════════════════════════════════════════════════════════ */
+#pattern-selector {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(18, 15, 14, 0.45);
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
+  opacity: 1;
+  transition: opacity 0.35s var(--ease-out-quart);
+}
+[data-theme="light"] #pattern-selector {
+  background: rgba(245, 236, 225, 0.55);
+}
+#pattern-selector.hidden {
+  display: none;
+}
+
+.pattern-band {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  max-width: 900px;
+  padding: 32px 40px;
+  border-radius: 20px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+.pattern-band-title {
+  font: 500 18px var(--font-mono);
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.pattern-band-hint {
+  font: 400 11px var(--font-mono);
+  color: var(--text-dim);
+  margin: 0;
+  letter-spacing: 0.3px;
+}
+.pattern-band-hint kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  background: var(--tile-bg);
+  font: inherit;
+  color: var(--text-secondary);
+  margin: 0 2px;
+}
+
+.pattern-cards {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.pattern-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  width: 148px;
+  border-radius: 14px;
+  background: var(--tile-bg);
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  color: var(--text-primary);
+  transition:
+    border-color var(--dur-fast) var(--ease-out-quart),
+    box-shadow   var(--dur-fast) var(--ease-out-quart),
+    transform    var(--dur-fast) var(--ease-out-quart);
+}
+
+.pattern-card:hover {
+  border-color: var(--glass-border-hover);
+  box-shadow: 0 0 16px rgba(194, 118, 46, 0.15);
+  transform: translateY(-2px);
+}
+[data-theme="light"] .pattern-card:hover {
+  box-shadow: 0 0 16px rgba(92, 58, 33, 0.12);
+}
+
+.pattern-card.active {
+  border-color: var(--accent-amber, var(--accent-copper));
+  box-shadow: 0 0 14px rgba(232, 160, 80, 0.25);
+}
+
+.pattern-card:active {
+  transform: translateY(0);
+}
+
+.pattern-thumb {
+  width: 120px;
+  height: 120px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.15);
+}
+[data-theme="light"] .pattern-thumb {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.pattern-card-planets {
+  font: 400 12px var(--font-mono);
+  color: var(--text-primary);
+  text-align: center;
+  letter-spacing: 0.3px;
+}

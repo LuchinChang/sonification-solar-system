@@ -25,6 +25,17 @@
       <p class="signature">Solar System Sonification</p>
     </div>
 
+    <!-- ══ Pattern selector overlay — toggled with the P hotkey ══ -->
+    <div id="pattern-selector" class="hidden" role="dialog" aria-modal="true" aria-label="Choose a planetary pattern">
+      <div class="pattern-band">
+        <h2 class="pattern-band-title">Choose a Planetary Pattern</h2>
+        <div class="pattern-cards" id="pattern-cards">
+          <!-- Cards injected by controls.ts from PATTERNS array -->
+        </div>
+        <p class="pattern-band-hint">Press <kbd>P</kbd> to toggle &middot; <kbd>Esc</kbd> to cancel</p>
+      </div>
+    </div>
+
     <!-- ══ Draw-animation caption bar ══ -->
     <div id="draw-caption" class="draw-caption hidden" aria-live="polite"></div>
 

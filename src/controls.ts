@@ -5,7 +5,7 @@
 
 import { CanvasShape, resetNextId, type ShapeType } from './shapes';
 import { calculateGeocentricLines, calculateEllipticalLines, clamp } from './engine';
-import { PATTERNS, computeAuScale } from './patterns';
+import { PATTERNS, computeAuScale, renderPatternThumbnail, type PlanetaryPattern } from './patterns';
 import type { AppState } from './state';
 import {
   MIN_SAMPLES, MAX_SAMPLES, MIN_CPM, MAX_CPM,
@@ -188,11 +188,12 @@ export function finishDrawAnimation(state: AppState, dom: DomElements, tour: Tou
   setTimeout(() => tour.start(), 800);
 }
 
-// ── Default pattern bootstrap ────────────────────────────────────────────────
-// Invoked once after audio init; node editor will replace this entry point.
+// ── Pattern application ──────────────────────────────────────────────────────
+// Swaps the active planetary pattern: recomputes orbital radii, rebuilds link
+// lines, clears existing shapes, and kicks off the draw-animation. Shared by
+// the Start-Engine bootstrap (first pattern) and the P-hotkey picker.
 
-function applyDefaultPattern(state: AppState, dom: DomElements): void {
-  const pattern = PATTERNS[0];
+function applyPattern(state: AppState, dom: DomElements, pattern: PlanetaryPattern): void {
   state.currentPattern = pattern;
 
   const minDim = Math.min(dom.canvas.width, dom.canvas.height);
@@ -239,6 +240,63 @@ function applyDefaultPattern(state: AppState, dom: DomElements): void {
   updateTelemetry(dom, state);
 
   startDrawAnimation(state, dom);
+}
+
+// ── Pattern selector modal (P hotkey) ────────────────────────────────────────
+// Keyboard-triggered picker of pre-defined planetary patterns. Parallel to
+// the node editor — selecting a pattern swaps the active link-line field and
+// re-runs the draw-animation.
+
+function showPatternSelector(state: AppState, dom: DomElements): void {
+  if (state.isPlaying) togglePlayback(state, dom);
+
+  if (state.drawAnimActive) {
+    state.drawAnimActive = false;
+    dom.captionEl.classList.remove('visible');
+    dom.captionEl.classList.add('hidden');
+    if (state.captionTimeoutId) clearTimeout(state.captionTimeoutId);
+  }
+
+  dom.patternCardsEl.innerHTML = '';
+  const thumbColor = state.currentTheme === 'dark'
+    ? 'rgba(194, 118, 46, 0.4)'
+    : 'rgba(92, 58, 33, 0.35)';
+
+  for (const pattern of PATTERNS) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'pattern-card';
+    if (pattern.id === state.currentPattern.id) card.classList.add('active');
+    card.dataset['pattern'] = pattern.id;
+
+    const thumb = renderPatternThumbnail(pattern, 120, thumbColor);
+    thumb.className = 'pattern-thumb';
+    card.appendChild(thumb);
+
+    const planets = document.createElement('span');
+    planets.className = 'pattern-card-planets';
+    planets.textContent = `${pattern.planet1} \u2014 ${pattern.planet2}`;
+    card.appendChild(planets);
+
+    card.addEventListener('click', () => selectPattern(state, dom, pattern.id));
+    dom.patternCardsEl.appendChild(card);
+  }
+
+  dom.patternSelectorEl.classList.remove('hidden');
+}
+
+function hidePatternSelector(dom: DomElements): void {
+  dom.patternSelectorEl.classList.add('hidden');
+}
+
+function selectPattern(state: AppState, dom: DomElements, patternId: string): void {
+  const pattern = PATTERNS.find(p => p.id === patternId);
+  if (!pattern) return;
+
+  hidePatternSelector(dom);
+  if (pattern.id === state.currentPattern.id) return;
+
+  applyPattern(state, dom, pattern);
 }
 
 // ── Playback toggle (refactored from 191-line monolith) ──────────────────────
@@ -483,7 +541,7 @@ export function setupEventHandlers(
       dom.audioOverlay.classList.add('hidden');
       updateTelemetry(dom, state);
       playLiveCode(state.strudelRepl, dom.telemetryTextarea.value, false);
-      applyDefaultPattern(state, dom);
+      applyPattern(state, dom, PATTERNS[0]);
     } catch (err) {
       console.error('[audio] init failed:', err);
     }
@@ -729,6 +787,14 @@ export function setupEventHandlers(
 
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
+    // Escape closes the pattern selector without applying. Global so it fires
+    // regardless of focus (but still gated above on text-input targets).
+    if (e.key === 'Escape' && !dom.patternSelectorEl.classList.contains('hidden')) {
+      e.preventDefault();
+      hidePatternSelector(dom);
+      return;
+    }
+
     switch (e.key.toLowerCase()) {
       case 'd':
         document.body.classList.toggle('ui-hidden');
@@ -756,6 +822,17 @@ export function setupEventHandlers(
       case 'n':
         // N: spawn a sweeper at the Sun (Unit 3 minimal affordance)
         spawnShape(state, dom, 'sweeper' as ShapeType, tour);
+        break;
+      case 'p':
+        // P: toggle the pattern-selector modal (Unit 5 restore).
+        // Available once audio is initialised — before that, no pattern is
+        // active so swapping has no meaning.
+        if (!state.audioInitialized) break;
+        if (dom.patternSelectorEl.classList.contains('hidden')) {
+          showPatternSelector(state, dom);
+        } else {
+          hidePatternSelector(dom);
+        }
         break;
       case 'e': {
         // E toggle: close if open-for-same / no-active-sweeper, else (re)open
