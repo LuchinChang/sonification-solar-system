@@ -17,7 +17,9 @@ import {
   setupEventHandlers, calculateLines,
   finishDrawAnimation, updateCaption,
 } from './controls';
-import { initNodeEditor, openEditor, closeEditor, isEditorOpen } from './node-editor';
+import {
+  initNodeEditor, openEditor, closeEditor, isEditorOpen, registerDataNodes,
+} from './node-editor';
 
 // ── Initialise ───────────────────────────────────────────────────────────────
 
@@ -35,6 +37,7 @@ setupEventHandlers(state, dom, tour);
 // Opens when a sweeper is clicked on the canvas, or when 'E' is pressed with a
 // sweeper selected. Escape closes (handled inside panel.ts). Codegen is
 // DEFERRED — Unit 14 will hook into closeEditor().
+registerDataNodes();
 initNodeEditor({
   resolveSweeper: id => state.shapes.find(s => s.id === id && s.type === 'sweeper') ?? null,
 });

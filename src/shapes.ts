@@ -6,7 +6,7 @@
 // Audio (Strudel) is intentionally NOT wired here — code generation only.
 
 import type { Point } from './geometry';
-import { getRaySegmentDist, pointToSegmentDist } from './geometry';
+import { angleStdev, getRaySegmentDist, pointToSegmentDist } from './geometry';
 // LEGACY: disabled 2026-04-21 — non-sweeper shape support, kept for future revival.
 // To re-enable: un-comment this block and re-add 'circle' | 'triangle' | 'rectangle' to ShapeType.
 /*
@@ -38,6 +38,10 @@ export interface SweepCluster {
   y:        number;  // canvas y of cluster centroid
   freq:     number;  // mapped Hz  : 100 + (dist/maxR) * 900
   gain:     number;  // mapped amp : min(density/20, 1.0) * 0.7
+  /** Circular stdev (rad) of the angles of the link-lines making up this
+   *  cluster. 0 for single-line clusters; folded to the half-circle so that
+   *  parallel lines score as low-variance regardless of direction. */
+  angleVariance: number;
 }
 
 /** Resolution of the binary rhythm grid (angular bins mapped to Strudel struct). */
@@ -69,8 +73,10 @@ interface TriggerAnimation {
 }
 
 // ── Sweeper constants ─────────────────────────────────────────────────────────
-/** Max gap (px) between sorted distances before starting a new cluster. */
-const SWEEP_CLUSTER_THRESHOLD = 2;
+/** Max gap (px) between sorted distances before starting a new cluster.
+ *  Exported so the data-side `cluster-tolerance` node can read the live value
+ *  it publishes onto globalThis.__sw_<id>_tol each frame. */
+export const SWEEP_CLUSTER_THRESHOLD = 2;
 /** Accent colour palette for sweeper shapes — each sweeper gets a distinct hue. */
 const SWEEP_PALETTE = ['#2DD4BF', '#C084FC', '#F472B6', '#60A5FA', '#FACC15', '#FB923C', '#34D399', '#A78BFA'];
 
@@ -645,48 +651,56 @@ export class CanvasShape {
     linkLines: { p1: Point; p2: Point }[],
     maxR:      number,
   ): SweepCluster[] {
-    // 1. Collect distances of all ray-segment hits within maxR
-    const dists: number[] = [];
+    // 1. Collect (distance, line-angle) pairs of all ray-segment hits within maxR.
+    //    Line angle is preserved so the final cluster can expose angleVariance.
+    const hits: { dist: number; lineAngle: number }[] = [];
     const origin: Point = { x: this.x, y: this.y };
     for (const line of linkLines) {
       const t = getRaySegmentDist(origin, angle, line.p1, line.p2);
-      if (t !== null && t <= maxR) dists.push(t);
+      if (t !== null && t <= maxR) {
+        hits.push({
+          dist: t,
+          lineAngle: Math.atan2(line.p2.y - line.p1.y, line.p2.x - line.p1.x),
+        });
+      }
     }
-    if (dists.length === 0) return [];
+    if (hits.length === 0) return [];
 
-    // 2. Sort ascending
-    dists.sort((a, b) => a - b);
+    // 2. Sort ascending by distance
+    hits.sort((a, b) => a.dist - b.dist);
 
-    // 3. Greedy 1D clustering
-    const groups: number[][] = [];
-    for (const d of dists) {
+    // 3. Greedy 1D clustering on distance, carrying line-angle along.
+    const groups: { dist: number; lineAngle: number }[][] = [];
+    for (const h of hits) {
       const last = groups[groups.length - 1];
-      if (last !== undefined && d - last[last.length - 1] <= SWEEP_CLUSTER_THRESHOLD) {
-        last.push(d);
+      if (last !== undefined && h.dist - last[last.length - 1].dist <= SWEEP_CLUSTER_THRESHOLD) {
+        last.push(h);
       } else {
-        groups.push([d]);
+        groups.push([h]);
       }
     }
 
     // 4. Top-K by density, then re-sort by ascending distance for stable index→freq assignment
-    const avg = (arr: number[]) => arr.reduce((s, v) => s + v, 0) / arr.length;
+    const avgDist = (g: { dist: number }[]): number =>
+      g.reduce((s, v) => s + v.dist, 0) / g.length;
     const topK = groups
       .sort((a, b) => b.length - a.length)   // primary: highest density first
       .slice(0, this.k)
-      .sort((a, b) => avg(a) - avg(b));       // secondary: nearest cluster → f0
+      .sort((a, b) => avgDist(a) - avgDist(b)); // secondary: nearest cluster → f0
 
     // 5. Map to SweepCluster objects
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
     return topK.map(group => {
-      const avgDist = avg(group);
+      const d = avgDist(group);
       return {
-        distance: avgDist,
+        distance: d,
         density:  group.length,
-        x:        this.x + cos * avgDist,
-        y:        this.y + sin * avgDist,
-        freq:     this.freqLow + (avgDist / maxR) * (this.freqHigh - this.freqLow),
+        x:        this.x + cos * d,
+        y:        this.y + sin * d,
+        freq:     this.freqLow + (d / maxR) * (this.freqHigh - this.freqLow),
         gain:     0.6 + Math.min(group.length / 20, 1.0) * 0.3,  // 0.6–0.9
+        angleVariance: angleStdev(group.map(h => h.lineAngle)),
       };
     });
   }
@@ -706,6 +720,37 @@ export class CanvasShape {
     for (let arm = 0; arm < this.sweepCount; arm++) {
       const angle = (this.playheadAngle + arm * armSpacing) % (Math.PI * 2);
       this.sweepClusters.push(...this._clustersAtAngle(angle, linkLines, maxR));
+    }
+    // Publish per-frame data-side sensor globals so the node-editor's data
+    // nodes (see src/node-editor/nodes/data.ts) can feed them into Strudel
+    // via `signal(() => globalThis.__sw_<id>_<name>)` in generated code.
+    // Sweeper-only — guarded at the callsite via `shape.type === 'sweeper'`
+    // in the render loop, but we also guard here for safety.
+    if (this.type === 'sweeper') this._publishSensorGlobals();
+  }
+
+  /**
+   * Write the four data-side sensor values onto globalThis, keyed by
+   * sweeper id. Called every rAF frame from computeSweepClusters() — so
+   * we avoid allocations and only touch slots up to this.k. Slots that
+   * don't have a live cluster are zeroed so stale values can't leak into
+   * Strudel's signal() callbacks.
+   */
+  private _publishSensorGlobals(): void {
+    const g = globalThis as unknown as Record<string, number>;
+    const id = this.id;
+    g[`__sw_${id}_tol`]   = SWEEP_CLUSTER_THRESHOLD;
+    g[`__sw_${id}_count`] = this.sweepClusters.length;
+    const k = this.k;
+    for (let i = 0; i < k; i++) {
+      const c = this.sweepClusters[i];
+      if (c !== undefined) {
+        g[`__sw_${id}_dist_${i}`]   = c.distance;
+        g[`__sw_${id}_angvar_${i}`] = c.angleVariance;
+      } else {
+        g[`__sw_${id}_dist_${i}`]   = 0;
+        g[`__sw_${id}_angvar_${i}`] = 0;
+      }
     }
   }
 
