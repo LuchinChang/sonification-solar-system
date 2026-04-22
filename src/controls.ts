@@ -3,7 +3,7 @@
 // All UI event handlers: mouse, keyboard, knobs, shape management,
 // and playback toggle.
 
-import { CanvasShape, resetNextId, type ShapeType, type PlaybackMode } from './shapes';
+import { CanvasShape, resetNextId, type ShapeType } from './shapes';
 import { calculateGeocentricLines, calculateEllipticalLines, clamp } from './engine';
 import { PATTERNS, computeAuScale } from './patterns';
 import type { AppState } from './state';
@@ -36,6 +36,26 @@ import {
   inspectSnapshot,
   downloadSnapshot,
 } from './config-snapshot';
+
+// ── Unit 5: Selection / delete reconciliation ────────────────────────────────
+//
+// The canvas Backspace hotkey must defer to the node-editor's own cable-delete
+// handler when (a) the editor panel is open and (b) a cable is currently
+// selected. Otherwise Backspace should continue to delete the selected shape,
+// preserving the pre-editor user habit.
+//
+// Duck-typed on `.edge.selected` in the live DOM so this works independently
+// of Unit 3's `hasSelectedEdge()` export — if/when that lands, this function
+// can switch over without touching callers.
+//
+// Exported for unit tests — not part of the public module surface.
+export function editorShouldConsumeDeleteKey(): boolean {
+  if (typeof document === 'undefined') return false;
+  const panel = document.getElementById('node-editor-panel');
+  const panelOpen = panel !== null && !panel.classList.contains('hidden');
+  if (!panelOpen) return false;
+  return document.querySelector('.edge.selected') !== null;
+}
 
 // ── Orbital line computation ─────────────────────────────────────────────────
 
@@ -338,7 +358,9 @@ function buildSnapshot(state: AppState): ConfigSnapshot {
     patternId:    state.currentPattern.id,
     sampleRate:   state.sampleRate,
     cpm:          state.cpm,
-    playbackMode: state.playbackMode,
+    // Unit 1 removed the global Const T / Const V toggle — always constant-time.
+    // Field kept in snapshot schema for backward-compat with pre-Unit-1 files.
+    playbackMode: 'constant-time',
     theme:        state.currentTheme,
     shapes:       state.shapes.map(s => s.toConfig()),
   };
@@ -388,10 +410,8 @@ function restoreFromSnapshot(state: AppState, dom: DomElements, snap: ConfigSnap
 
   // 2 — Global params
   state.cpm          = snap.cpm;
-  state.playbackMode = snap.playbackMode;
-  dom.modeOptions.forEach(opt =>
-    opt.classList.toggle('active', opt.dataset['mode'] === snap.playbackMode),
-  );
+  // Unit 1: snap.playbackMode is accepted by the schema for backward compat
+  // but no longer applied — the app is always constant-time globally.
   state.currentTheme = snap.theme;
   setTheme(snap.theme, dom.themeToggleBtn);
   updateSampleKnobVisual(state, dom);
@@ -512,17 +532,6 @@ export function setupEventHandlers(
     updateCpmKnobVisual(state, dom);
     syncStrudelCps(state.strudelRepl, state.cpm);
     patchHeader(dom.telemetryTextarea, state.currentPattern.name, state.shapes.length, state.sampleRate, state.cpm);
-  });
-
-  // Mode toggle
-  dom.modeToggle.addEventListener('click', e => {
-    const target = (e.target as HTMLElement).closest<HTMLElement>('.mode-option');
-    if (target?.dataset['mode']) {
-      state.playbackMode = target.dataset['mode'] as PlaybackMode;
-      dom.modeOptions.forEach(opt =>
-        opt.classList.toggle('active', opt.dataset['mode'] === state.playbackMode),
-      );
-    }
   });
 
   // Play/Pause
@@ -737,6 +746,10 @@ export function setupEventHandlers(
         }
         break;
       case 'backspace':
+        // Unit 5 — Selection / delete reconciliation (#13).
+        // If the node editor is open AND has a selected cable, let its own
+        // Backspace handler delete the cable instead of the shape.
+        if (editorShouldConsumeDeleteKey()) break;
         e.preventDefault();
         deleteActiveShape(state, dom);
         break;

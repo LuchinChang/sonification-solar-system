@@ -607,36 +607,91 @@ body.ui-hidden #foundry-panel {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   PLAYBACK MODE PILL TOGGLE
+   SWEEPER SPAWN BUTTON  (Unit 1)
+   Matches .config-btn aesthetic — copper border, amber hover,
+   JetBrains Mono label, kbd badge sized to the other dock buttons.
    ══════════════════════════════════════════════════════════════ */
-.mode-toggle {
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-  background: var(--tile-bg);
+.sweeper-spawn-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 17px;
   border: 1px solid var(--glass-border);
-  border-radius: 999px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.mode-option {
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 9px;
+  background: var(--tile-bg);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
   font-weight: 500;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--text-dim);
-  white-space: nowrap;
+  cursor: pointer;
   transition:
-    background var(--dur-fast) var(--ease-out-quart),
-    color      var(--dur-fast) var(--ease-out-quart);
+    border-color var(--dur-fast) var(--ease-out-quart),
+    color        var(--dur-fast) var(--ease-out-quart),
+    box-shadow   var(--dur-fast) var(--ease-out-quart);
 }
 
-.mode-option.active {
-  background: var(--accent-copper);
-  color: rgba(255, 240, 215, 0.96);
+.sweeper-spawn-btn:hover {
+  border-color: var(--accent-amber);
+  color: var(--accent-amber);
+  box-shadow: 0 0 10px rgba(232, 160, 80, 0.22);
+}
+
+.sweeper-spawn-btn:focus-visible {
+  outline: 2px solid var(--accent-copper);
+  outline-offset: 3px;
+}
+
+.sweeper-spawn-plus {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--accent-copper);
+  line-height: 1;
+}
+
+.sweeper-spawn-label {
+  line-height: 1;
+}
+
+.sweeper-spawn-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 3px;
+  border: 1px solid var(--glass-border);
+  background: var(--tile-bg);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TOP-LEFT CHROME  (Unit 1)
+   Holds Save / Load / Theme — moved out of the bottom dock.
+   ══════════════════════════════════════════════════════════════ */
+#top-chrome {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  z-index: 50;
+}
+
+body.ui-hidden #top-chrome {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ══════════════════════════════════════════════════════════════

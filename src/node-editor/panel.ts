@@ -2,45 +2,54 @@
 //
 // Glassmorphic panel shell for the sweeper node-editor.
 //
-// Layout:
+// Layout (Unit 3 overhaul — freeform canvas, draw.io-style):
 //   ┌──────────────────────────────────────────────────────────┐
 //   │ Header: color swatch · "Sweeper #N" · close              │
-//   ├────────────┬──────────────────────────┬──────────────────┤
-//   │ Data Rules │  sweeper icon + cables  │   Sound Rules     │
-//   └────────────┴──────────────────────────┴──────────────────┘
+//   ├──────────────────────────────────────────────────────────┤
+//   │  <div class="node-editor-canvas">                        │
+//   │    absolutely-positioned chips, colored by side          │
+//   │    + overlaid SVG cable layer                            │
+//   │  </div>                                                  │
+//   └──────────────────────────────────────────────────────────┘
 //
 // DEFERRED-COMMIT POLICY
 // ──────────────────────
 // The graph is NOT compiled to Strudel while the panel is open. All edits
-// are pure data mutations on the in-memory NodeGraph. `closeEditor()` is
-// the single commit point. Unit 14 will slot its codegen call at the
-// marked hook below.
+// (including node drags) are pure data mutations on the in-memory NodeGraph.
+// `closeEditor()` is the single commit point. Codegen runs exactly there —
+// never during drag/drop.
 
 import type { NodeGraphSnapshot } from '../config-snapshot';
 import type { CanvasShape } from '../shapes';
-import { initCables } from './cables';
+import { CABLE_REFLOW_EVENT, initCables } from './cables';
 import { compileGraphToStrudel } from './codegen';
-import { addEdge, addNode, createGraph } from './graph';
+import { addEdge, addNode, createGraph, graphFromSnapshot } from './graph';
 import { getNodeDef } from './registry';
+import { openSidebar, closeSidebar } from './sidebar';
 import { mountToolbox, refreshToolbox } from './toolbox';
-import type { Node, NodeDefinition, NodeGraph } from './types';
+import type { Node, NodeDefinition, NodeGraph, PortSpec } from './types';
 // Side-effect import: registers the four sound-basic NodeDefinitions so the
 // default-graph seeding below can find them via getNodeDef().
 import './nodes/sound-basic';
 
+// Grid-snap step for freeform chip positions (px). Matches the 24px dot-grid
+// background of the canvas.
+const GRID_SNAP_PX = 24;
+// Default initial positions for seeded / toolbox-dropped nodes. Kept sparse
+// so chips don't land on top of each other.
+const DEFAULT_NODE_WIDTH  = 180;
+const DEFAULT_NODE_HEIGHT = 90;
+
 // ── Module state ─────────────────────────────────────────────────────────────
 
-// leftCol / rightCol / cableLayer are captured now so Units 11-13 can populate
-// them without re-querying the DOM; closeBtn is kept for future enable/disable.
+// canvas + cableLayer are captured once so drag / drop / cable code doesn't
+// have to re-query the DOM; closeBtn is kept for future enable/disable.
 interface EditorRefs {
   root:          HTMLDivElement;
   swatch:        HTMLSpanElement;
   sweeperNumEl:  HTMLSpanElement;
-  sweeperIcon:   HTMLDivElement;
   closeBtn:      HTMLButtonElement;
-  leftCol:       HTMLDivElement;
-  center:        HTMLDivElement;
-  rightCol:      HTMLDivElement;
+  canvas:        HTMLDivElement;
   cableLayer:    SVGSVGElement;
 }
 
@@ -107,21 +116,20 @@ export function openEditor(sweeperId: number): void {
 
   activeSweeperId = sweeperId;
 
-  // Unit 8: if the sweeper has no saved graph yet, seed the default wiring
-  // (distance → lpf, cluster-count → gain) that mirrors the pre-overhaul
-  // behaviour so audio never drops out when a sweeper first spawns.
-  //
-  // TODO(Unit 14): hydrate from `sweeper.graph` (NodeGraphSnapshot) when it is
-  // present, so saved scenes round-trip through the editor. For now we always
-  // seed a fresh default when we see no snapshot.
-  activeGraph = sweeper.graph === null
-    ? seedDefaultGraph(sweeperId)
-    : createGraph(sweeperId);
+  // If the sweeper has a saved graph snapshot, hydrate it. Otherwise seed the
+  // default wiring (distance → lpf, cluster-count → gain) that mirrors the
+  // pre-overhaul behaviour so audio never drops out on first spawn.
+  if (sweeper.graph !== null && sweeper.graph !== undefined) {
+    const hydrated = graphFromSnapshot(sweeper.graph);
+    hydrated.sweeperId = sweeperId;
+    activeGraph = hydrated;
+  } else {
+    activeGraph = seedDefaultGraph(sweeperId);
+  }
 
   const color = sweeper.sweepColor;
   refs.swatch.style.color           = color;
   refs.swatch.style.backgroundColor = color;
-  refs.sweeperIcon.style.color      = color;
   refs.sweeperNumEl.textContent     = `Sweeper #${sweeper.id}`;
 
   // Re-render chip list in case new NodeDefinitions registered since last open.
@@ -138,49 +146,54 @@ export function openEditor(sweeperId: number): void {
   refs.root.classList.remove('hidden');
   refs.root.removeAttribute('aria-hidden');
   refs.root.removeAttribute('inert');
+  // Unit 2 — open the shape-options sidebar alongside the editor.
+  openSidebar(sweeperId);
   attachKeyHandler();
 }
 
-// ── Node-body rendering (Phase-2 integration) ────────────────────────────────
+// ── Node-body rendering (Unit 3 overhaul) ────────────────────────────────────
 //
-// Each node becomes a glass card inside its side's column. Ports on the left
-// edge (inputs) and right edge (outputs) carry the `.port` data-attributes
-// Unit 11's cables.ts listens for, so dragging works end-to-end.
+// Each node becomes a glass card absolutely-positioned inside the single
+// freeform canvas. `card.dataset.side = def.side` drives the color (copper
+// for data, coral for sound, amber for sweeper / playback) via CSS attribute
+// selectors. Ports carry the `.port` data-attributes Unit 11's cables.ts
+// listens for; port labels render inline next to each dot.
 
 let graphChangedHandler: (() => void) | null = null;
 
 function renderAllNodes(): void {
   if (refs === null || activeGraph === null) return;
-  // Clear existing node bodies (keep column title + placeholder).
-  for (const col of [refs.leftCol, refs.rightCol, refs.center]) {
-    col.querySelectorAll(':scope > .ne-node').forEach(n => n.remove());
-  }
+  // Clear existing node bodies from the single canvas.
+  refs.canvas.querySelectorAll(':scope > .ne-node').forEach(n => n.remove());
+  let i = 0;
   for (const node of activeGraph.nodes) {
     const def = getNodeDef(node.type);
     if (!def) continue;
-    const host = columnForSide(def.side);
-    if (host !== null) host.appendChild(renderNode(node, def));
+    // Assign a sensible default position for freshly-added nodes whose x/y
+    // are still zero — lay them out along a diagonal so they don't pile up.
+    if (node.x === 0 && node.y === 0) {
+      node.x = snapToGrid(48 + (i % 3) * DEFAULT_NODE_WIDTH);
+      node.y = snapToGrid(48 + Math.floor(i / 3) * DEFAULT_NODE_HEIGHT);
+    }
+    refs.canvas.appendChild(renderNode(node, def));
+    i += 1;
   }
-}
-
-function columnForSide(side: 'data' | 'sweeper' | 'sound' | 'playback'): HTMLElement | null {
-  if (refs === null) return null;
-  if (side === 'data')  return refs.leftCol;
-  if (side === 'sound') return refs.rightCol;
-  return refs.center;  // sweeper + playback share center
 }
 
 function renderNode(node: Node, def: NodeDefinition): HTMLDivElement {
   const card = document.createElement('div');
   card.className = 'ne-node';
   card.dataset['nodeId'] = node.id;
+  card.dataset['side']   = def.side;
+  card.style.left = `${node.x}px`;
+  card.style.top  = `${node.y}px`;
 
   const title = document.createElement('div');
   title.className = 'ne-node-title';
   title.textContent = def.label;
   card.appendChild(title);
 
-  // Inputs (left edge)
+  // Inputs (top row)
   if (def.inputs && def.inputs.length > 0) {
     const inRow = document.createElement('div');
     inRow.className = 'ne-node-ports ne-node-ports-in';
@@ -188,7 +201,7 @@ function renderNode(node: Node, def: NodeDefinition): HTMLDivElement {
     card.appendChild(inRow);
   }
 
-  // Custom UI (slider / select / text — Unit 7/8/9/10)
+  // Custom UI (slider / select / text)
   if (def.ui) {
     try {
       const ui = def.ui(node, patch => {
@@ -201,7 +214,7 @@ function renderNode(node: Node, def: NodeDefinition): HTMLDivElement {
     }
   }
 
-  // Outputs (right edge)
+  // Outputs (bottom row)
   if (def.outputs && def.outputs.length > 0) {
     const outRow = document.createElement('div');
     outRow.className = 'ne-node-ports ne-node-ports-out';
@@ -209,18 +222,88 @@ function renderNode(node: Node, def: NodeDefinition): HTMLDivElement {
     card.appendChild(outRow);
   }
 
+  mountDragHandler(card, node);
   return card;
 }
 
-function makePortEl(node: Node, port: { id: string; label?: string; kind: string }, direction: 'in' | 'out'): HTMLDivElement {
-  const el = document.createElement('div');
-  el.className = 'port';
-  el.dataset['nodeId']   = node.id;
-  el.dataset['portId']   = port.id;
-  el.dataset['direction'] = direction;
-  el.dataset['kind']     = port.kind;
-  el.title                = `${port.label ?? port.id} (${port.kind})`;
-  return el;
+function makePortEl(node: Node, port: PortSpec, direction: 'in' | 'out'): HTMLDivElement {
+  const row = document.createElement('div');
+  row.className = `ne-port-row ne-port-row-${direction}`;
+
+  const dot = document.createElement('div');
+  dot.className = 'port';
+  dot.dataset['nodeId']    = node.id;
+  dot.dataset['portId']    = port.id;
+  dot.dataset['direction'] = direction;
+  dot.dataset['kind']      = port.kind;
+  dot.title                = `${port.label ?? port.id} (${port.kind})`;
+
+  const label = document.createElement('span');
+  label.className = 'port-label';
+  label.textContent = `${port.label ?? port.id} : ${port.kind}`;
+
+  // Output rows reverse via `flex-direction: row-reverse` in CSS, so the
+  // append order here stays (dot, label) for both directions.
+  row.append(dot, label);
+  return row;
+}
+
+/**
+ * Install a freeform drag handler on a chip card. Mutates node.x/node.y in
+ * memory during drag and snaps to GRID_SNAP_PX on pointerup. Emits
+ * `cableReflow` so cables.ts repositions Bézier endpoints without rebuilding
+ * the DOM. Deferred-commit: no codegen runs during drag.
+ */
+function mountDragHandler(card: HTMLDivElement, node: Node): void {
+  card.addEventListener('pointerdown', (e) => {
+    if (!(e.target instanceof Element)) return;
+    // Ports forward to cables.ts; form controls handle their own pointer events.
+    if (e.target.closest('.port, button, input, select, textarea')) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const startClientX = e.clientX;
+    const startClientY = e.clientY;
+    const startX = node.x;
+    const startY = node.y;
+
+    card.classList.add('ne-node-dragging');
+
+    const emitReflow = (): void => {
+      if (refs !== null) {
+        refs.root.dispatchEvent(new CustomEvent(CABLE_REFLOW_EVENT, { bubbles: true }));
+      }
+    };
+
+    const onMove = (ev: PointerEvent): void => {
+      node.x = Math.max(0, startX + ev.clientX - startClientX);
+      node.y = Math.max(0, startY + ev.clientY - startClientY);
+      card.style.left = `${node.x}px`;
+      card.style.top  = `${node.y}px`;
+      emitReflow();
+    };
+
+    const onUp = (): void => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup',   onUp);
+      window.removeEventListener('pointercancel', onUp);
+      node.x = snapToGrid(node.x);
+      node.y = snapToGrid(node.y);
+      card.style.left = `${node.x}px`;
+      card.style.top  = `${node.y}px`;
+      card.classList.remove('ne-node-dragging');
+      emitReflow();
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup',   onUp);
+    window.addEventListener('pointercancel', onUp);
+  });
+}
+
+function snapToGrid(v: number): number {
+  return Math.round(v / GRID_SNAP_PX) * GRID_SNAP_PX;
 }
 
 /**
@@ -235,6 +318,8 @@ export function closeEditor(): void {
   refs.root.classList.add('hidden');
   refs.root.setAttribute('aria-hidden', 'true');
   refs.root.setAttribute('inert', '');
+  // Unit 2 — hide the shape-options sidebar.
+  closeSidebar();
 
   // Unit 14 — DEFERRED COMMIT. Compile the in-memory graph to a full sweeper
   // block, persist the snapshot onto the shape, and hand the fresh block to
@@ -335,22 +420,18 @@ function ensureMounted(): void {
   const body = document.createElement('div');
   body.className = 'node-editor-body';
 
-  const leftCol  = buildColumn('Data Rules',  'Drop data-sided rule nodes here');
-  const rightCol = buildColumn('Sound Rules', 'Drop sound-sided rule nodes here');
-
-  const center = document.createElement('div');
-  center.className = 'node-editor-center';
-
-  const sweeperIcon = document.createElement('div');
-  sweeperIcon.className = 'node-editor-sweeper-icon';
-  sweeperIcon.textContent = 'SWP';
+  // Single freeform canvas (draw.io / Apple Freeform style). Chips float on
+  // this surface with absolute positioning; the 24px dot-grid background is
+  // applied via CSS. An overlaid SVG hosts the cable layer.
+  const canvas = document.createElement('div');
+  canvas.className = 'node-editor-canvas';
 
   const cableLayer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   cableLayer.setAttribute('class', 'node-editor-cable-layer');
   cableLayer.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
 
-  center.append(cableLayer, sweeperIcon);
-  body.append(leftCol, center, rightCol);
+  canvas.appendChild(cableLayer);
+  body.appendChild(canvas);
 
   root.append(header, body);
   document.body.appendChild(root);
@@ -359,24 +440,27 @@ function ensureMounted(): void {
     root,
     swatch,
     sweeperNumEl,
-    sweeperIcon,
     closeBtn,
-    leftCol,
-    center,
-    rightCol,
+    canvas,
     cableLayer,
   };
 
-  // Unit 13: drop-in toolbox drawer along the bottom of the panel.
+  // Toolbox drawer lives along the bottom of the panel.
   mountToolbox(toolboxHost(refs), toolboxCallbacks());
 
-  // Unit 11: cable drag + connect interactions. Attaches delegated pointer
-  // handlers to `root`, so future units can add ports without re-wiring.
+  // Cable drag + connect interactions. Delegated to `root`, so nodes can be
+  // added/removed without re-wiring listeners.
   initCables(root, cableLayer);
 }
 
 function toolboxHost(r: EditorRefs): { root: HTMLElement; leftCol: HTMLElement; center: HTMLElement; rightCol: HTMLElement } {
-  return { root: r.root, leftCol: r.leftCol, center: r.center, rightCol: r.rightCol };
+  // Unit 3 collapses the three-column layout into a single canvas. The
+  // toolbox module still asks for three host elements to decide which
+  // column to mark as a drop-target; we point all three at the same canvas
+  // so any drop-zone lookup lands inside it and the drop-accepted check
+  // always succeeds. Node color comes from def.side (on the chip card), not
+  // from which column it was dropped into.
+  return { root: r.root, leftCol: r.canvas, center: r.canvas, rightCol: r.canvas };
 }
 
 function toolboxCallbacks(): { getGraph: () => NodeGraph | null; onGraphChanged: () => void } {
@@ -397,22 +481,6 @@ function emitGraphChanged(): void {
     bubbles: true,
     detail: { sweeperId: activeSweeperId, graph: activeGraph },
   }));
-}
-
-function buildColumn(title: string, placeholder: string): HTMLDivElement {
-  const col = document.createElement('div');
-  col.className = 'node-editor-col';
-
-  const h = document.createElement('h3');
-  h.className = 'node-editor-col-title';
-  h.textContent = title;
-
-  const p = document.createElement('p');
-  p.className = 'node-editor-col-placeholder';
-  p.textContent = placeholder;
-
-  col.append(h, p);
-  return col;
 }
 
 // ── Keyboard: Escape closes (listener is scoped to when panel is open) ───────

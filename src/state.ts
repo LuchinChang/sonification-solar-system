@@ -5,7 +5,7 @@
 // instead of closing over global lets.
 
 import type { Point } from './geometry';
-import type { CanvasShape, PlaybackMode } from './shapes';
+import type { CanvasShape } from './shapes';
 import type { PlanetaryPattern } from './patterns';
 import { PATTERNS } from './patterns';
 
@@ -111,7 +111,6 @@ export interface AppState {
 
   // Sequencer
   cpm: number;
-  playbackMode: PlaybackMode;
   isPlaying: boolean;
   lastFrameTime: number;
 
@@ -183,7 +182,6 @@ export function createInitialState(): AppState {
 
     // Sequencer
     cpm: 10,
-    playbackMode: 'constant-time',
     isPlaying: false,
     lastFrameTime: 0,
 

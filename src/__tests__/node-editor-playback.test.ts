@@ -122,7 +122,7 @@ describe("stepPlayhead('normal')", () => {
     s.playbackMode  = 'normal';
     s.playheadAngle = 0;
     // CPM=60 → period=1s → full 2π per 1000ms; 500ms → π radians.
-    s.stepPlayhead(500, 60, 'constant-time');
+    s.stepPlayhead(500, 60);
     expect(s.playheadAngle).toBeCloseTo(Math.PI, 5);
   });
 
@@ -130,7 +130,7 @@ describe("stepPlayhead('normal')", () => {
     const s = new CanvasShape(0, 0, 'sweeper');
     s.playbackMode  = 'normal';
     s.playheadAngle = 0;
-    s.stepPlayhead(1500, 60, 'constant-time');   // 1.5 cycles
+    s.stepPlayhead(1500, 60);   // 1.5 cycles
     expect(s.playheadAngle).toBeGreaterThanOrEqual(0);
     expect(s.playheadAngle).toBeLessThan(Math.PI * 2);
     expect(s.playheadAngle).toBeCloseTo(Math.PI, 5);
@@ -148,11 +148,11 @@ describe("stepPlayhead('ping-pong')", () => {
     s.sweepPingPongAccum = 0;
 
     // CPM=60 → 2π per 1000ms. Step 999ms → accumulator just shy of 2π.
-    s.stepPlayhead(999, 60, 'constant-time');
+    s.stepPlayhead(999, 60);
     expect(s.sweepDirection).toBe(1);
 
     // One more step pushes us past 2π → flip.
-    s.stepPlayhead(10, 60, 'constant-time');
+    s.stepPlayhead(10, 60);
     expect(s.sweepDirection).toBe(-1);
   });
 
@@ -162,7 +162,7 @@ describe("stepPlayhead('ping-pong')", () => {
     s.playheadAngle     = Math.PI;
     s.sweepDirection    = -1;
     s.sweepPingPongAccum = 0;
-    s.stepPlayhead(100, 60, 'constant-time');
+    s.stepPlayhead(100, 60);
     // With ω*dt = 2π * 0.1 = 0.628… and direction = -1, angle should decrease.
     expect(s.playheadAngle).toBeLessThan(Math.PI);
   });
@@ -173,7 +173,7 @@ describe("stepPlayhead('ping-pong')", () => {
     s.playheadAngle     = 0.1;
     s.sweepDirection    = -1;
     s.sweepPingPongAccum = 0;
-    s.stepPlayhead(500, 60, 'constant-time');   // π rad backwards
+    s.stepPlayhead(500, 60);   // π rad backwards
     expect(s.playheadAngle).toBeGreaterThanOrEqual(0);
     expect(s.playheadAngle).toBeLessThan(Math.PI * 2);
   });
@@ -190,7 +190,7 @@ describe("stepPlayhead('spring')", () => {
     s.springVelocity   = 0;
     // A single 16ms @ CPM=60 nudges the target slightly forward, so the arm
     // begins to follow.
-    for (let i = 0; i < 10; i++) s.stepPlayhead(16, 60, 'constant-time');
+    for (let i = 0; i < 10; i++) s.stepPlayhead(16, 60);
     expect(s.playheadAngle).toBeGreaterThan(0);
   });
 
@@ -204,7 +204,7 @@ describe("stepPlayhead('spring')", () => {
     // Near-zero CPM freezes the target (period ~ 6e10 s) so we isolate the
     // spring response from target drift.
     const frozenCPM = 1e-9;
-    for (let i = 0; i < 300; i++) s.stepPlayhead(16, frozenCPM, 'constant-time');
+    for (let i = 0; i < 300; i++) s.stepPlayhead(16, frozenCPM);
 
     expect(Math.abs(s.playheadAngle - Math.PI / 2)).toBeLessThan(0.05);
     expect(Math.abs(s.springVelocity)).toBeLessThan(0.5);
@@ -221,7 +221,7 @@ describe("stepPlayhead('spring')", () => {
 
     let maxAngle = 0;
     for (let i = 0; i < 500; i++) {
-      s.stepPlayhead(16, frozenCPM, 'constant-time');
+      s.stepPlayhead(16, frozenCPM);
       if (s.playheadAngle > maxAngle) maxAngle = s.playheadAngle;
     }
     // Critical damping → minimal overshoot; allow a tiny integrator error margin.

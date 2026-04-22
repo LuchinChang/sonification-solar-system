@@ -18,12 +18,17 @@ import {
   finishDrawAnimation, updateCaption,
 } from './controls';
 import {
-  initNodeEditor, openEditor, registerDataNodes,
+  initNodeEditor, openEditor, registerDataNodes, initSidebar,
 } from './node-editor';
 import './node-editor/nodes/sound-basic';     // side-effect register: pitch, freq-range, lpf, gain
 import './node-editor/nodes/sweeper';          // side-effect register: 4 sweeper-self nodes
 import { registerPlaybackModeNode } from './node-editor/nodes/playback';
 import { setSweeperResolver } from './node-editor/nodes/sweeper';
+import { installQuantizeHelper } from './node-editor/codegen-helpers';
+
+// Expose __sw_quantizeNote on globalThis so generated Strudel code can call
+// it from inside `signal(() => ...)`. Must run before any sweeper evaluation.
+installQuantizeHelper();
 
 // ── Initialise ───────────────────────────────────────────────────────────────
 
@@ -44,6 +49,16 @@ setupEventHandlers(state, dom, tour);
 registerDataNodes();
 registerPlaybackModeNode();
 setSweeperResolver(id => state.shapes.find(s => s.id === id && s.type === 'sweeper') ?? null);
+// Unit 2 — Shape-options sidebar. Houses sweeper-self + playback controls
+// that never participate in the cable graph (playback mode, arm length,
+// fineness, cluster count, generator). Opens/closes with the editor.
+const sidebarHost = document.getElementById('shape-options-sidebar');
+if (sidebarHost !== null) {
+  initSidebar(sidebarHost, {
+    resolveSweeper: id => state.shapes.find(s => s.id === id && s.type === 'sweeper') ?? null,
+  });
+}
+
 initNodeEditor({
   resolveSweeper: id => state.shapes.find(s => s.id === id && s.type === 'sweeper') ?? null,
   // Unit 14 — DEFERRED commit. The panel hands us the freshly-compiled sweeper
@@ -64,7 +79,12 @@ initNodeEditor({
 // existing click handler (which selects the shape); both fire on the same
 // click because we attach with addEventListener — order matches registration.
 // The 'E' hotkey is owned by controls.ts (toggle semantics).
+//
+// Unit 5: Shift+click bypasses the editor, preserving the pre-editor habit of
+// "click to select, then Backspace to delete" without forcing the user to
+// close the editor first.
 dom.canvas.addEventListener('click', e => {
+  if (e.shiftKey) return;
   for (let i = state.shapes.length - 1; i >= 0; i--) {
     const s = state.shapes[i];
     if (s.type === 'sweeper' && s.containsPoint(e.clientX, e.clientY)) {
@@ -111,11 +131,11 @@ function animate(now: number): void {
           shape.prevPlayheadAngle = shape.playheadAngle;
           shape.playheadAngle     = (shape.startAngle + phase * Math.PI * 2) % (Math.PI * 2);
         } else {
-          shape.stepPlayhead(dt, state.cpm, state.playbackMode);
+          shape.stepPlayhead(dt, state.cpm);
         }
       } catch (e) {
         console.debug('[audio] AC clock fallback:', e);
-        shape.stepPlayhead(dt, state.cpm, state.playbackMode);
+        shape.stepPlayhead(dt, state.cpm);
       }
       shape.computeSweepClusters(state.linkLines, state.orbitalMaxRadius);
       // LEGACY: disabled 2026-04-21 — non-sweeper rAF branch (stepPlayhead +
@@ -124,7 +144,7 @@ function animate(now: number): void {
       // To re-enable: un-comment this block and restore non-sweeper ShapeTypes.
       /*
       else {
-        shape.stepPlayhead(dt, state.cpm, state.playbackMode);
+        shape.stepPlayhead(dt, state.cpm);
         const triggered = shape.checkAndFireCollisions();
         if (triggered.length > 0) {
           for (const int of triggered) shape.triggerAt(int.x, int.y);

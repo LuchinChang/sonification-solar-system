@@ -11,8 +11,9 @@
 // Removing a node cascades to its incident edges so callers don't have
 // to clean up by hand.
 
+import type { NodeGraphSnapshot } from '../config-snapshot';
 import { getNodeDef } from './registry';
-import type { Edge, Node, NodeGraph, PortKind } from './types';
+import type { Edge, Node, NodeGraph, NodeSide, PortKind } from './types';
 
 // ── Construction ─────────────────────────────────────────────────────────────
 
@@ -29,6 +30,35 @@ function mintEdgeId(): string { return `e${++_edgeSeq}`; }
 
 /** Test-only reset. */
 export function _resetIdsForTests(): void { _nodeSeq = 0; _edgeSeq = 0; }
+
+/**
+ * Advance the global id counters so the next minted id is strictly greater
+ * than any id currently in `snapshot`. Keeps future addNode / addEdge calls
+ * from colliding with ids that were restored from disk.
+ *
+ * Ids follow the `n123` / `e123` pattern; non-matching ids are ignored when
+ * computing the max (defensive for externally-authored snapshots).
+ */
+function advanceIdCountersPast(snapshot: NodeGraphSnapshot): void {
+  let maxN = _nodeSeq;
+  let maxE = _edgeSeq;
+  for (const n of snapshot.nodes) {
+    const m = /^n(\d+)$/.exec(n.id);
+    if (m) {
+      const v = Number(m[1]);
+      if (Number.isFinite(v) && v > maxN) maxN = v;
+    }
+  }
+  for (const e of snapshot.edges) {
+    const m = /^e(\d+)$/.exec(e.id);
+    if (m) {
+      const v = Number(m[1]);
+      if (Number.isFinite(v) && v > maxE) maxE = v;
+    }
+  }
+  _nodeSeq = maxN;
+  _edgeSeq = maxE;
+}
 
 // ── Node ops ─────────────────────────────────────────────────────────────────
 
@@ -130,6 +160,77 @@ function createsCycle(g: NodeGraph, candidate: Edge): boolean {
 /** Utility: inbound edges for a specific input port — used by codegen. */
 export function incomingEdges(g: NodeGraph, nodeId: string, portId: string): Edge[] {
   return g.edges.filter(e => e.to.nodeId === nodeId && e.to.portId === portId);
+}
+
+/**
+ * Reconstruct a live NodeGraph from its persisted NodeGraphSnapshot.
+ *
+ * Preserves the original node + edge ids (so future serialization round-trips
+ * stay stable) and advances the module-level id counters past the largest
+ * restored id, so subsequent addNode / addEdge calls never collide with
+ * hydrated ids.
+ *
+ * Nodes whose `defType` is not registered are dropped — the registry may not
+ * have finished loading yet, and silently skipping is safer than throwing in
+ * the middle of panel open. Edges that reference a dropped node, a missing
+ * port, incompatible kinds, or would create a cycle are likewise skipped with
+ * a warn-level log; the remaining graph stays valid.
+ *
+ * Note: Node.side isn't persisted in the snapshot (it's derivable from the
+ * NodeDefinition), so we pull it from the registered def.
+ */
+export function graphFromSnapshot(snapshot: NodeGraphSnapshot): NodeGraph {
+  // sweeperId isn't carried in the snapshot — the caller owns that context.
+  // We reconstruct a graph with sweeperId=0; panel.ts overwrites it before use
+  // (or we adjust the signature later if needed). For now, default to 0 so
+  // the graph object is well-formed.
+  const g: NodeGraph = { sweeperId: 0, nodes: [], edges: [] };
+
+  for (const sn of snapshot.nodes) {
+    const def = getNodeDef(sn.defType);
+    if (!def) {
+      console.warn(`[graph] graphFromSnapshot: unknown defType "${sn.defType}", skipping node ${sn.id}`);
+      continue;
+    }
+    const side: NodeSide = def.side;
+    const node: Node = {
+      id:     sn.id,
+      type:   sn.defType,
+      side,
+      x:      sn.x,
+      y:      sn.y,
+      params: { ...(def.defaultParams ?? {}), ...sn.params },
+    };
+    g.nodes.push(node);
+  }
+
+  for (const se of snapshot.edges) {
+    // fromPort / toPort are stored as `${nodeId}:${portId}`.
+    const [fromNodeId, fromPortId] = splitPortRef(se.fromPort);
+    const [toNodeId,   toPortId]   = splitPortRef(se.toPort);
+    if (fromNodeId === null || fromPortId === null || toNodeId === null || toPortId === null) {
+      console.warn(`[graph] graphFromSnapshot: malformed edge ${se.id}, skipping`);
+      continue;
+    }
+    const candidate = {
+      from: { nodeId: fromNodeId, portId: fromPortId, dir: 'out' as const },
+      to:   { nodeId: toNodeId,   portId: toPortId,   dir: 'in'  as const },
+    };
+    if (!canAddEdge(g, candidate)) {
+      console.warn(`[graph] graphFromSnapshot: edge ${se.id} rejected (missing ports / cycle / kind mismatch)`);
+      continue;
+    }
+    g.edges.push({ id: se.id, from: candidate.from, to: candidate.to });
+  }
+
+  advanceIdCountersPast(snapshot);
+  return g;
+}
+
+function splitPortRef(ref: string): [string | null, string | null] {
+  const idx = ref.indexOf(':');
+  if (idx === -1) return [null, null];
+  return [ref.slice(0, idx), ref.slice(idx + 1)];
 }
 
 /**

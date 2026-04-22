@@ -23,6 +23,7 @@ import type { CodegenCtx, Edge, NodeDefinition, NodeGraph } from '../node-editor
 // wipes it. We call the explicit registrar each time instead.
 import { registerSoundBasicNodes } from '../node-editor/nodes/sound-basic';
 import { _seedDefaultGraphForTests } from '../node-editor/panel';
+import { quantizeNote, installQuantizeHelper } from '../node-editor/codegen-helpers';
 
 // ── CodegenCtx factory ───────────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ describe('sound-basic node definitions', () => {
   });
 
   it('has the expected defaultParams', () => {
-    expect(getNodeDef('sound.pitch')!.defaultParams).toEqual({ note: 'c4' });
+    expect(getNodeDef('sound.pitch')!.defaultParams).toEqual({ note: 'c4', root: 'c4', span: 12 });
     expect(getNodeDef('sound.frequency-range')!.defaultParams).toEqual({ min: 100, max: 1000 });
     expect(getNodeDef('sound.lpf')!.defaultParams).toEqual({ frequency: 1200 });
     expect(getNodeDef('sound.gain')!.defaultParams).toEqual({ amp: 0.6 });
@@ -147,7 +148,7 @@ describe('sound-basic codegen — wired (signal)', () => {
     expect(out).toBe('.gain(signal(() => globalThis.__sw_3_count))');
   });
 
-  it('sound.pitch emits .note(signal(...)) when wired', () => {
+  it('sound.pitch wraps the wired signal with __sw_quantizeNote()', () => {
     registerDataStub();
     const g = createGraph(9);
     const src   = addNode(g, { type: 'data.stub',   side: 'data',  x: 0, y: 0 });
@@ -157,7 +158,27 @@ describe('sound-basic codegen — wired (signal)', () => {
       to:   { nodeId: pitch.id, portId: 'note',    dir: 'in' },
     });
     const out = getNodeDef('sound.pitch')!.codegen(makeCtx(9, g), pitch.params, [edge]);
-    expect(out).toBe('.note(signal(() => globalThis.__sw_9_noteSig))');
+    expect(out).toBe(
+      '.note(signal(() => globalThis.__sw_quantizeNote(globalThis.__sw_9_noteSig, "c4", 12)))'
+    );
+  });
+
+  it('sound.pitch honours custom root/span params when wired', () => {
+    registerDataStub();
+    const g = createGraph(2);
+    const src   = addNode(g, { type: 'data.stub', side: 'data',  x: 0, y: 0 });
+    const pitch = addNode(g, {
+      type: 'sound.pitch', side: 'sound', x: 0, y: 0,
+      params: { note: 'c4', root: 'a4', span: 24 },
+    });
+    const edge = addEdge(g, {
+      from: { nodeId: src.id,   portId: 'noteSig', dir: 'out' },
+      to:   { nodeId: pitch.id, portId: 'note',    dir: 'in' },
+    });
+    const out = getNodeDef('sound.pitch')!.codegen(makeCtx(2, g), pitch.params, [edge]);
+    expect(out).toBe(
+      '.note(signal(() => globalThis.__sw_quantizeNote(globalThis.__sw_2_noteSig, "a4", 24)))'
+    );
   });
 });
 
@@ -246,5 +267,70 @@ describe('default graph seeding (openEditor)', () => {
       'sound.lpf',
     ]);
     expect(g.edges).toHaveLength(0);
+  });
+});
+
+// ── Pitch chromatic quantization (Unit 4) ────────────────────────────────────
+
+describe('quantizeNote — chromatic mapping', () => {
+  it('x=0 maps to the root', () => {
+    expect(quantizeNote(0, 'c4', 12)).toBe('c4');
+  });
+
+  it('x just under one semitone-slice stays on the root', () => {
+    // 1/12 ≈ 0.0833, so 0.08 floors to semi 0 → still c4
+    expect(quantizeNote(0.08, 'c4', 12)).toBe('c4');
+  });
+
+  it('x past one semitone-slice advances to c#4', () => {
+    // 0.09 * 12 = 1.08 → floor 1 → c#4
+    expect(quantizeNote(0.09, 'c4', 12)).toBe('c#4');
+  });
+
+  it('x=0.5 maps to f#4 (6 semitones above c4)', () => {
+    expect(quantizeNote(0.5, 'c4', 12)).toBe('f#4');
+  });
+
+  it('x near 1 maps to b4 (11 semitones above c4)', () => {
+    expect(quantizeNote(0.999, 'c4', 12)).toBe('b4');
+  });
+
+  it('x=1.0 clamps — does NOT overflow to c5', () => {
+    expect(quantizeNote(1.0, 'c4', 12)).toBe('b4');
+  });
+
+  it('x=0.5 with root=a4, span=24 maps to a5 (12 semitones above a4)', () => {
+    // 0.5 * 24 = 12 → a4 + 12 semitones = a5
+    expect(quantizeNote(0.5, 'a4', 24)).toBe('a5');
+  });
+
+  it('x<0 clamps to the root', () => {
+    expect(quantizeNote(-0.5, 'g4', 12)).toBe('g4');
+  });
+
+  it('handles sharp roots (f#3)', () => {
+    expect(quantizeNote(0, 'f#3', 12)).toBe('f#3');
+    expect(quantizeNote(0.5, 'f#3', 12)).toBe('c4'); // 6 semitones above f#3
+  });
+
+  it('returns c4 on unparseable root strings', () => {
+    expect(quantizeNote(0, 'not-a-note', 12)).toBe('c4');
+    expect(quantizeNote(0.5, '', 12)).toBe('c4');
+  });
+
+  it('falls back to span=12 on invalid span', () => {
+    expect(quantizeNote(0.5, 'c4', 0)).toBe('f#4');
+    expect(quantizeNote(0.5, 'c4', -4)).toBe('f#4');
+    expect(quantizeNote(0.5, 'c4', Number.NaN)).toBe('f#4');
+  });
+});
+
+describe('installQuantizeHelper', () => {
+  it('attaches the quantize fn to globalThis.__sw_quantizeNote', () => {
+    installQuantizeHelper();
+    const g = globalThis as unknown as Record<string, unknown>;
+    expect(typeof g['__sw_quantizeNote']).toBe('function');
+    const fn = g['__sw_quantizeNote'] as (x: number, r: string, s: number) => string;
+    expect(fn(0.5, 'c4', 12)).toBe('f#4');
   });
 });

@@ -80,8 +80,6 @@ function mockDomElements(): DomElements {
     cpmKnobEl: el() as unknown as HTMLElement,
     cpmNeedleGroup: el() as unknown as SVGGElement,
     cpmValueEl: el() as unknown as HTMLElement,
-    modeToggle: el() as unknown as HTMLElement,
-    modeOptions: [] as unknown as NodeListOf<HTMLElement>,
     playPauseBtn: el() as unknown as HTMLButtonElement,
     themeToggleBtn: el() as unknown as HTMLButtonElement,
     audioOverlay: el() as unknown as HTMLElement,

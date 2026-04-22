@@ -1,14 +1,17 @@
+// @vitest-environment jsdom
 // src/__tests__/controls.test.ts
 //
 // Tests for controls: shape management, playback toggle, caches.
+// Also covers Unit 5 — Backspace / node-editor selection reconciliation.
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CanvasShape } from '../shapes';
 import { createInitialState } from '../state';
 import {
   setActiveShape,
   deleteActiveShape,
   rebuildAllCaches,
+  editorShouldConsumeDeleteKey,
 } from '../controls';
 import type { DomElements } from '../dom';
 
@@ -48,8 +51,6 @@ function mockDom(): DomElements {
     cpmKnobEl: el() as unknown as HTMLElement,
     cpmNeedleGroup: el() as unknown as SVGGElement,
     cpmValueEl: el() as unknown as HTMLElement,
-    modeToggle: el() as unknown as HTMLElement,
-    modeOptions: [] as unknown as NodeListOf<HTMLElement>,
     playPauseBtn: el() as unknown as HTMLButtonElement,
     themeToggleBtn: el() as unknown as HTMLButtonElement,
     audioOverlay: el() as unknown as HTMLElement,
@@ -161,5 +162,167 @@ describe('rebuildAllCaches', () => {
     rebuildAllCaches(state);
     // Sweeper should have sweep ticks computed
     expect(sw.sweepTicks).toBeDefined();
+  });
+});
+
+// ── Unit 5: Selection / delete reconciliation ──────────────────────────────
+//
+// When the node editor is open AND has a selected cable, Backspace must go
+// to the cable handler, NOT delete the sweeper. Otherwise Backspace should
+// continue to delete the active shape (restoring pre-editor behaviour).
+//
+// Requires jsdom so we can build real DOM fixtures for #node-editor-panel
+// and `.edge.selected`.
+
+describe('editorShouldConsumeDeleteKey (Unit 5)', () => {
+  beforeEach(() => {
+    // Fresh document.body each test.
+    document.body.innerHTML = '';
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('returns false when no editor panel exists', () => {
+    expect(editorShouldConsumeDeleteKey()).toBe(false);
+  });
+
+  it('returns false when the editor panel is closed (.hidden class)', () => {
+    const panel = document.createElement('div');
+    panel.id = 'node-editor-panel';
+    panel.className = 'hidden';
+    document.body.appendChild(panel);
+    // Even an edge with .selected is irrelevant if the panel is hidden.
+    const edge = document.createElement('div');
+    edge.className = 'edge selected';
+    document.body.appendChild(edge);
+    expect(editorShouldConsumeDeleteKey()).toBe(false);
+  });
+
+  it('returns false when the panel is open but no edge is selected', () => {
+    const panel = document.createElement('div');
+    panel.id = 'node-editor-panel';
+    document.body.appendChild(panel);
+    expect(editorShouldConsumeDeleteKey()).toBe(false);
+  });
+
+  it('returns true when the panel is open AND an edge is selected', () => {
+    const panel = document.createElement('div');
+    panel.id = 'node-editor-panel';
+    document.body.appendChild(panel);
+    const edge = document.createElement('div');
+    edge.className = 'edge selected';
+    document.body.appendChild(edge);
+    expect(editorShouldConsumeDeleteKey()).toBe(true);
+  });
+});
+
+describe('Backspace behaviour (Unit 5 integration)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  // Simulates the keydown-switch branch logic from setupEventHandlers without
+  // wiring the full handler (which pulls in audio/strudel). Matches the exact
+  // order of guards in controls.ts: text-input early-return, then editor guard,
+  // then deleteActiveShape.
+  function handleBackspace(
+    state: ReturnType<typeof createInitialState>,
+    dom: DomElements,
+    target: EventTarget | null,
+  ): void {
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+    if (editorShouldConsumeDeleteKey()) return;
+    deleteActiveShape(state, dom);
+  }
+
+  it('deletes the active sweeper when editor panel is closed', () => {
+    const state = createInitialState();
+    const dom = mockDom();
+    const sw = new CanvasShape(400, 300, 'sweeper', 200);
+    state.shapes.push(sw);
+    state.activeShape = sw;
+
+    handleBackspace(state, dom, document.body);
+
+    expect(state.shapes).toHaveLength(0);
+    expect(state.activeShape).toBeNull();
+  });
+
+  it('does NOT delete the sweeper when an .edge.selected exists in an open panel', () => {
+    const panel = document.createElement('div');
+    panel.id = 'node-editor-panel';
+    document.body.appendChild(panel);
+    const edge = document.createElement('div');
+    edge.className = 'edge selected';
+    document.body.appendChild(edge);
+
+    const state = createInitialState();
+    const dom = mockDom();
+    const sw = new CanvasShape(400, 300, 'sweeper', 200);
+    state.shapes.push(sw);
+    state.activeShape = sw;
+
+    handleBackspace(state, dom, document.body);
+
+    // Sweeper is preserved — the cable handler owns this Backspace.
+    expect(state.shapes).toHaveLength(1);
+    expect(state.activeShape).toBe(sw);
+  });
+
+  it('does NOT delete the sweeper when focus is in a text input', () => {
+    const state = createInitialState();
+    const dom = mockDom();
+    const sw = new CanvasShape(400, 300, 'sweeper', 200);
+    state.shapes.push(sw);
+    state.activeShape = sw;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    document.body.appendChild(input);
+
+    handleBackspace(state, dom, input);
+
+    expect(state.shapes).toHaveLength(1);
+    expect(state.activeShape).toBe(sw);
+  });
+
+  it('does NOT delete the sweeper when focus is in a textarea', () => {
+    const state = createInitialState();
+    const dom = mockDom();
+    const sw = new CanvasShape(400, 300, 'sweeper', 200);
+    state.shapes.push(sw);
+    state.activeShape = sw;
+
+    const ta = document.createElement('textarea');
+    document.body.appendChild(ta);
+
+    handleBackspace(state, dom, ta);
+
+    expect(state.shapes).toHaveLength(1);
+  });
+
+  it('deletes the sweeper when panel is open but no edge is selected', () => {
+    // e.g. user clicked the sweeper to open the editor, then pressed Backspace
+    // without picking a cable — we still want old-school "delete the sweeper".
+    const panel = document.createElement('div');
+    panel.id = 'node-editor-panel';
+    document.body.appendChild(panel);
+
+    const state = createInitialState();
+    const dom = mockDom();
+    const sw = new CanvasShape(400, 300, 'sweeper', 200);
+    state.shapes.push(sw);
+    state.activeShape = sw;
+
+    handleBackspace(state, dom, document.body);
+
+    expect(state.shapes).toHaveLength(0);
+    expect(state.activeShape).toBeNull();
   });
 });

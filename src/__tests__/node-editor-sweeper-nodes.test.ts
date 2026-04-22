@@ -78,7 +78,7 @@ describe('CanvasShape.fineness quantizes the playhead angle', () => {
 
     // Run several sub-steps that would normally land on non-step phases.
     for (const dt of [50, 83, 110, 137, 200]) {
-      s.stepPlayhead(dt, 60, 'constant-time');
+      s.stepPlayhead(dt, 60);
       const mod = s.playheadAngle % step;
       const err = Math.min(mod, step - mod);
       expect(err).toBeLessThan(1e-9);
@@ -91,7 +91,7 @@ describe('CanvasShape.fineness quantizes the playhead angle', () => {
     s.playheadAngle = 0;
     s.prevPlayheadAngle = 0;
 
-    s.stepPlayhead(17, 60, 'constant-time');
+    s.stepPlayhead(17, 60);
     // With no quantization the angle is the raw advance, not a round step.
     const expected = (17 / 1000) * Math.PI * 2;
     expect(s.playheadAngle).toBeCloseTo(expected, 9);

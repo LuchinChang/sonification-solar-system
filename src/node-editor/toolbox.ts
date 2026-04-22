@@ -143,8 +143,13 @@ export function refreshToolbox(host: ToolboxHost, cb: ToolboxCallbacks): void {
   renderChips(drawer, host, cb);
 }
 
+/** Sides that the toolbox drawer exposes as draggable chips. Unit 2 — shape-
+ *  specific 'sweeper' and 'playback' sides live in the left sidebar, not the
+ *  toolbox, because they can't be connected via cables. */
+const TOOLBOX_SIDES: ReadonlySet<NodeSide> = new Set<NodeSide>(['data', 'sound']);
+
 function renderChips(drawer: HTMLElement, host: ToolboxHost, cb: ToolboxCallbacks): void {
-  const defs = listNodeDefs();
+  const defs = listNodeDefs().filter(d => TOOLBOX_SIDES.has(d.side));
   if (defs.length === 0) {
     const empty = document.createElement('span');
     empty.className = 'ne-toolbox-empty';

@@ -294,23 +294,26 @@ describe('toolbox mount + drag/drop', () => {
     onGraphChanged = vi.fn() as unknown as (() => void) & { mock: { calls: unknown[][] } };
   });
 
-  it('renders one chip per registered NodeDefinition, grouped by side', () => {
-    registerNodeDef(makeDef({ type: 'data.distance-to-sun', side: 'data',    label: 'Distance' }));
-    registerNodeDef(makeDef({ type: 'sound.sine',           side: 'sound',   label: 'Sine'      }));
-    registerNodeDef(makeDef({ type: 'sweeper.spokes',       side: 'sweeper', label: 'Spokes'    }));
+  it('renders a chip per cable-eligible NodeDefinition, excluding sweeper/playback sides', () => {
+    // Unit 2 — shape-specific sides ('sweeper' + 'playback') are routed to the
+    // left sidebar and must NOT appear in the toolbox drawer.
+    registerNodeDef(makeDef({ type: 'data.distance-to-sun', side: 'data',     label: 'Distance' }));
+    registerNodeDef(makeDef({ type: 'sound.sine',           side: 'sound',    label: 'Sine'      }));
+    registerNodeDef(makeDef({ type: 'sweeper.spokes',       side: 'sweeper',  label: 'Spokes'    }));
+    registerNodeDef(makeDef({ type: 'playback.mode',        side: 'playback', label: 'Mode'      }));
 
     mountToolbox(host, { getGraph: () => graph, onGraphChanged });
 
     const chips = dom.allChips();
-    expect(chips).toHaveLength(3);
+    expect(chips).toHaveLength(2);
 
     const types = chips.map(c => (c as unknown as { dataset: Record<string, string> }).dataset.type);
-    expect(types.sort()).toEqual(['data.distance-to-sun', 'sound.sine', 'sweeper.spokes']);
+    expect(types.sort()).toEqual(['data.distance-to-sun', 'sound.sine']);
 
-    // Each side gets a labelled group.
+    // Only data + sound groups surface — sweeper/playback are sidebar-owned.
     const labels = (dom.root as unknown as { querySelectorAll: (s: string) => { textContent: string }[] })
       .querySelectorAll('.ne-toolbox-group-label').map(l => l.textContent);
-    expect(labels.sort()).toEqual(['DATA', 'SOUND', 'SWEEPER']);
+    expect(labels.sort()).toEqual(['DATA', 'SOUND']);
   });
 
   it('a drop inside the matching column creates a node via addNode and fires onGraphChanged', () => {

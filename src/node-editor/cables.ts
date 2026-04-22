@@ -38,32 +38,51 @@ import type { Edge, NodeGraph, Port, PortDirection } from './types';
 
 export const GRAPH_CHANGED_EVENT = 'graphChanged';
 
+/** Bubbling event fired while a node is being dragged — asks cables to reflow
+ *  without rebuilding the DOM (cheap, per-frame). */
+export const CABLE_REFLOW_EVENT = 'cableReflow';
+
+// Module-local flag read by hasSelectedEdge(); updated by every initCables
+// instance as the user clicks edges + presses Backspace. Unit 5's worker
+// uses this to avoid swallowing Backspace when nothing is selected.
+let _hasSelectedEdge = false;
+
+/**
+ * True iff the currently-open node editor has an edge in its "selected"
+ * state. Unit 5's global Backspace handler uses this to decide whether to
+ * preventDefault and delete the edge, or to let the keystroke fall through
+ * to other consumers (shape deletion, for example).
+ */
+export function hasSelectedEdge(): boolean { return _hasSelectedEdge; }
+
 // ── Geometry ─────────────────────────────────────────────────────────────────
 
 /**
- * Compute a quadratic Bézier "M…Q…" path string connecting (ax,ay) → (bx,by)
- * with a control point offset perpendicular to the segment by 40–80px,
- * scaled by distance so short cables stay gentle and long cables swoop.
- *
- * Offset direction is fixed (right-hand normal of the A→B vector), so
- * cables curve consistently regardless of user drag direction. Max-MSP
- * uses downward sag driven by gravity; here we use perpendicular offset
- * to keep vertical + horizontal connections equally legible.
+ * Quadratic Bézier control point perpendicular to A→B, offset 40–80px by
+ * segment length. Right-hand normal so cables curve consistently regardless
+ * of drag direction.
  */
-export function pathForEndpoints(ax: number, ay: number, bx: number, by: number): string {
-  const mx = (ax + bx) / 2;
-  const my = (ay + by) / 2;
+function controlPoint(ax: number, ay: number, bx: number, by: number): { cx: number; cy: number } {
   const dx = bx - ax;
   const dy = by - ay;
   const len = Math.hypot(dx, dy) || 1;
-  // Perpendicular unit vector (right-hand normal).
-  const nx = -dy / len;
-  const ny =  dx / len;
-  // Scale: clamp 40..80 by a smooth easing on length.
   const offset = Math.min(80, Math.max(40, len * 0.25));
-  const cx = mx + nx * offset;
-  const cy = my + ny * offset;
+  return {
+    cx: (ax + bx) / 2 + (-dy / len) * offset,
+    cy: (ay + by) / 2 + ( dx / len) * offset,
+  };
+}
+
+/** Compute a quadratic Bézier "M…Q…" path string connecting A → B. */
+export function pathForEndpoints(ax: number, ay: number, bx: number, by: number): string {
+  const { cx, cy } = controlPoint(ax, ay, bx, by);
   return `M ${ax.toFixed(2)} ${ay.toFixed(2)} Q ${cx.toFixed(2)} ${cy.toFixed(2)} ${bx.toFixed(2)} ${by.toFixed(2)}`;
+}
+
+/** Midpoint of the quadratic Bézier used by pathForEndpoints (t=0.5). */
+function bezierMidpoint(ax: number, ay: number, bx: number, by: number): { x: number; y: number } {
+  const { cx, cy } = controlPoint(ax, ay, bx, by);
+  return { x: 0.25 * ax + 0.5 * cx + 0.25 * bx, y: 0.25 * ay + 0.5 * cy + 0.25 * by };
 }
 
 // ── DOM helpers ──────────────────────────────────────────────────────────────
@@ -173,9 +192,18 @@ export function initCables(
   // ── Selection state for existing edges ──────────────────────────────────
   let selectedEdgeEl: SVGPathElement | null = null;
   const selectEdge = (el: SVGPathElement | null): void => {
-    if (selectedEdgeEl !== null) selectedEdgeEl.classList.remove('selected');
+    if (selectedEdgeEl !== null) {
+      selectedEdgeEl.classList.remove('selected');
+      const oldBtn = findDeleteBtn(selectedEdgeEl);
+      if (oldBtn !== null) oldBtn.classList.remove('is-visible');
+    }
     selectedEdgeEl = el;
-    if (el !== null) el.classList.add('selected');
+    _hasSelectedEdge = el !== null;
+    if (el !== null) {
+      el.classList.add('selected');
+      const btn = findDeleteBtn(el);
+      if (btn !== null) btn.classList.add('is-visible');
+    }
   };
 
   const dispatchGraphChanged = (): void => {
@@ -187,6 +215,41 @@ export function initCables(
     return panelRoot.querySelector(sel);
   };
 
+  // Find the sibling `.edge-delete-btn` associated with a path. Stored as
+  // data-edge-id on the button so renderEdge + reflow can address it directly
+  // without walking the DOM.
+  const findDeleteBtn = (path: SVGPathElement): HTMLButtonElement | null => {
+    const edgeId = path.getAttribute('data-edge-id');
+    if (edgeId === null) return null;
+    return panelRoot.querySelector<HTMLButtonElement>(
+      `.edge-delete-btn[data-edge-id="${edgeId}"]`,
+    );
+  };
+
+  // Overlay layer for HTML × buttons. Lives on panelRoot so it renders above
+  // the SVG cable layer and receives pointer events normally.
+  let overlay = panelRoot.querySelector<HTMLDivElement>(':scope > .node-editor-edge-overlay');
+  if (overlay === null) {
+    overlay = document.createElement('div');
+    overlay.className = 'node-editor-edge-overlay';
+    panelRoot.appendChild(overlay);
+  }
+
+  const overlayOrigin = (): { left: number; top: number } => {
+    const sr = svgLayer.getBoundingClientRect();
+    const pr = panelRoot.getBoundingClientRect();
+    return { left: sr.left - pr.left, top: sr.top - pr.top };
+  };
+
+  // Position the × button at the current Bézier midpoint of its edge. Called
+  // after renderEdge and on every cableReflow.
+  const positionDeleteBtn = (btn: HTMLButtonElement, ax: number, ay: number, bx: number, by: number): void => {
+    const mid = bezierMidpoint(ax, ay, bx, by);
+    const o = overlayOrigin();
+    btn.style.left = `${o.left + mid.x}px`;
+    btn.style.top  = `${o.top  + mid.y}px`;
+  };
+
   // Martian Dusk tokens are applied via CSS (see styles.css); we keep the
   // path element attribute-only so future units can animate `stroke` there.
   const renderEdge = (edge: Edge): SVGPathElement => {
@@ -194,15 +257,68 @@ export function initCables(
     path.setAttribute('class', 'edge');
     path.setAttribute('data-edge-id', edge.id);
     path.setAttribute('fill', 'none');
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'edge-delete-btn';
+    deleteBtn.dataset['edgeId'] = edge.id;
+    deleteBtn.textContent = '×';
+    deleteBtn.setAttribute('aria-label', 'Delete cable');
+
     const from = findPortEl(edge.from);
     const to   = findPortEl(edge.to);
     if (from !== null && to !== null) {
       const a = portAnchor(from, svgLayer);
       const b = portAnchor(to,   svgLayer);
       path.setAttribute('d', pathForEndpoints(a.x, a.y, b.x, b.y));
+      positionDeleteBtn(deleteBtn, a.x, a.y, b.x, b.y);
     }
+
+    deleteBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const g = getGraph();
+      if (g === null) return;
+      const removed = removeEdge(g, edge.id);
+      if (selectedEdgeEl === path) selectEdge(null);
+      path.remove();
+      deleteBtn.remove();
+      if (removed) dispatchGraphChanged();
+    });
+
+    // Reveal × on edge hover. SVG→HTML isn't a CSS cascade path, so toggle
+    // via JS. Selection also reveals (see selectEdge).
+    path.addEventListener('pointerenter', () => deleteBtn.classList.add('is-visible'));
+    path.addEventListener('pointerleave', () => {
+      // Keep visible if the edge is selected or if the pointer moved onto
+      // the button itself (its own :hover state will keep it visible).
+      if (selectedEdgeEl !== path) deleteBtn.classList.remove('is-visible');
+    });
+
     edgesGroup.appendChild(path);
+    overlay.appendChild(deleteBtn);
     return path;
+  };
+
+  /** Recompute every existing edge's `d` + × position against current DOM
+   *  anchors. Called on node drag (`cableReflow`) and after graph mutations
+   *  that might have shifted endpoints. Cheap — no DOM churn. */
+  const reflowAllEdges = (): void => {
+    const paths = edgesGroup.querySelectorAll<SVGPathElement>('.edge');
+    const g = getGraph();
+    paths.forEach((path) => {
+      const edgeId = path.getAttribute('data-edge-id');
+      if (edgeId === null) return;
+      const edge = g?.edges.find(e => e.id === edgeId);
+      if (edge === undefined) return;
+      const from = findPortEl(edge.from);
+      const to   = findPortEl(edge.to);
+      if (from === null || to === null) return;
+      const a = portAnchor(from, svgLayer);
+      const b = portAnchor(to,   svgLayer);
+      path.setAttribute('d', pathForEndpoints(a.x, a.y, b.x, b.y));
+      const btn = findDeleteBtn(path);
+      if (btn !== null) positionDeleteBtn(btn, a.x, a.y, b.x, b.y);
+    });
   };
 
   // ── Pointer handlers ─────────────────────────────────────────────────────
@@ -334,6 +450,11 @@ export function initCables(
     selectEdge(selectedEdgeEl === edgeEl ? null : edgeEl);
   };
 
+  // Only intercept Backspace/Delete when an edge is actually selected. This
+  // prevents the editor from stealing the key from outside consumers (e.g.
+  // shape deletion) when the panel is open but no cable is selected. The
+  // listener is scoped to `panelRoot`, not `document`, so it only fires
+  // when focus / pointer is inside the editor.
   const onKeyDown = (e: Event): void => {
     const ke = e as KeyboardEvent;
     if (ke.key !== 'Delete' && ke.key !== 'Backspace') return;
@@ -344,10 +465,26 @@ export function initCables(
     if (edgeId === null) return;
     ke.preventDefault();
     const removed = removeEdge(g, edgeId);
+    const btn = findDeleteBtn(selectedEdgeEl);
+    if (btn !== null) btn.remove();
     selectedEdgeEl.remove();
     selectEdge(null);
     if (removed) dispatchGraphChanged();
   };
+
+  // rAF-coalesce reflows: pointermove can fire faster than the display
+  // refresh, so we batch into a single DOM walk per frame.
+  let reflowScheduled = false;
+  const scheduleReflow = (): void => {
+    if (reflowScheduled) return;
+    reflowScheduled = true;
+    requestAnimationFrame(() => {
+      reflowScheduled = false;
+      reflowAllEdges();
+    });
+  };
+  const onCableReflow  = (): void => { scheduleReflow(); };
+  const onGraphChanged = (): void => { scheduleReflow(); };
 
   // ── Wire up listeners (event delegation on panelRoot) ────────────────────
   panelRoot.addEventListener('pointerdown', onPointerDown);
@@ -357,6 +494,8 @@ export function initCables(
   panelRoot.addEventListener('pointerup',   onPointerUp);
   panelRoot.addEventListener('click',       onEdgeClick, true);
   panelRoot.addEventListener('keydown',     onKeyDown);
+  panelRoot.addEventListener(CABLE_REFLOW_EVENT,  onCableReflow);
+  panelRoot.addEventListener(GRAPH_CHANGED_EVENT, onGraphChanged);
 
   return (): void => {
     panelRoot.removeEventListener('pointerdown', onPointerDown);
@@ -366,7 +505,10 @@ export function initCables(
     panelRoot.removeEventListener('pointerup',   onPointerUp);
     panelRoot.removeEventListener('click',       onEdgeClick, true);
     panelRoot.removeEventListener('keydown',     onKeyDown);
+    panelRoot.removeEventListener(CABLE_REFLOW_EVENT,  onCableReflow);
+    panelRoot.removeEventListener(GRAPH_CHANGED_EVENT, onGraphChanged);
     rootAny[flag] = false;
+    _hasSelectedEdge = false;
     if (drag !== null) {
       drag.preview.remove();
       clearHover();

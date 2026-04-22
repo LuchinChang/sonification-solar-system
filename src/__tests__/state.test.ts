@@ -41,11 +41,6 @@ describe('createInitialState', () => {
     expect(s.orbitalMaxRadius).toBeCloseTo(300 * 1.05, 1);
   });
 
-  it('defaults to constant-time playback mode', () => {
-    const s = createInitialState();
-    expect(s.playbackMode).toBe('constant-time');
-  });
-
   it('defaults CPM to 10', () => {
     const s = createInitialState();
     expect(s.cpm).toBe(10);

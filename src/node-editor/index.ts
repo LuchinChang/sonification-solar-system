@@ -31,12 +31,15 @@ export {
   removeEdge,
   incomingEdges,
   canAddEdge,
+  graphFromSnapshot,
 } from './graph';
 
 export {
   initCables,
   pathForEndpoints,
+  hasSelectedEdge,
   GRAPH_CHANGED_EVENT,
+  CABLE_REFLOW_EVENT,
 } from './cables';
 
 export {
@@ -49,8 +52,17 @@ export {
 } from './panel';
 
 export {
+  initSidebar,
+  openSidebar,
+  closeSidebar,
+  isSidebarOpen,
+} from './sidebar';
+export type { SidebarCallbacks } from './sidebar';
+
+export {
   compileGraphToStrudel,
   inboundSignalExpr,
+  signalRefRaw,
 } from './codegen';
 
 // Explicit-register (call from main.ts): Unit 6 / 7 / 10 expose their own
