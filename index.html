@@ -25,17 +25,6 @@
       <p class="signature">Solar System Sonification</p>
     </div>
 
-    <!-- ══ Pattern selector overlay — shown after audio init ══ -->
-    <div id="pattern-selector" class="hidden">
-      <div class="pattern-band">
-        <h2 class="pattern-band-title">Choose a Planetary Pattern</h2>
-        <div class="pattern-cards" id="pattern-cards">
-          <!-- Cards injected by main.ts from PATTERNS array -->
-        </div>
-        <p class="pattern-band-hint">Press <kbd>P</kbd> to reopen anytime</p>
-      </div>
-    </div>
-
     <!-- ══ Draw-animation caption bar ══ -->
     <div id="draw-caption" class="draw-caption hidden" aria-live="polite"></div>
 
@@ -65,74 +54,7 @@
     <!-- ╚════════════════════════════════════════════════════════╝ -->
     <aside id="foundry-panel" aria-label="Sonic Foundry and Orbital Engine">
 
-      <!-- ── Left: Shape Spawner ── -->
-      <section class="dock-section" id="foundry-shapes-section">
-        <header class="dock-header">
-          <span class="dock-icon" aria-hidden="true">◈</span>
-          <span class="dock-title">Sonic Foundry</span>
-        </header>
-        <div class="dock-divider"></div>
-        <div id="foundry-shapes" class="foundry-shapes" role="toolbar" aria-label="Spawn shapes">
-
-          <button
-            class="shape-tile"
-            data-shape="circle"
-            title="Spawn Circle at Sun"
-            aria-label="Spawn Circle"
-          >
-            <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <circle cx="16" cy="16" r="11" stroke="currentColor" stroke-width="1.5" />
-            </svg>
-            <span class="shape-label">Circle</span>
-          </button>
-
-          <button
-            class="shape-tile"
-            data-shape="triangle"
-            title="Spawn Triangle at Sun"
-            aria-label="Spawn Triangle"
-          >
-            <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <polygon points="16,4 28,27 4,27" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
-            </svg>
-            <span class="shape-label">Triangle</span>
-          </button>
-
-          <button
-            class="shape-tile"
-            data-shape="rectangle"
-            title="Spawn Rectangle at Sun"
-            aria-label="Spawn Rectangle"
-          >
-            <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <rect x="3" y="9" width="26" height="14" rx="2" stroke="currentColor" stroke-width="1.5" />
-            </svg>
-            <span class="shape-label">Rect</span>
-          </button>
-
-          <button
-            class="shape-tile"
-            data-shape="sweeper"
-            title="Spawn Sweeper at Sun"
-            aria-label="Spawn Sweeper"
-          >
-            <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <circle cx="16" cy="16" r="10" stroke="currentColor" stroke-width="0.75" stroke-dasharray="3 4"/>
-              <line x1="16" y1="16" x2="26" y2="9" stroke="currentColor" stroke-width="1.5"/>
-              <circle cx="23.5" cy="10.5" r="2.5" stroke="currentColor" stroke-width="1.2"/>
-              <circle cx="16" cy="16" r="2" fill="currentColor"/>
-            </svg>
-            <span class="shape-label">Sweep</span>
-          </button>
-
-        </div>
-        <p class="dock-hint">Click to spawn &nbsp;&middot;&nbsp; Click canvas shape to select &nbsp;&middot;&nbsp; Scroll to resize</p>
-      </section>
-
-      <!-- Vertical separator -->
-      <div class="section-sep" aria-hidden="true"></div>
-
-      <!-- ── Right: Orbital Engine ── -->
+      <!-- ── Orbital Engine ── -->
       <section class="dock-section" id="controls-section">
         <header class="dock-header">
           <span class="dock-icon" aria-hidden="true">◉</span>
@@ -197,22 +119,34 @@
 
         </div><!-- /knobs-row -->
 
-        <!-- Mode toggle + Play/Pause -->
+        <!-- Mode toggle (hidden — CONST is the only default surfaced)
+             kept in DOM so config-snapshot restore still targets the
+             .mode-option elements. Other units may re-surface this. -->
+        <div
+          class="mode-toggle is-collapsed"
+          id="mode-toggle"
+          role="group"
+          aria-label="Playback mode"
+          hidden
+        >
+          <span class="mode-option active" data-mode="constant-time"  title="All shapes complete one loop in the same time">Const T</span>
+          <span class="mode-option"        data-mode="constant-speed" title="Larger shapes take longer (fixed linear speed)">Const V</span>
+        </div>
+
+        <!-- Transport + Files + View row -->
         <div class="sequencer-controls">
 
-          <!--
-            Pill toggle: clicking either option calls setPlaybackMode().
-            JS manages the .active class on each .mode-option.
-          -->
-          <div
-            class="mode-toggle"
-            id="mode-toggle"
-            role="group"
-            aria-label="Playback mode"
+          <!-- Sweeper spawn affordance ( + Sweeper | N hotkey ) -->
+          <button
+            id="sweeper-spawn-btn"
+            class="sweeper-spawn-btn"
+            aria-label="Spawn sweeper at Sun"
+            title="Spawn sweeper  [ N ]"
           >
-            <span class="mode-option active" data-mode="constant-time"  title="All shapes complete one loop in the same time">Const T</span>
-            <span class="mode-option"        data-mode="constant-speed" title="Larger shapes take longer (fixed linear speed)">Const V</span>
-          </div>
+            <span class="sweeper-spawn-plus" aria-hidden="true">+</span>
+            <span class="sweeper-spawn-label">Sweeper</span>
+            <kbd class="sweeper-spawn-kbd" aria-hidden="true">N</kbd>
+          </button>
 
           <!-- Play / Pause button -->
           <button
@@ -222,196 +156,38 @@
             title="Play / Pause  [ Space ]"
           >⏸</button>
 
-          <!-- Theme toggle (Martian Dusk ↔ Daylight) -->
+          <!-- Files cluster: save + load compact grouping -->
+          <div class="files-cluster" role="group" aria-label="Files">
+            <span class="files-cluster-label" aria-hidden="true">Files</span>
+            <button
+              id="save-config-btn"
+              class="config-btn"
+              aria-label="Save configuration"
+              title="Save config  [ ⌘S ]"
+            >⬇</button>
+            <button
+              id="load-config-btn"
+              class="config-btn"
+              aria-label="Load configuration"
+              title="Load config"
+            >⬆</button>
+            <input id="load-config-input" type="file" accept=".json" style="display:none" />
+          </div>
+
+          <!-- View toggle (Martian Dusk ↔ Daylight) -->
           <button
             id="theme-toggle"
             class="theme-toggle-btn"
             aria-label="Switch to Daylight"
-            title="Daylight theme"
+            title="View: Daylight theme"
           >☀</button>
-
-          <!-- Save / Load config -->
-          <button
-            id="save-config-btn"
-            class="config-btn"
-            aria-label="Save configuration"
-            title="Save config  [ ⌘S ]"
-          >⬇</button>
-          <button
-            id="load-config-btn"
-            class="config-btn"
-            aria-label="Load configuration"
-            title="Load config"
-          >⬆</button>
-          <input id="load-config-input" type="file" accept=".json" style="display:none" />
 
         </div><!-- /sequencer-controls -->
 
-        <p class="dock-hint">⌘ / Ctrl + Scroll → Samples  |  ⌘S → Save</p>
+        <p class="dock-hint">⌘ / Ctrl + Scroll → Samples  |  ⌘S → Save  |  N → Sweeper</p>
       </section>
 
     </aside>
-
-    <!-- ╔════════════════════════════════════════════════════════╗ -->
-    <!-- ║    INSTRUMENT SELECTION PANEL  (canvas shape click)   ║ -->
-    <!-- ║  Grouped: Drums · Synths · Keys                       ║ -->
-    <!-- ╚════════════════════════════════════════════════════════╝ -->
-    <div id="sound-menu" class="hidden" role="menu" aria-label="Instrument selection">
-
-      <!-- ── Drums ── -->
-      <div class="instrument-group">
-        <span class="instrument-group-label">Drums</span>
-        <div class="instrument-row">
-          <button class="instrument-pill" data-instrument="bd" role="menuitem" title="Bass Drum">BD</button>
-          <button class="instrument-pill" data-instrument="sd" role="menuitem" title="Snare">SD</button>
-          <button class="instrument-pill" data-instrument="hh" role="menuitem" title="Hi-Hat">HH</button>
-          <button class="instrument-pill" data-instrument="cp" role="menuitem" title="Clap">CP</button>
-        </div>
-      </div>
-
-      <div class="instrument-sep" aria-hidden="true"></div>
-
-      <!-- ── Synths ── -->
-      <div class="instrument-group">
-        <span class="instrument-group-label">Synth</span>
-        <div class="instrument-row">
-          <button class="instrument-pill" data-instrument="sawtooth" role="menuitem" title="Sawtooth">Saw</button>
-          <button class="instrument-pill" data-instrument="sine"     role="menuitem" title="Sine">Sine</button>
-          <button class="instrument-pill" data-instrument="triangle" role="menuitem" title="Triangle">Tri</button>
-          <button class="instrument-pill" data-instrument="square"   role="menuitem" title="Square">Sqr</button>
-          <button class="instrument-pill" data-instrument="fm"       role="menuitem" title="FM Synth">FM</button>
-        </div>
-      </div>
-
-      <div class="instrument-sep" aria-hidden="true"></div>
-
-      <!-- ── Keys ── -->
-      <div class="instrument-group">
-        <span class="instrument-group-label">Keys</span>
-        <div class="instrument-row">
-          <button class="instrument-pill" data-instrument="superpiano" role="menuitem" title="Piano (superpiano synth)">Piano</button>
-        </div>
-      </div>
-
-      <div class="instrument-sep" aria-hidden="true"></div>
-
-      <!-- ── Bass ── -->
-      <div class="instrument-group">
-        <span class="instrument-group-label">Bass</span>
-        <div class="instrument-row">
-          <button class="instrument-pill" data-instrument="gm_acoustic_bass" role="menuitem" title="Acoustic Bass">Acoustic</button>
-        </div>
-      </div>
-
-      <div class="instrument-sep" aria-hidden="true"></div>
-
-      <!-- ── Sweeper Controls ── -->
-      <div id="sweeper-controls" class="hidden" style="padding: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
-        <div style="margin-bottom: 8px;">
-          <label for="sweeper-k-slider" style="font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px;">
-            Top-K Clusters
-          </label>
-        </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <input
-            id="sweeper-k-slider"
-            type="range"
-            min="1"
-            max="10"
-            value="3"
-            style="flex: 1;"
-          />
-          <span id="sweeper-k-value" style="font-size: 12px; min-width: 20px; text-align: right;">3</span>
-        </div>
-        <div style="margin-top: 10px; margin-bottom: 8px;">
-          <label for="sweeper-arms-slider" style="font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px;">
-            Arms
-          </label>
-        </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <input
-            id="sweeper-arms-slider"
-            type="range"
-            min="1"
-            max="8"
-            value="1"
-            style="flex: 1;"
-          />
-          <span id="sweeper-arms-value" style="font-size: 12px; min-width: 20px; text-align: right;">1</span>
-        </div>
-        <div style="margin-top: 10px; margin-bottom: 8px;">
-          <label for="sweeper-pos-slider" style="font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px;">
-            Positions
-          </label>
-        </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <input
-            id="sweeper-pos-slider"
-            type="range"
-            min="10"
-            max="180"
-            value="60"
-            style="flex: 1;"
-          />
-          <span id="sweeper-pos-value" style="font-size: 12px; min-width: 20px; text-align: right;">60</span>
-        </div>
-
-        <div style="margin-top: 10px; margin-bottom: 8px;">
-          <label for="sweeper-freq-low-slider" style="font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px;">
-            Freq Low (Hz)
-          </label>
-        </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <input
-            id="sweeper-freq-low-slider"
-            type="range"
-            min="20"
-            max="2000"
-            value="100"
-            style="flex: 1;"
-          />
-          <span id="sweeper-freq-low-value" style="font-size: 12px; min-width: 36px; text-align: right;">100</span>
-        </div>
-        <div style="margin-top: 10px; margin-bottom: 8px;">
-          <label for="sweeper-freq-high-slider" style="font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px;">
-            Freq High (Hz)
-          </label>
-        </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <input
-            id="sweeper-freq-high-slider"
-            type="range"
-            min="20"
-            max="2000"
-            value="1000"
-            style="flex: 1;"
-          />
-          <span id="sweeper-freq-high-value" style="font-size: 12px; min-width: 36px; text-align: right;">1000</span>
-        </div>
-
-        <div style="margin-top: 10px; margin-bottom: 8px;">
-          <label for="sweeper-angle-slider" style="font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px;">
-            Start Angle
-          </label>
-        </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <input
-            id="sweeper-angle-slider"
-            type="range"
-            min="0"
-            max="359"
-            value="270"
-            step="1"
-            style="flex: 1;"
-          />
-          <span id="sweeper-angle-value" style="font-size: 12px; min-width: 30px; text-align: right;">270°</span>
-          <button id="sweeper-angle-reset" title="Reset to 12 o'clock" style="font-size: 11px; padding: 2px 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #999; cursor: pointer;">
-            &#x21BA;
-          </button>
-        </div>
-      </div>
-
-    </div>
 
     <!-- ╔════════════════════════════════════════════════════════╗ -->
     <!-- ║    LIVE CODE TELEMETRY PANEL  (I key toggles)         ║ -->

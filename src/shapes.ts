@@ -6,12 +6,18 @@
 // Audio (Strudel) is intentionally NOT wired here — code generation only.
 
 import type { Point } from './geometry';
-import { getLineCircleIntersections, getRaySegmentDist, pointToSegmentDist } from './geometry';
-import type { ShapeConfig } from './config-snapshot';
+import { getRaySegmentDist, pointToSegmentDist } from './geometry';
+// LEGACY: disabled 2026-04-21 — non-sweeper shape support, kept for future revival.
+// To re-enable: un-comment this block and re-add 'circle' | 'triangle' | 'rectangle' to ShapeType.
+/*
+import { getLineCircleIntersections } from './geometry';
+*/
+import type { ShapeConfig, NodeGraphSnapshot } from './config-snapshot';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
-export type ShapeType   = 'circle' | 'triangle' | 'rectangle' | 'sweeper';
+export type ShapeType   = 'sweeper';
+// LEGACY: previous union was 'circle' | 'triangle' | 'rectangle' | 'sweeper'
 export type PlaybackMode = 'constant-time' | 'constant-speed';
 
 /** Pre-computed orbital intersection — angle (polar, 0…2π) + canvas coords. */
@@ -37,6 +43,9 @@ export interface SweepCluster {
 /** Resolution of the binary rhythm grid (angular bins mapped to Strudel struct). */
 export const RHYTHM_STEPS = 256;
 
+// LEGACY: disabled 2026-04-21 — non-sweeper shape support, kept for future revival.
+// To re-enable: un-comment this block and re-add 'circle' | 'triangle' | 'rectangle' to ShapeType.
+/*
 // ── Instrument classification ────────────────────────────────────────────────
 // Used to choose the right Strudel code template and accent colour.
 
@@ -48,6 +57,7 @@ const BASS_INSTRUMENTS = new Set(['gm_acoustic_bass']);
 export function isDrum(instrument: string): boolean {
   return DRUM_INSTRUMENTS.has(instrument);
 }
+*/
 
 // ── Module-private types ──────────────────────────────────────────────────────
 
@@ -78,9 +88,12 @@ let _nextId = 0;
 /** Reset the auto-increment ID counter (used when restoring a saved config). */
 export function resetNextId(n: number): void { _nextId = n; }
 
+// LEGACY: disabled 2026-04-21 — non-sweeper shape support, kept for future revival.
+// To re-enable: un-comment this block and re-add 'circle' | 'triangle' | 'rectangle' to ShapeType.
+/*
 // ── Internal geometry helpers ─────────────────────────────────────────────────
 
-/** Finite line-segment intersection, or null when parallel/non-overlapping. */
+// Finite line-segment intersection, or null when parallel/non-overlapping.
 function segmentIntersect(
   a1: Point, a2: Point,
   b1: Point, b2: Point,
@@ -96,6 +109,7 @@ function segmentIntersect(
     ? { x: a1.x + t * d1x, y: a1.y + t * d1y }
     : null;
 }
+*/
 
 // ── CanvasShape ───────────────────────────────────────────────────────────────
 
@@ -136,6 +150,13 @@ export class CanvasShape {
   freqHigh: number;
   /** Palette index for sweeper accent colour. */
   colorIndex: number;
+  /**
+   * Per-sweeper node-graph snapshot (sweeper only). `null` until the user opens
+   * the node editor on this sweeper; only persisted to/from ShapeConfig when set.
+   * TODO(Unit 14): replace with a reference to the live NodeGraph instance once
+   * Unit 4's src/node-editor/ lands.
+   */
+  graph: NodeGraphSnapshot | null;
 
   // ═══ DERIVED (recomputed, never serialized) ═════════════════════════════════
   // Adding here? Add to DERIVED_PROPS in config-snapshot.test.ts
@@ -167,7 +188,8 @@ export class CanvasShape {
     this.x                   = x;
     this.y                   = y;
     this.type                = type;
-    this.instrument          = type === 'sweeper' ? 'sine' : 'bd';  // sweeper defaults to sine
+    // LEGACY: previous default was `type === 'sweeper' ? 'sine' : 'bd'` to cover non-sweeper shapes.
+    this.instrument          = 'sine';  // sweeper-only: sine default
     this.size                = size;
     this.isSelected          = false;
     this.playheadAngle       = 3 * Math.PI / 2;  // 12 o'clock, stays in [0, 2π)
@@ -184,6 +206,7 @@ export class CanvasShape {
     this.freqLow             = 100;
     this.freqHigh            = 1000;
     this.colorIndex          = 0;
+    this.graph               = null;
     this.sweepAudioRefTime   = 0;
     this.sweepPhaseAtRef     = 0;
   }
@@ -204,6 +227,7 @@ export class CanvasShape {
       base.freqLow    = this.freqLow;
       base.freqHigh   = this.freqHigh;
       base.colorIndex = this.colorIndex;
+      if (this.graph !== null) base.graph = this.graph;
     }
     return base;
   }
@@ -221,6 +245,7 @@ export class CanvasShape {
     if (cfg.freqLow    !== undefined) s.freqLow    = cfg.freqLow;
     if (cfg.freqHigh   !== undefined) s.freqHigh   = cfg.freqHigh;
     if (cfg.colorIndex !== undefined) s.colorIndex = cfg.colorIndex;
+    if (cfg.graph      !== undefined) s.graph      = cfg.graph;
     return s;
   }
 
@@ -235,6 +260,9 @@ export class CanvasShape {
     ctx.shadowColor = color;
     ctx.shadowBlur  = this.isSelected ? 22 : 9;
     ctx.beginPath();
+    // LEGACY: disabled 2026-04-21 — non-sweeper switch cases removed; only 'sweeper' is live.
+    // To re-enable: restore the 'circle' | 'triangle' | 'rectangle' cases below.
+    /*
     switch (this.type) {
       case 'circle':
         ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
@@ -248,17 +276,17 @@ export class CanvasShape {
           this.size * 2,      this.size * 1.2,
         );
         break;
-      case 'sweeper': {
-        // Draw all N arms evenly spaced around the pivot
-        const armSpacing = (Math.PI * 2) / this.sweepCount;
-        for (let arm = 0; arm < this.sweepCount; arm++) {
-          const angle = (this.playheadAngle + arm * armSpacing) % (Math.PI * 2);
-          const ex = this.x + this.size * Math.cos(angle);
-          const ey = this.y + this.size * Math.sin(angle);
-          ctx.moveTo(this.x, this.y);
-          ctx.lineTo(ex, ey);
-        }
-        break;
+    }
+    */
+    {
+      // Sweeper: draw all N arms evenly spaced around the pivot
+      const armSpacing = (Math.PI * 2) / this.sweepCount;
+      for (let arm = 0; arm < this.sweepCount; arm++) {
+        const angle = (this.playheadAngle + arm * armSpacing) % (Math.PI * 2);
+        const ex = this.x + this.size * Math.cos(angle);
+        const ey = this.y + this.size * Math.sin(angle);
+        ctx.moveTo(this.x, this.y);
+        ctx.lineTo(ex, ey);
       }
     }
     ctx.stroke();
@@ -313,43 +341,56 @@ export class CanvasShape {
   }
 
   /** Draws the travelling playhead dot on this shape's perimeter. */
-  drawPlayhead(ctx: CanvasRenderingContext2D): void {
-    if (this.type === 'sweeper') return; // the rotating line IS the playhead
+  drawPlayhead(_ctx: CanvasRenderingContext2D): void {
+    // Sweepers: the rotating line IS the playhead — no separate dot.
+    if (this.type === 'sweeper') return;
+    // LEGACY: disabled 2026-04-21 — non-sweeper playhead dot, kept for future revival.
+    // To re-enable: un-comment this block and re-add non-sweeper ShapeTypes.
+    /*
     const pos = this.getPlayheadPosition();
-    ctx.save();
-    ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
-    ctx.shadowBlur  = 14;
-    ctx.fillStyle   = '#FFFFFF';
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur  = 0;
-    ctx.fillStyle   = '#FFFDE7';
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y, 1.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+    _ctx.save();
+    _ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
+    _ctx.shadowBlur  = 14;
+    _ctx.fillStyle   = '#FFFFFF';
+    _ctx.beginPath();
+    _ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
+    _ctx.fill();
+    _ctx.shadowBlur  = 0;
+    _ctx.fillStyle   = '#FFFDE7';
+    _ctx.beginPath();
+    _ctx.arc(pos.x, pos.y, 1.5, 0, Math.PI * 2);
+    _ctx.fill();
+    _ctx.restore();
+    */
   }
 
   /** Draws all live expanding-ring trigger animations. */
-  drawAnimations(ctx: CanvasRenderingContext2D): void {
+  drawAnimations(_ctx: CanvasRenderingContext2D): void {
+    // LEGACY: disabled 2026-04-21 — non-sweeper trigger-ring animations (fired on orbital
+    // intersection crossings). Sweepers do not use per-hit triggerAt/stepAnimations.
+    // To re-enable: un-comment this block.
+    /*
     if (this.activeAnimations.length === 0) return;
-    ctx.save();
+    _ctx.save();
     for (const anim of this.activeAnimations) {
       const t      = anim.frame / anim.maxFrames;
       const radius = 5 + t * 18;
-      ctx.globalAlpha  = (1 - t) * 0.80;
-      ctx.strokeStyle  = '#F25C54';
-      ctx.lineWidth    = 2.5 * (1 - t * 0.5);
-      ctx.shadowColor  = '#F25C54';
-      ctx.shadowBlur   = 12 * (1 - t);
-      ctx.beginPath();
-      ctx.arc(anim.x, anim.y, radius, 0, Math.PI * 2);
-      ctx.stroke();
+      _ctx.globalAlpha  = (1 - t) * 0.80;
+      _ctx.strokeStyle  = '#F25C54';
+      _ctx.lineWidth    = 2.5 * (1 - t * 0.5);
+      _ctx.shadowColor  = '#F25C54';
+      _ctx.shadowBlur   = 12 * (1 - t);
+      _ctx.beginPath();
+      _ctx.arc(anim.x, anim.y, radius, 0, Math.PI * 2);
+      _ctx.stroke();
     }
-    ctx.restore();
+    _ctx.restore();
+    */
   }
 
+  // LEGACY: disabled 2026-04-21 — non-sweeper shape support, kept for future revival.
+  // To re-enable: un-comment this block and re-add 'triangle' to ShapeType.
+  /*
   private pathTriangle(ctx: CanvasRenderingContext2D): void {
     const h = this.size * Math.sqrt(3);
     ctx.moveTo(this.x,              this.y - h * 0.667);
@@ -357,6 +398,7 @@ export class CanvasShape {
     ctx.lineTo(this.x - this.size,  this.y + h * 0.333);
     ctx.closePath();
   }
+  */
 
   // ── Accent colour — derived from instrument type ──────────────────────────
 
@@ -366,15 +408,24 @@ export class CanvasShape {
   }
 
   get accentColor(): string {
-    if (this.type === 'sweeper')               return this.sweepColor;
+    // Only sweepers are active; fall back to sweeper palette.
+    if (this.type === 'sweeper') return this.sweepColor;
+    // LEGACY: disabled 2026-04-21 — non-sweeper instrument→colour mapping.
+    // To re-enable: un-comment this block and restore DRUM_INSTRUMENTS/KEY_INSTRUMENTS.
+    /*
     if (DRUM_INSTRUMENTS.has(this.instrument)) return '#E8472C';    // coral  — drums
     if (KEY_INSTRUMENTS.has(this.instrument))  return '#E8A050';    // amber  — keys
     return '#C87A2E';                                               // copper — synths
+    */
+    return this.sweepColor;
   }
 
   // ── Hit-testing ───────────────────────────────────────────────────────────
 
   containsPoint(px: number, py: number): boolean {
+    // LEGACY: disabled 2026-04-21 — non-sweeper hit-testing (circle/triangle/rectangle).
+    // To re-enable: un-comment this block and restore those ShapeTypes.
+    /*
     switch (this.type) {
       case 'circle':
         return Math.hypot(px - this.x, py - this.y) <= Math.max(this.size, 15);
@@ -385,16 +436,18 @@ export class CanvasShape {
         return px >= this.x - hw && px <= this.x + hw
             && py >= this.y - hh && py <= this.y + hh;
       }
-      case 'sweeper': {
-        // Selectable within 30px of origin OR within 8px of the rotating ray
-        if (Math.hypot(px - this.x, py - this.y) <= 30) return true;
-        const ex = this.x + this.size * Math.cos(this.playheadAngle);
-        const ey = this.y + this.size * Math.sin(this.playheadAngle);
-        return pointToSegmentDist(px, py, this.x, this.y, ex, ey) <= 8;
-      }
     }
+    */
+    // Sweeper: selectable within 30px of origin OR within 8px of the rotating ray.
+    if (Math.hypot(px - this.x, py - this.y) <= 30) return true;
+    const ex = this.x + this.size * Math.cos(this.playheadAngle);
+    const ey = this.y + this.size * Math.sin(this.playheadAngle);
+    return pointToSegmentDist(px, py, this.x, this.y, ex, ey) <= 8;
   }
 
+  // LEGACY: disabled 2026-04-21 — triangle hit-test helper, kept for future revival.
+  // To re-enable: un-comment this block and restore 'triangle' ShapeType.
+  /*
   private pointInTriangle(p: Point): boolean {
     const h  = this.size * Math.sqrt(3);
     const v1: Point = { x: this.x,             y: this.y - h * 0.667 };
@@ -405,22 +458,30 @@ export class CanvasShape {
     const d1 = side(p, v1, v2), d2 = side(p, v2, v3), d3 = side(p, v3, v1);
     return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
   }
+  */
 
   // ── Orbital line intersection ──────────────────────────────────────────────
 
-  getIntersections(line: { p1: Point; p2: Point }): Point[] {
+  getIntersections(_line: { p1: Point; p2: Point }): Point[] {
+    // LEGACY: disabled 2026-04-21 — non-sweeper orbital-line intersection math.
+    // To re-enable: un-comment this block, restore segmentIntersect +
+    // getLineCircleIntersections imports, and the non-sweeper ShapeTypes.
+    /*
     switch (this.type) {
       case 'circle':
-        return getLineCircleIntersections(line.p1, line.p2, this.x, this.y, this.size);
+        return getLineCircleIntersections(_line.p1, _line.p2, this.x, this.y, this.size);
       case 'triangle':
-        return this.edgeIntersections(line, this.triangleEdges());
+        return this.edgeIntersections(_line, this.triangleEdges());
       case 'rectangle':
-        return this.edgeIntersections(line, this.rectEdges());
-      case 'sweeper':
-        return []; // sweeper uses computeSweepClusters() instead
+        return this.edgeIntersections(_line, this.rectEdges());
     }
+    */
+    return []; // sweeper uses computeSweepClusters() instead
   }
 
+  // LEGACY: disabled 2026-04-21 — polygon-edge intersection helpers.
+  // To re-enable: un-comment this block and restore segmentIntersect.
+  /*
   private edgeIntersections(
     line: { p1: Point; p2: Point }, edges: [Point, Point][],
   ): Point[] {
@@ -447,6 +508,7 @@ export class CanvasShape {
     const br: Point = { x: r, y: b }, bl: Point = { x: l, y: b };
     return [[tl, tr], [tr, br], [br, bl], [bl, tl]];
   }
+  */
 
   // ── Playhead system ───────────────────────────────────────────────────────
 
@@ -455,10 +517,14 @@ export class CanvasShape {
    * Must be called whenever: shape spawns, moves, resizes, or SAMPLE_RATE changes.
    * Also sets intersectionCount for the telemetry panel.
    */
-  rebuildIntersectionCache(linkLines: { p1: Point; p2: Point }[]): void {
-    if (this.type === 'sweeper') return; // sweeper intersections are dynamic per-frame
+  rebuildIntersectionCache(_linkLines: { p1: Point; p2: Point }[]): void {
+    // Sweepers: intersections are dynamic per-frame via computeSweepClusters().
+    if (this.type === 'sweeper') return;
+    // LEGACY: disabled 2026-04-21 — non-sweeper static intersection cache.
+    // To re-enable: un-comment this block.
+    /*
     this.cachedIntersections = [];
-    for (const line of linkLines) {
+    for (const line of _linkLines) {
       for (const pt of this.getIntersections(line)) {
         const raw   = Math.atan2(pt.y - this.y, pt.x - this.x);
         const angle = raw < 0 ? raw + Math.PI * 2 : raw;
@@ -466,6 +532,7 @@ export class CanvasShape {
       }
     }
     this.intersectionCount = this.cachedIntersections.length;
+    */
   }
 
   /**
@@ -489,6 +556,10 @@ export class CanvasShape {
    * this frame.  Correctly handles the 2π → 0 wrap-around boundary.
    */
   checkAndFireCollisions(): CachedIntersection[] {
+    // LEGACY: disabled 2026-04-21 — non-sweeper path only; sweepers use cluster-based
+    // per-frame audio signals, not angle-crossing collisions.
+    // To re-enable: un-comment this block.
+    /*
     if (this.cachedIntersections.length === 0) return [];
     const prev = this.prevPlayheadAngle;
     const curr = this.playheadAngle;
@@ -497,21 +568,33 @@ export class CanvasShape {
         ? int.angle >= prev && int.angle < curr
         : int.angle >= prev || int.angle < curr,
     );
+    */
+    return [];
   }
 
   /** Spawn a new expanding-ring animation at a specific canvas point. */
-  triggerAt(x: number, y: number): void {
-    this.activeAnimations.push({ x, y, frame: 0, maxFrames: 18 });
+  triggerAt(_x: number, _y: number): void {
+    // LEGACY: disabled 2026-04-21 — non-sweeper expanding-ring animation.
+    // To re-enable: un-comment this block.
+    /*
+    this.activeAnimations.push({ x: _x, y: _y, frame: 0, maxFrames: 18 });
+    */
   }
 
   /** Advance + prune all active trigger animations. Call once per rAF frame. */
   stepAnimations(): void {
+    // LEGACY: disabled 2026-04-21 — non-sweeper animation advancement.
+    // To re-enable: un-comment this block.
+    /*
     for (const anim of this.activeAnimations) anim.frame++;
     this.activeAnimations = this.activeAnimations.filter(a => a.frame < a.maxFrames);
+    */
   }
 
-  // ── Playhead position: maps angle → boundary point ────────────────────────
-
+  // LEGACY: disabled 2026-04-21 — non-sweeper playhead-position helpers.
+  // To re-enable: un-comment this block and restore non-sweeper ShapeTypes +
+  // triangleEdges / rectEdges helpers above.
+  /*
   private getPlayheadPosition(): Point {
     switch (this.type) {
       case 'circle':
@@ -549,6 +632,7 @@ export class CanvasShape {
     }
     return result;
   }
+  */
 
   // ── Sweeper cluster computation ───────────────────────────────────────────
 
@@ -649,22 +733,27 @@ export class CanvasShape {
   // ── Rhythm string + Strudel code generation ──────────────────────────────
 
   /**
-   * Map cached intersection angles onto a fixed-width binary grid.
-   * Each '1' marks a step where the playhead crosses an orbital line;
-   * '~' is silence.  The result is valid Strudel mini-notation for `struct()`.
+   * Sweeper-only stub: returns an empty rhythm grid. Sweepers have no
+   * @rhythm-N markers, so telemetry's patchRhythm() regex never matches and
+   * this value is never embedded in the running code.
+   *
+   * LEGACY: disabled 2026-04-21 — the original binary-grid generator mapped
+   * cachedIntersections onto a RHYTHM_STEPS-wide struct(), used by
+   * drum/synth/key/bass templates. To re-enable: restore the body below.
    */
   generateRhythmString(): string {
+    return '[~]';
+    /*
     const grid: string[] = new Array(RHYTHM_STEPS).fill('~');
     for (const int of this.cachedIntersections) {
       const step = Math.floor((int.angle / (Math.PI * 2)) * RHYTHM_STEPS) % RHYTHM_STEPS;
       grid[step] = '1';
     }
-    // Format as 16 tokens per line → 16×16 square grid for readability.
-    // Strudel mini-notation treats newlines as whitespace separators.
     const rows = Array.from({ length: Math.ceil(grid.length / 16) }, (_, i) =>
       grid.slice(i * 16, i * 16 + 16).join(' ')
     );
     return `[${rows.join('\n  ')}]`;
+    */
   }
 
   /**
@@ -686,6 +775,13 @@ export class CanvasShape {
    * when the instrument changes (since the pattern template changes too).
    */
   toStrudelCode(): string {
+    // Only sweepers are active in this unit.
+    return this._toSweeperCode();
+    // LEGACY: disabled 2026-04-21 — per-instrument Strudel templates for
+    // drum / bass / key / synth non-sweeper shapes.
+    // To re-enable: un-comment the block below, restore DRUM_INSTRUMENTS /
+    // KEY_INSTRUMENTS / BASS_INSTRUMENTS sets and generateRhythmString().
+    /*
     if (this.type === 'sweeper') return this._toSweeperCode();
     const typeName = this.type.charAt(0).toUpperCase() + this.type.slice(1);
     const r        = Math.round(this.size);
@@ -698,15 +794,6 @@ export class CanvasShape {
     const startMarker  = `// @shape-start-${this.id}`;
     const endMarker    = `// @shape-end-${this.id}`;
 
-    // Instrument-driven template:
-    // • Drums  → percussive single-note hit
-    // • Synths → 4-note chord arpeggio with low-pass filter
-    // • Keys   → melodic chord with softer envelope
-    //
-    // NOTE: .p((id).toString()) is used instead of .p("id") because the
-    // Strudel transpiler converts all string literals to m() Pattern objects,
-    // but .p() expects a plain string key.  (id).toString() evaluates at
-    // runtime without going through the transpiler.
     const pat = DRUM_INSTRUMENTS.has(this.instrument)
       ? `s("${this.instrument}")\n  .struct(${v})\n  .gain(0.8)`
       : BASS_INSTRUMENTS.has(this.instrument)
@@ -722,6 +809,7 @@ export class CanvasShape {
       `${pat}\n  .p((${this.id}).toString())`,
       endMarker,
     ].join('\n');
+    */
   }
 
   /**

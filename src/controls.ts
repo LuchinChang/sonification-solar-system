@@ -1,22 +1,28 @@
 // src/controls.ts
 //
 // All UI event handlers: mouse, keyboard, knobs, shape management,
-// pattern selector, instrument selection, and playback toggle.
+// and playback toggle.
 
 import { CanvasShape, resetNextId, type ShapeType, type PlaybackMode } from './shapes';
 import { calculateGeocentricLines, calculateEllipticalLines, clamp } from './engine';
-import { PATTERNS, computeAuScale, renderPatternThumbnail } from './patterns';
+import { PATTERNS, computeAuScale } from './patterns';
 import type { AppState } from './state';
 import {
   MIN_SAMPLES, MAX_SAMPLES, MIN_CPM, MAX_CPM,
-  MIN_SHAPE_SIZE, MAX_SHAPE_SIZE,
+  // LEGACY: MIN_SHAPE_SIZE only used by the non-sweeper wheel-resize branch.
+  // MIN_SHAPE_SIZE,
+  MAX_SHAPE_SIZE,
   KNOB_SENSITIVITY, CPM_SENSITIVITY, DRAG_THRESHOLD,
   sunPos,
 } from './state';
 import type { DomElements } from './dom';
 import type { TourController } from './tour';
 import {
-  patchRhythm, patchShapeBlock, patchHeader,
+  // LEGACY: patchRhythm / patchShapeBlock were only used by the non-sweeper
+  // wheel-to-resize branch and the removed pattern-bank. To re-enable: add back
+  // to this import and restore the call sites.
+  // patchRhythm, patchShapeBlock,
+  patchHeader,
   patchAllRhythms, rebuildSweeperPatterns, updateTelemetry,
   setEvalStatus, toggleTelemetry,
 } from './telemetry';
@@ -25,7 +31,8 @@ import { setTheme } from './theme';
 import { drawScene } from './renderer';
 import {
   type ConfigSnapshot,
-  validateSnapshot,
+  SNAPSHOT_VERSION,
+  inspectSnapshot,
   downloadSnapshot,
 } from './config-snapshot';
 
@@ -82,7 +89,6 @@ export function spawnShape(
   s.rebuildIntersectionCache(state.linkLines);
   if (s.type === 'sweeper') s.rebuildSweepTicks(state.linkLines, state.orbitalMaxRadius);
   setActiveShape(state, s);
-  showSoundMenu(dom, s);
   updateTelemetry(dom, state);
   if (state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value, false);
   tour.notify('shape-spawned');
@@ -100,7 +106,6 @@ export function deleteActiveShape(state: AppState, dom: DomElements): void {
   if (idx !== -1) state.shapes.splice(idx, 1);
   state.flashCooldowns.delete(state.activeShape.id);
   state.activeShape = null;
-  hideSoundMenu(dom);
   updateTelemetry(dom, state);
 }
 
@@ -162,57 +167,11 @@ export function finishDrawAnimation(state: AppState, dom: DomElements, tour: Tou
   setTimeout(() => tour.start(), 800);
 }
 
-// ── Pattern selector ─────────────────────────────────────────────────────────
+// ── Default pattern bootstrap ────────────────────────────────────────────────
+// Invoked once after audio init; node editor will replace this entry point.
 
-function showPatternSelector(state: AppState, dom: DomElements): void {
-  if (state.isPlaying) togglePlayback(state, dom);
-
-  if (state.drawAnimActive) {
-    state.drawAnimActive = false;
-    dom.captionEl.classList.remove('visible');
-    dom.captionEl.classList.add('hidden');
-    if (state.captionTimeoutId) clearTimeout(state.captionTimeoutId);
-  }
-
-  dom.patternCardsEl.innerHTML = '';
-  const thumbColor = state.currentTheme === 'dark'
-    ? 'rgba(194, 118, 46, 0.4)'
-    : 'rgba(92, 58, 33, 0.35)';
-
-  for (const pattern of PATTERNS) {
-    const card = document.createElement('button');
-    card.className = 'pattern-card';
-    card.dataset['pattern'] = pattern.id;
-
-    const thumb = renderPatternThumbnail(pattern, 120, thumbColor);
-    thumb.className = 'pattern-thumb';
-    card.appendChild(thumb);
-
-    const planets = document.createElement('span');
-    planets.className = 'pattern-card-planets';
-    planets.textContent = `${pattern.planet1} \u2014 ${pattern.planet2}`;
-    card.appendChild(planets);
-
-    card.addEventListener('click', () => selectPattern(state, dom, pattern.id));
-    dom.patternCardsEl.appendChild(card);
-  }
-
-  dom.patternSelectorEl.classList.remove('hidden');
-}
-
-function hidePatternSelector(dom: DomElements): void {
-  dom.patternSelectorEl.classList.add('hidden');
-}
-
-function selectPattern(state: AppState, dom: DomElements, patternId: string): void {
-  const pattern = PATTERNS.find(p => p.id === patternId);
-  if (!pattern) return;
-
-  if (pattern.id === state.currentPattern.id) {
-    hidePatternSelector(dom);
-    return;
-  }
-
+function applyDefaultPattern(state: AppState, dom: DomElements): void {
+  const pattern = PATTERNS[0];
   state.currentPattern = pattern;
 
   const minDim = Math.min(dom.canvas.width, dom.canvas.height);
@@ -256,10 +215,8 @@ function selectPattern(state: AppState, dom: DomElements, patternId: string): vo
   while (state.shapes.length > 0) state.shapes.pop();
   state.activeShape = null;
   state.flashCooldowns.clear();
-  hideSoundMenu(dom);
   updateTelemetry(dom, state);
 
-  hidePatternSelector(dom);
   startDrawAnimation(state, dom);
 }
 
@@ -339,66 +296,6 @@ function updateCpmKnobVisual(state: AppState, dom: DomElements): void {
   dom.cpmKnobEl.setAttribute('aria-valuenow', String(state.cpm));
 }
 
-// ── Instrument selection ─────────────────────────────────────────────────────
-
-function showSoundMenu(dom: DomElements, shape: CanvasShape): void {
-  dom.instrumentBtns.forEach(btn =>
-    btn.classList.toggle('active', btn.dataset['instrument'] === shape.instrument),
-  );
-
-  const sweeperControls = dom.soundMenu.querySelector('#sweeper-controls');
-  if (sweeperControls) {
-    if (shape.type === 'sweeper') {
-      sweeperControls.classList.remove('hidden');
-      const kSliderEl = dom.soundMenu.querySelector('#sweeper-k-slider') as HTMLInputElement;
-      const kValueEl  = dom.soundMenu.querySelector('#sweeper-k-value');
-      if (kSliderEl && kValueEl) {
-        kSliderEl.value      = shape.k.toString();
-        kValueEl.textContent = shape.k.toString();
-      }
-      const armsSliderEl = dom.soundMenu.querySelector('#sweeper-arms-slider') as HTMLInputElement;
-      const armsValueEl  = dom.soundMenu.querySelector('#sweeper-arms-value');
-      if (armsSliderEl && armsValueEl) {
-        armsSliderEl.value      = shape.sweepCount.toString();
-        armsValueEl.textContent = shape.sweepCount.toString();
-      }
-      const posSliderEl = dom.soundMenu.querySelector('#sweeper-pos-slider') as HTMLInputElement;
-      const posValueEl  = dom.soundMenu.querySelector('#sweeper-pos-value');
-      if (posSliderEl && posValueEl) {
-        posSliderEl.value      = shape.ticks.toString();
-        posValueEl.textContent = shape.ticks.toString();
-      }
-      const freqLowSliderEl = dom.soundMenu.querySelector('#sweeper-freq-low-slider') as HTMLInputElement;
-      const freqLowValueEl  = dom.soundMenu.querySelector('#sweeper-freq-low-value');
-      if (freqLowSliderEl && freqLowValueEl) {
-        freqLowSliderEl.value      = shape.freqLow.toString();
-        freqLowValueEl.textContent = shape.freqLow.toString();
-      }
-      const freqHighSliderEl = dom.soundMenu.querySelector('#sweeper-freq-high-slider') as HTMLInputElement;
-      const freqHighValueEl  = dom.soundMenu.querySelector('#sweeper-freq-high-value');
-      if (freqHighSliderEl && freqHighValueEl) {
-        freqHighSliderEl.value      = shape.freqHigh.toString();
-        freqHighValueEl.textContent = shape.freqHigh.toString();
-      }
-      const angleSliderEl = dom.soundMenu.querySelector('#sweeper-angle-slider') as HTMLInputElement;
-      const angleValueEl  = dom.soundMenu.querySelector('#sweeper-angle-value');
-      if (angleSliderEl && angleValueEl) {
-        const deg = Math.round((shape.startAngle * 180 / Math.PI) % 360);
-        angleSliderEl.value      = deg.toString();
-        angleValueEl.textContent = deg + '°';
-      }
-    } else {
-      sweeperControls.classList.add('hidden');
-    }
-  }
-
-  dom.soundMenu.classList.remove('hidden');
-}
-
-function hideSoundMenu(dom: DomElements): void {
-  dom.soundMenu.classList.add('hidden');
-}
-
 // ── Evaluate + global flash ──────────────────────────────────────────────────
 
 function evaluateAndFlash(state: AppState, dom: DomElements, tour: TourController): void {
@@ -437,7 +334,7 @@ export function handleResize(state: AppState, dom: DomElements): void {
 
 function buildSnapshot(state: AppState): ConfigSnapshot {
   return {
-    version: 1,
+    version: SNAPSHOT_VERSION,
     patternId:    state.currentPattern.id,
     sampleRate:   state.sampleRate,
     cpm:          state.cpm,
@@ -505,7 +402,6 @@ function restoreFromSnapshot(state: AppState, dom: DomElements, snap: ConfigSnap
   state.shapes.length = 0;
   state.activeShape   = null;
   state.flashCooldowns.clear();
-  dom.soundMenu.classList.add('hidden');
 
   // 4 — Recreate shapes from config
   let maxId = 0;
@@ -530,11 +426,15 @@ function handleConfigFile(state: AppState, dom: DomElements, file: File): void {
   reader.onload = () => {
     try {
       const data = JSON.parse(reader.result as string);
-      if (!validateSnapshot(data)) {
-        showToast(dom, 'Invalid config file');
+      const rejection = inspectSnapshot(data);
+      if (rejection !== null) {
+        const msg = rejection.kind === 'legacy-version'
+          ? 'Legacy v1 config — please recreate your scene (no migration)'
+          : `Invalid config: ${rejection.message}`;
+        showToast(dom, msg);
         return;
       }
-      restoreFromSnapshot(state, dom, data);
+      restoreFromSnapshot(state, dom, data as ConfigSnapshot);
     } catch {
       showToast(dom, 'Could not parse config file');
     }
@@ -563,7 +463,7 @@ export function setupEventHandlers(
       dom.audioOverlay.classList.add('hidden');
       updateTelemetry(dom, state);
       playLiveCode(state.strudelRepl, dom.telemetryTextarea.value, false);
-      showPatternSelector(state, dom);
+      applyDefaultPattern(state, dom);
     } catch (err) {
       console.error('[audio] init failed:', err);
     }
@@ -702,11 +602,8 @@ export function setupEventHandlers(
     if (hit !== null) {
       const wasActive = hit === state.activeShape;
       setActiveShape(state, wasActive ? null : hit);
-      if (!wasActive) showSoundMenu(dom, hit);
-      else hideSoundMenu(dom);
     } else {
       setActiveShape(state, null);
-      hideSoundMenu(dom);
     }
   });
 
@@ -723,6 +620,18 @@ export function setupEventHandlers(
       const hasSweeper = rebuildSweeperPatterns(dom.telemetryTextarea, state.shapes, state.currentPattern.name, state.sampleRate, state.cpm);
       if (hasSweeper && state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value);
     } else if (state.activeShape !== null) {
+      // Sweeper-only: wheel rotates the 12 o'clock start angle by 1°.
+      // LEGACY: disabled 2026-04-21 — non-sweeper wheel-to-resize branch
+      // (clamped size + rhythm re-patch). To re-enable: restore the else
+      // branch and non-sweeper ShapeTypes.
+      /*
+      if (state.activeShape.type !== 'sweeper') {
+        state.activeShape.size = clamp(state.activeShape.size + (up ? +2 : -2), MIN_SHAPE_SIZE, MAX_SHAPE_SIZE);
+        state.activeShape.rebuildIntersectionCache(state.linkLines);
+        patchRhythm(dom.telemetryTextarea, state.activeShape);
+        patchHeader(dom.telemetryTextarea, state.currentPattern.name, state.shapes.length, state.sampleRate, state.cpm);
+      } else {
+      */
       if (state.activeShape.type === 'sweeper') {
         const step  = Math.PI / 180;
         const delta = up ? -step : step;
@@ -731,148 +640,29 @@ export function setupEventHandlers(
         drawScene(dom.ctx, state);
         updateTelemetry(dom, state);
         if (state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value);
-      } else {
-        state.activeShape.size = clamp(state.activeShape.size + (up ? +2 : -2), MIN_SHAPE_SIZE, MAX_SHAPE_SIZE);
-        state.activeShape.rebuildIntersectionCache(state.linkLines);
-        patchRhythm(dom.telemetryTextarea, state.activeShape);
-        patchHeader(dom.telemetryTextarea, state.currentPattern.name, state.shapes.length, state.sampleRate, state.cpm);
       }
     }
   }, { passive: false });
 
-  // Dock — click-to-spawn
+  // Dock — click-to-spawn.
+  // Unit 3 will strip legacy shape tiles from the dock entirely. For now we
+  // ignore clicks from any non-'sweeper' tile so legacy tiles are a no-op
+  // (no runtime errors). ShapeType is narrowed to 'sweeper' in shapes.ts.
   document.querySelectorAll<HTMLButtonElement>('.shape-tile').forEach(tile => {
     tile.addEventListener('click', () => {
-      spawnShape(state, dom, (tile.dataset['shape'] ?? 'circle') as ShapeType, tour);
+      const requested = tile.dataset['shape'] ?? 'sweeper';
+      // LEGACY: previously passed requested value cast as ShapeType (allowing
+      // 'circle' | 'triangle' | 'rectangle'). Now we short-circuit to a no-op
+      // for any non-sweeper tile.
+      if (requested !== 'sweeper') return;
+      spawnShape(state, dom, 'sweeper' as ShapeType, tour);
     });
   });
 
-  // Instrument buttons
-  dom.instrumentBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (state.activeShape === null) return;
-      const instr = btn.dataset['instrument']!;
-      state.activeShape.instrument = instr;
-      dom.instrumentBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      patchShapeBlock(dom.telemetryTextarea, state.activeShape, state.shapes, state.currentPattern.name, state.sampleRate, state.cpm);
-      patchHeader(dom.telemetryTextarea, state.currentPattern.name, state.shapes.length, state.sampleRate, state.cpm);
-      tour.notify('instrument-picked');
-    });
+  // Minimal dock sweeper-spawn affordance (Unit 3): click + N hotkey
+  document.querySelectorAll<HTMLButtonElement>('.sweeper-spawn-btn').forEach(btn => {
+    btn.addEventListener('click', () => spawnShape(state, dom, 'sweeper' as ShapeType, tour));
   });
-
-  // Sweeper K-slider
-  const kSlider = document.getElementById('sweeper-k-slider') as HTMLInputElement;
-  const kValue = document.getElementById('sweeper-k-value');
-  if (kSlider && kValue) {
-    kSlider.addEventListener('input', () => {
-      const k = parseInt(kSlider.value, 10);
-      kValue.textContent = k.toString();
-      if (state.activeShape?.type === 'sweeper') {
-        state.activeShape.k = k;
-        state.activeShape.rebuildSweepTicks(state.linkLines, state.orbitalMaxRadius);
-        updateTelemetry(dom, state);
-        if (state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value);
-      }
-    });
-  }
-
-  // Sweeper arms slider
-  const armsSlider = document.getElementById('sweeper-arms-slider') as HTMLInputElement;
-  const armsValue  = document.getElementById('sweeper-arms-value');
-  if (armsSlider && armsValue) {
-    armsSlider.addEventListener('input', () => {
-      const arms = parseInt(armsSlider.value, 10);
-      armsValue.textContent = arms.toString();
-      if (state.activeShape?.type === 'sweeper') {
-        state.activeShape.sweepCount = arms;
-        state.activeShape.rebuildSweepTicks(state.linkLines, state.orbitalMaxRadius);
-        updateTelemetry(dom, state);
-        if (state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value);
-      }
-    });
-  }
-
-  // Sweeper positions slider
-  const posSlider = document.getElementById('sweeper-pos-slider') as HTMLInputElement;
-  const posValue  = document.getElementById('sweeper-pos-value');
-  if (posSlider && posValue) {
-    posSlider.addEventListener('input', () => {
-      const ticks = parseInt(posSlider.value, 10);
-      posValue.textContent = ticks.toString();
-      if (state.activeShape?.type === 'sweeper') {
-        state.activeShape.ticks = ticks;
-        state.activeShape.rebuildSweepTicks(state.linkLines, state.orbitalMaxRadius);
-        updateTelemetry(dom, state);
-        if (state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value);
-      }
-    });
-  }
-
-  // Sweeper freq-low slider: lower frequency bound for distance mapping
-  const freqLowSlider = document.getElementById('sweeper-freq-low-slider') as HTMLInputElement;
-  const freqLowValue  = document.getElementById('sweeper-freq-low-value');
-  if (freqLowSlider && freqLowValue) {
-    freqLowSlider.addEventListener('input', () => {
-      const hz = parseInt(freqLowSlider.value, 10);
-      freqLowValue.textContent = hz.toString();
-      if (state.activeShape?.type === 'sweeper') {
-        state.activeShape.freqLow = hz;
-        state.activeShape.rebuildSweepTicks(state.linkLines, state.orbitalMaxRadius);
-        updateTelemetry(dom, state);
-        if (state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value);
-      }
-    });
-  }
-
-  // Sweeper freq-high slider: upper frequency bound for distance mapping
-  const freqHighSlider = document.getElementById('sweeper-freq-high-slider') as HTMLInputElement;
-  const freqHighValue  = document.getElementById('sweeper-freq-high-value');
-  if (freqHighSlider && freqHighValue) {
-    freqHighSlider.addEventListener('input', () => {
-      const hz = parseInt(freqHighSlider.value, 10);
-      freqHighValue.textContent = hz.toString();
-      if (state.activeShape?.type === 'sweeper') {
-        state.activeShape.freqHigh = hz;
-        state.activeShape.rebuildSweepTicks(state.linkLines, state.orbitalMaxRadius);
-        updateTelemetry(dom, state);
-        if (state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value);
-      }
-    });
-  }
-
-  // Sweeper start-angle slider
-  const angleSlider = document.getElementById('sweeper-angle-slider') as HTMLInputElement;
-  const angleValue  = document.getElementById('sweeper-angle-value');
-  if (angleSlider && angleValue) {
-    angleSlider.addEventListener('input', () => {
-      const deg = parseInt(angleSlider.value, 10);
-      angleValue.textContent = deg + '°';
-      if (state.activeShape?.type === 'sweeper') {
-        state.activeShape.startAngle = (deg * Math.PI / 180) % (Math.PI * 2);
-        state.activeShape.rebuildSweepTicks(state.linkLines, state.orbitalMaxRadius);
-        drawScene(dom.ctx, state);
-        updateTelemetry(dom, state);
-        if (state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value);
-      }
-    });
-  }
-
-  // Sweeper start-angle reset button
-  const angleReset = document.getElementById('sweeper-angle-reset');
-  if (angleReset) {
-    angleReset.addEventListener('click', () => {
-      if (state.activeShape?.type === 'sweeper') {
-        state.activeShape.startAngle = 3 * Math.PI / 2;
-        if (angleSlider) angleSlider.value = '270';
-        if (angleValue)  angleValue.textContent = '270°';
-        state.activeShape.rebuildSweepTicks(state.linkLines, state.orbitalMaxRadius);
-        drawScene(dom.ctx, state);
-        updateTelemetry(dom, state);
-        if (state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value);
-      }
-    });
-  }
 
   // Save / load config snapshot — drag-drop, buttons, file input
   dom.canvas.addEventListener('dragover', e => {
@@ -951,19 +741,13 @@ export function setupEventHandlers(
           togglePlayback(state, dom);
         }
         break;
-      case 'p':
-        if (!state.drawAnimActive && state.audioInitialized) {
-          if (!dom.patternSelectorEl.classList.contains('hidden')) {
-            hidePatternSelector(dom);
-          } else {
-            showPatternSelector(state, dom);
-            tour.notify('pattern-opened');
-          }
-        }
-        break;
       case 'backspace':
         e.preventDefault();
         deleteActiveShape(state, dom);
+        break;
+      case 'n':
+        // N: spawn a sweeper at the Sun (Unit 3 minimal affordance)
+        spawnShape(state, dom, 'sweeper' as ShapeType, tour);
         break;
     }
   });

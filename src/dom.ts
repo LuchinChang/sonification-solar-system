@@ -11,10 +11,6 @@ export interface DomElements {
   captionEl: HTMLElement;
   toastEl: HTMLElement;
 
-  // Pattern selector
-  patternSelectorEl: HTMLElement;
-  patternCardsEl: HTMLElement;
-
   // Telemetry panel
   telemetryTextarea: HTMLTextAreaElement;
   telemetryPanel: HTMLElement;
@@ -37,10 +33,6 @@ export interface DomElements {
 
   // Play/Pause
   playPauseBtn: HTMLButtonElement;
-
-  // Instrument selection
-  soundMenu: HTMLElement;
-  instrumentBtns: NodeListOf<HTMLButtonElement>;
 
   // Theme
   themeToggleBtn: HTMLButtonElement;
@@ -78,7 +70,6 @@ export function resolveDomElements(): DomElements {
   if (!ctx) throw new Error('Canvas 2D context unavailable');
 
   const modeToggle = getEl('mode-toggle');
-  const soundMenu = getEl('sound-menu');
 
   return {
     canvas,
@@ -86,9 +77,6 @@ export function resolveDomElements(): DomElements {
 
     captionEl: getEl('draw-caption'),
     toastEl: getEl('pattern-toast'),
-
-    patternSelectorEl: getEl('pattern-selector'),
-    patternCardsEl: getEl('pattern-cards'),
 
     telemetryTextarea: getEl('telemetry-code') as HTMLTextAreaElement,
     telemetryPanel: getEl('telemetry-panel'),
@@ -108,9 +96,6 @@ export function resolveDomElements(): DomElements {
     modeOptions: modeToggle.querySelectorAll<HTMLElement>('.mode-option'),
 
     playPauseBtn: getEl('play-pause-btn') as HTMLButtonElement,
-
-    soundMenu,
-    instrumentBtns: soundMenu.querySelectorAll<HTMLButtonElement>('[data-instrument]'),
 
     themeToggleBtn: getEl('theme-toggle') as HTMLButtonElement,
 

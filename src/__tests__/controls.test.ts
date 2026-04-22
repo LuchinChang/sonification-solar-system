@@ -38,8 +38,6 @@ function mockDom(): DomElements {
     ctx: {} as CanvasRenderingContext2D,
     captionEl: el() as unknown as HTMLElement,
     toastEl: el() as unknown as HTMLElement,
-    patternSelectorEl: el() as unknown as HTMLElement,
-    patternCardsEl: el() as unknown as HTMLElement,
     telemetryTextarea: { ...el(), value: '' } as unknown as HTMLTextAreaElement,
     telemetryPanel: el() as unknown as HTMLElement,
     telemetryTab: el() as unknown as HTMLButtonElement,
@@ -53,8 +51,6 @@ function mockDom(): DomElements {
     modeToggle: el() as unknown as HTMLElement,
     modeOptions: [] as unknown as NodeListOf<HTMLElement>,
     playPauseBtn: el() as unknown as HTMLButtonElement,
-    soundMenu: el() as unknown as HTMLElement,
-    instrumentBtns: [] as unknown as NodeListOf<HTMLButtonElement>,
     themeToggleBtn: el() as unknown as HTMLButtonElement,
     audioOverlay: el() as unknown as HTMLElement,
     syncAudioBtn: el() as unknown as HTMLElement,
@@ -74,8 +70,8 @@ function mockDom(): DomElements {
 describe('setActiveShape', () => {
   it('selects a shape and deselects others', () => {
     const state = createInitialState();
-    const s1 = new CanvasShape(100, 100, 'circle', 50);
-    const s2 = new CanvasShape(200, 200, 'triangle', 40);
+    const s1 = new CanvasShape(100, 100, 'sweeper', 50);
+    const s2 = new CanvasShape(200, 200, 'sweeper', 40);
     state.shapes.push(s1, s2);
 
     setActiveShape(state, s1);
@@ -91,7 +87,7 @@ describe('setActiveShape', () => {
 
   it('deselects all when null is passed', () => {
     const state = createInitialState();
-    const s1 = new CanvasShape(100, 100, 'circle', 50);
+    const s1 = new CanvasShape(100, 100, 'sweeper', 50);
     state.shapes.push(s1);
     setActiveShape(state, s1);
 
@@ -105,8 +101,8 @@ describe('deleteActiveShape', () => {
   it('removes the active shape from the array', () => {
     const state = createInitialState();
     const dom = mockDom();
-    const s1 = new CanvasShape(100, 100, 'circle', 50);
-    const s2 = new CanvasShape(200, 200, 'triangle', 40);
+    const s1 = new CanvasShape(100, 100, 'sweeper', 50);
+    const s2 = new CanvasShape(200, 200, 'sweeper', 40);
     state.shapes.push(s1, s2);
     state.activeShape = s1;
 
@@ -119,7 +115,7 @@ describe('deleteActiveShape', () => {
   it('is a no-op when no shape is active', () => {
     const state = createInitialState();
     const dom = mockDom();
-    const s1 = new CanvasShape(100, 100, 'circle', 50);
+    const s1 = new CanvasShape(100, 100, 'sweeper', 50);
     state.shapes.push(s1);
     state.activeShape = null;
 
@@ -130,7 +126,7 @@ describe('deleteActiveShape', () => {
   it('clears flash cooldown for deleted shape', () => {
     const state = createInitialState();
     const dom = mockDom();
-    const s1 = new CanvasShape(100, 100, 'circle', 50);
+    const s1 = new CanvasShape(100, 100, 'sweeper', 50);
     state.shapes.push(s1);
     state.activeShape = s1;
     state.flashCooldowns.set(s1.id, 1000);
@@ -141,17 +137,20 @@ describe('deleteActiveShape', () => {
 });
 
 describe('rebuildAllCaches', () => {
+  // LEGACY: disabled 2026-04-21 — rebuildIntersectionCache is a no-op for
+  // sweepers, so the old coverage only exercised non-sweeper ShapeTypes.
+  /*
   it('rebuilds intersection caches for all shapes', () => {
     const state = createInitialState();
     const s1 = new CanvasShape(400, 300, 'circle', 80);
     const s2 = new CanvasShape(400, 300, 'rectangle', 60);
     state.shapes.push(s1, s2);
 
-    // Should not throw even with empty link lines
     rebuildAllCaches(state);
     expect(s1.cachedIntersections).toEqual([]);
     expect(s2.cachedIntersections).toEqual([]);
   });
+  */
 
   it('rebuilds sweep ticks for sweeper shapes', () => {
     const state = createInitialState();

@@ -10,11 +10,9 @@ import type { DomElements } from './dom';
 export type TourAction =
   | 'dock-shown'
   | 'shape-spawned'
-  | 'instrument-picked'
   | 'play-pressed'
   | 'eval-pressed'
-  | 'telemetry-toggled'
-  | 'pattern-opened';
+  | 'telemetry-toggled';
 
 interface TourStep {
   target: () => HTMLElement | null;
@@ -38,49 +36,34 @@ const tourSteps: TourStep[] = [
     text: 'Click a shape in the dock to place it on the canvas.',
     trigger: 'action',
   },
-  { // 2 — Pick an instrument
-    target: () => document.getElementById('sound-menu'),
-    text: 'Pick an instrument from the menu that just appeared!',
-    trigger: 'action',
-  },
-  { // 3 — Press Play
+  { // 2 — Press Play
     target: () => document.getElementById('play-pause-btn'),
     text: 'Press <kbd>Space</kbd> or click Play to hear your creation.',
     trigger: 'action',
   },
-  { // 4 — Celebrate
+  { // 3 — Celebrate
     target: () => document.body,
     text: 'You made music from planetary orbits!',
     trigger: 'auto',
     autoMs: 2000,
   },
-  { // 5 — Re-pick instrument
-    target: () => document.body,
-    text: 'Try changing your shape\'s instrument — click it to select, then pick a new one. Press <kbd>Space</kbd> to pause if the shape is moving. (The instrument menu only appears when the dock is visible.)',
-    trigger: 'action',
-  },
-  { // 6 — Sync changes
+  { // 4 — Sync changes
     target: () => document.body,
     text: 'Press <kbd>⌘/Ctrl+Enter</kbd> to sync your changes. Look for the green flash — it confirms the sound has been updated!',
     trigger: 'action',
   },
-  { // 7 — Listen to the change
+  { // 5 — Listen to the change
     target: () => document.body,
     text: 'Listen to the difference!',
     trigger: 'auto',
     autoMs: 3000,
   },
-  { // 8 — Live code panel
+  { // 6 — Live code panel
     target: () => document.getElementById('telemetry-panel'),
     text: 'Press <kbd>I</kbd> to open the live code panel. Watch how code changes as you add shapes — you can edit it directly!',
     trigger: 'action',
   },
-  { // 9 — Change patterns
-    target: () => document.getElementById('pattern-selector'),
-    text: 'Press <kbd>P</kbd> to toggle the pattern selector — you can browse patterns without losing your shapes!',
-    trigger: 'action',
-  },
-  { // 10 — Done
+  { // 7 — Done
     target: () => document.body,
     text: 'You\'re all set! Explore freely.',
     trigger: 'gotit',
@@ -145,7 +128,7 @@ export function createTourController(dom: DomElements): TourController {
       dom.tourSpot.style.height = `${rect.height + pad * 2}px`;
       dom.tourSpot.style.display = 'block';
 
-      const liftTarget = target.closest('#foundry-panel, #sound-menu, #telemetry-panel') as HTMLElement ?? target;
+      const liftTarget = target.closest('#foundry-panel, #telemetry-panel') as HTMLElement ?? target;
       if (step.trigger === 'action' || step.trigger === 'gotit') {
         liftTarget.style.zIndex = '96';
         liftedEl = liftTarget;
@@ -195,11 +178,9 @@ export function createTourController(dom: DomElements): TourController {
     const idx = stepIdx;
     if (action === 'dock-shown' && idx === 0) advance();
     else if (action === 'shape-spawned' && idx === 1) advance();
-    else if (action === 'instrument-picked' && (idx === 2 || idx === 5)) advance();
-    else if (action === 'play-pressed' && idx === 3) advance();
-    else if (action === 'eval-pressed' && idx === 6) advance();
-    else if (action === 'telemetry-toggled' && idx === 8) advance();
-    else if (action === 'pattern-opened' && idx === 9) advance();
+    else if (action === 'play-pressed' && idx === 2) advance();
+    else if (action === 'eval-pressed' && idx === 4) advance();
+    else if (action === 'telemetry-toggled' && idx === 6) advance();
   }
 
   // Wire up tour UI buttons

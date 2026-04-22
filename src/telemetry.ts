@@ -24,7 +24,7 @@ export function generateFullCode(
   ].join('\n');
 
   if (shapes.length === 0) {
-    return header + '// Spawn shapes from the Sonic Foundry dock.';
+    return header + '// Click + Sweeper in the dock or press N to spawn one.';
   }
   return header + shapes.map(s => s.toStrudelCode()).join('\n\n');
 }
