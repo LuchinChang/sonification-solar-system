@@ -119,6 +119,16 @@ export function inboundSignalExpr(sweeperId: number, outPortId: string): string 
   return `signal(() => globalThis.__sw_${sweeperId}_${outPortId})`;
 }
 
+/**
+ * Raw `globalThis.__sw_<id>_<outName>` reference (no `signal(() => ...)` wrapper).
+ * Used when a node needs to re-wrap the live value with its own helper — e.g.
+ * Unit 4's `sound.pitch` wraps it with `__sw_quantizeNote(...)` so raw 0–1
+ * distance signals get mapped onto a chromatic note string.
+ */
+export function signalRefRaw(sweeperId: number, outPortId: string): string {
+  return `globalThis.__sw_${sweeperId}_${outPortId}`;
+}
+
 // ── Topological sort (Kahn's algorithm) ──────────────────────────────────────
 //
 // Kahn preserves insertion order when the graph has no edges, so the "no-

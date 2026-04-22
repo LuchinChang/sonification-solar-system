@@ -51,6 +51,7 @@ export {
 export {
   compileGraphToStrudel,
   inboundSignalExpr,
+  signalRefRaw,
 } from './codegen';
 
 // Explicit-register (call from main.ts): Unit 6 / 7 / 10 expose their own

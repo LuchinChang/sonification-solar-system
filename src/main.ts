@@ -24,6 +24,11 @@ import './node-editor/nodes/sound-basic';     // side-effect register: pitch, fr
 import './node-editor/nodes/sweeper';          // side-effect register: 4 sweeper-self nodes
 import { registerPlaybackModeNode } from './node-editor/nodes/playback';
 import { setSweeperResolver } from './node-editor/nodes/sweeper';
+import { installQuantizeHelper } from './node-editor/codegen-helpers';
+
+// Expose __sw_quantizeNote on globalThis so generated Strudel code can call
+// it from inside `signal(() => ...)`. Must run before any sweeper evaluation.
+installQuantizeHelper();
 
 // ── Initialise ───────────────────────────────────────────────────────────────
 
