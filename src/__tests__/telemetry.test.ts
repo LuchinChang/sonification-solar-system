@@ -30,7 +30,7 @@ describe('generateFullCode', () => {
     expect(code).toContain('Shapes: 0');
     expect(code).toContain('Samples: 500');
     expect(code).toContain('CPM: 60');
-    expect(code).toContain('Spawn shapes from the Sonic Foundry dock.');
+    expect(code).toContain('Click + Sweeper in the dock or press N to spawn one.');
   });
 
   it('generates code with one shape', () => {

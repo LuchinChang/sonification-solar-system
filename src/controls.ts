@@ -659,6 +659,11 @@ export function setupEventHandlers(
     });
   });
 
+  // Minimal dock sweeper-spawn affordance (Unit 3): click + N hotkey
+  document.querySelectorAll<HTMLButtonElement>('.sweeper-spawn-btn').forEach(btn => {
+    btn.addEventListener('click', () => spawnShape(state, dom, 'sweeper' as ShapeType, tour));
+  });
+
   // Save / load config snapshot — drag-drop, buttons, file input
   dom.canvas.addEventListener('dragover', e => {
     e.preventDefault();
@@ -739,6 +744,10 @@ export function setupEventHandlers(
       case 'backspace':
         e.preventDefault();
         deleteActiveShape(state, dom);
+        break;
+      case 'n':
+        // N: spawn a sweeper at the Sun (Unit 3 minimal affordance)
+        spawnShape(state, dom, 'sweeper' as ShapeType, tour);
         break;
     }
   });

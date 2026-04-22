@@ -79,6 +79,8 @@ export function openEditor(sweeperId: number): void {
   refs.sweeperNumEl.textContent    = `Sweeper #${sweeper.id}`;
 
   refs.root.classList.remove('hidden');
+  refs.root.removeAttribute('aria-hidden');
+  refs.root.removeAttribute('inert');
   attachKeyHandler();
 }
 
@@ -92,6 +94,8 @@ export function openEditor(sweeperId: number): void {
 export function closeEditor(): void {
   if (refs === null) return;
   refs.root.classList.add('hidden');
+  refs.root.setAttribute('aria-hidden', 'true');
+  refs.root.setAttribute('inert', '');
 
   // TODO(Unit 14): compileGraphToStrudel(activeGraph) here.
   //   - Walk nodes in topological order.
@@ -117,6 +121,8 @@ function ensureMounted(): void {
   const root = document.createElement('div');
   root.id = 'node-editor-panel';
   root.className = 'hidden';
+  root.setAttribute('aria-hidden', 'true');
+  root.setAttribute('inert', '');
   root.setAttribute('role', 'dialog');
   root.setAttribute('aria-modal', 'true');
   root.setAttribute('aria-label', 'Sweeper node editor');
