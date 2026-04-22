@@ -131,3 +131,28 @@ function createsCycle(g: NodeGraph, candidate: Edge): boolean {
 export function incomingEdges(g: NodeGraph, nodeId: string, portId: string): Edge[] {
   return g.edges.filter(e => e.to.nodeId === nodeId && e.to.portId === portId);
 }
+
+/**
+ * Pure, non-mutating validity check for a candidate edge. Mirrors the rules
+ * enforced by `addEdge` (direction, port existence, kind compatibility,
+ * acyclicity) but returns a boolean instead of throwing. Used by interactive
+ * layers (see cables.ts) to light up compatible drop-targets during a drag.
+ */
+export function canAddEdge(g: NodeGraph, edge: Omit<Edge, 'id'>): boolean {
+  if (edge.from.dir !== 'out') return false;
+  if (edge.to.dir   !== 'in')  return false;
+
+  const fromNode = g.nodes.find(n => n.id === edge.from.nodeId);
+  const toNode   = g.nodes.find(n => n.id === edge.to.nodeId);
+  if (!fromNode || !toNode) return false;
+
+  const fromPort = getNodeDef(fromNode.type)?.outputs?.find(p => p.id === edge.from.portId);
+  const toPort   = getNodeDef(toNode.type)?.inputs?.find(p => p.id === edge.to.portId);
+  if (!fromPort || !toPort) return false;
+
+  if (!portsCompatible(fromPort.kind, toPort.kind)) return false;
+
+  const candidate: Edge = { id: '__dryrun', from: edge.from, to: edge.to };
+  if (createsCycle(g, candidate)) return false;
+  return true;
+}

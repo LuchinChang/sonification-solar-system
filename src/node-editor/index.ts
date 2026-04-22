@@ -30,7 +30,14 @@ export {
   addEdge,
   removeEdge,
   incomingEdges,
+  canAddEdge,
 } from './graph';
+
+export {
+  initCables,
+  pathForEndpoints,
+  GRAPH_CHANGED_EVENT,
+} from './cables';
 
 export {
   initNodeEditor,
