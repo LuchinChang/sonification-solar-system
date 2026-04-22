@@ -65,6 +65,8 @@ function mockDom(): DomElements {
     saveConfigBtn: el() as unknown as HTMLElement,
     loadConfigBtn: el() as unknown as HTMLElement,
     loadConfigInput: el() as unknown as HTMLInputElement,
+    patternSelectorEl: el() as unknown as HTMLElement,
+    patternCardsEl: el() as unknown as HTMLElement,
   };
 }
 
