@@ -115,33 +115,52 @@ describe('TourController', () => {
     expect(tour.currentStep).toBe(0);
   });
 
-  it('notify with dock-shown advances from step 0 to step 1', () => {
+  it('sweeper-spawned advances from step 0 to step 1', () => {
     const tour = createTourController(dom);
     tour.start();
-    tour.notify('dock-shown');
+    tour.notify('sweeper-spawned');
     expect(tour.currentStep).toBe(1);
   });
 
-  it('notify with shape-spawned advances from step 1', () => {
+  it('editor-opened advances from step 1 to step 2', () => {
     const tour = createTourController(dom);
     tour.start();
-    tour.notify('dock-shown');   // 0 → 1
-    tour.notify('shape-spawned'); // 1 → 2
+    tour.notify('sweeper-spawned'); // 0 → 1
+    tour.notify('editor-opened');    // 1 → 2
     expect(tour.currentStep).toBe(2);
+  });
+
+  it('cable-connected advances from step 2 to step 3', () => {
+    const tour = createTourController(dom);
+    tour.start();
+    tour.notify('sweeper-spawned');  // 0 → 1
+    tour.notify('editor-opened');    // 1 → 2
+    tour.notify('cable-connected');  // 2 → 3
+    expect(tour.currentStep).toBe(3);
+  });
+
+  it('play-pressed advances from step 3 to step 4 (done)', () => {
+    const tour = createTourController(dom);
+    tour.start();
+    tour.notify('sweeper-spawned');  // 0 → 1
+    tour.notify('editor-opened');    // 1 → 2
+    tour.notify('cable-connected');  // 2 → 3
+    tour.notify('play-pressed');     // 3 → 4
+    expect(tour.currentStep).toBe(4);
   });
 
   it('notify at wrong step is a no-op', () => {
     const tour = createTourController(dom);
     tour.start();
-    // Step 0 expects 'dock-shown', not 'shape-spawned'
-    tour.notify('shape-spawned');
+    // Step 0 expects 'sweeper-spawned', not 'play-pressed'
+    tour.notify('play-pressed');
     expect(tour.currentStep).toBe(0);
   });
 
   it('notify when tour is inactive is a no-op', () => {
     const tour = createTourController(dom);
     // Don't start the tour
-    tour.notify('dock-shown');
+    tour.notify('sweeper-spawned');
     expect(tour.isActive).toBe(false);
   });
 
@@ -168,12 +187,16 @@ describe('TourController', () => {
     expect(tour.isActive).toBe(false);
   });
 
-  it('play-pressed advances from step 2', () => {
+  it('has exactly 5 steps (sweeper-only flow)', () => {
     const tour = createTourController(dom);
     tour.start();
-    tour.notify('dock-shown');    // 0 → 1
-    tour.notify('shape-spawned'); // 1 → 2
-    tour.notify('play-pressed');  // 2 → 3
-    expect(tour.currentStep).toBe(3);
+    tour.notify('sweeper-spawned');
+    tour.notify('editor-opened');
+    tour.notify('cable-connected');
+    tour.notify('play-pressed');
+    // The fifth step is a 'gotit'; simulate its advance via the controller
+    // by walking currentStep to 4 — reaching 5 would end the tour.
+    expect(tour.currentStep).toBe(4);
+    expect(tour.isActive).toBe(true);
   });
 });

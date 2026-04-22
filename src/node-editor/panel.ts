@@ -80,13 +80,28 @@ export function initNodeEditor(opts: {
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
-/** Open the editor for a given sweeper. No-op (warns) if id doesn't resolve. */
+/**
+ * Open the editor for a given sweeper.
+ *
+ * Toggle semantics:
+ *  - If the panel is already open for the SAME sweeper id → close it.
+ *  - If the panel is open for a DIFFERENT sweeper → repoint to the new one.
+ *  - Otherwise just open.
+ *
+ * No-op (warns) if the id doesn't resolve to a sweeper.
+ */
 export function openEditor(sweeperId: number): void {
   ensureMounted();
   if (refs === null || resolveSweeper === null) return;
   const sweeper = resolveSweeper(sweeperId);
   if (!sweeper || sweeper.type !== 'sweeper') {
     console.warn('[node-editor] openEditor: id is not a sweeper', sweeperId);
+    return;
+  }
+
+  // Toggle: same sweeper, already open → close and bail.
+  if (isEditorOpen() && activeSweeperId === sweeperId) {
+    closeEditor();
     return;
   }
 
@@ -104,10 +119,10 @@ export function openEditor(sweeperId: number): void {
     : createGraph(sweeperId);
 
   const color = sweeper.sweepColor;
-  refs.swatch.style.color          = color;
+  refs.swatch.style.color           = color;
   refs.swatch.style.backgroundColor = color;
-  refs.sweeperIcon.style.color     = color;
-  refs.sweeperNumEl.textContent    = `Sweeper #${sweeper.id}`;
+  refs.sweeperIcon.style.color      = color;
+  refs.sweeperNumEl.textContent     = `Sweeper #${sweeper.id}`;
 
   // Re-render chip list in case new NodeDefinitions registered since last open.
   refreshToolbox(toolboxHost(refs), toolboxCallbacks());
@@ -197,12 +212,17 @@ function ensureMounted(): void {
   const header = document.createElement('div');
   header.className = 'node-editor-header';
 
-  const swatch = document.createElement('span');
-  swatch.className = 'node-editor-swatch';
-
+  // Pre-attentive "identity chip": color swatch immediately left of the
+  // sweeper number, with a soft label underneath. The swatch glows in the
+  // sweeper's color so the open panel is visually locked to its target on
+  // the canvas.
   const titleLabel = document.createElement('span');
   titleLabel.className = 'node-editor-title';
-  titleLabel.textContent = 'Node Editor —';
+  titleLabel.textContent = 'Node Editor';
+
+  const swatch = document.createElement('span');
+  swatch.className = 'node-editor-swatch';
+  swatch.setAttribute('aria-hidden', 'true');
 
   const sweeperNumEl = document.createElement('span');
   sweeperNumEl.className = 'node-editor-sweeper-num';
@@ -210,7 +230,7 @@ function ensureMounted(): void {
 
   const hint = document.createElement('span');
   hint.className = 'node-editor-hint';
-  hint.textContent = 'Esc to close · Ctrl+Enter to commit';
+  hint.textContent = 'Esc / E to close · Ctrl+Enter to commit';
 
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
@@ -219,7 +239,7 @@ function ensureMounted(): void {
   closeBtn.setAttribute('aria-label', 'Close node editor');
   closeBtn.addEventListener('click', closeEditor);
 
-  header.append(swatch, titleLabel, sweeperNumEl, hint, closeBtn);
+  header.append(titleLabel, swatch, sweeperNumEl, hint, closeBtn);
 
   // Body ──────────────────────────────────────────────────────────────────
   const body = document.createElement('div');
@@ -369,10 +389,18 @@ function tryWireDefaultEdge(
 
 function seedDefaultGraph(sweeperId: number): NodeGraph {
   const g = createGraph(sweeperId);
-  const lpf  = addNode(g, { type: 'sound.lpf',  side: 'sound', x: 0, y: 0 });
-  const gain = addNode(g, { type: 'sound.gain', side: 'sound', x: 0, y: 0 });
-  tryWireDefaultEdge(g, 'data.distance-to-sun', 'distance', lpf.id,  'frequency');
-  tryWireDefaultEdge(g, 'data.cluster-count',   'count',    gain.id, 'amp');
+  // Gracefully skip missing defs: tests that reset the registry can still
+  // exercise openEditor/closeEditor without re-registering the full sound-basic
+  // suite. Production code imports './nodes/sound-basic' side-effect at module
+  // load, so the defs are always present there.
+  const lpf  = getNodeDef('sound.lpf')
+    ? addNode(g, { type: 'sound.lpf',  side: 'sound', x: 0, y: 0 })
+    : null;
+  const gain = getNodeDef('sound.gain')
+    ? addNode(g, { type: 'sound.gain', side: 'sound', x: 0, y: 0 })
+    : null;
+  if (lpf)  tryWireDefaultEdge(g, 'data.distance-to-sun', 'distance', lpf.id,  'frequency');
+  if (gain) tryWireDefaultEdge(g, 'data.cluster-count',   'count',    gain.id, 'amp');
   return g;
 }
 

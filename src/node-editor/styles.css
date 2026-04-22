@@ -48,12 +48,20 @@
   border-bottom: 1px solid var(--glass-border);
 }
 
+/* Identity chip: swatch sits immediately left of "Sweeper #N". The drop-shadow
+   uses currentColor (set inline by panel.ts to the sweeper's sweepColor) so
+   the glow is the sweeper's own hue — pre-attentive, not just decorative. */
 .node-editor-swatch {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 0 8px currentColor;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 0 0 2px rgba(0, 0, 0, 0.35),
+    0 0 10px currentColor,
+    0 0 22px currentColor;
+  filter: drop-shadow(0 0 6px currentColor);
+  flex-shrink: 0;
 }
 
 .node-editor-title {
@@ -62,13 +70,14 @@
   letter-spacing: 0.17em;
   text-transform: uppercase;
   color: var(--text-secondary);
+  margin-right: 4px;
 }
 
 .node-editor-sweeper-num {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
-  margin-left: -4px;
+  letter-spacing: 0.02em;
 }
 
 .node-editor-hint {

@@ -16,10 +16,55 @@ import {
   addEdge,
   removeEdge,
   incomingEdges,
+  initNodeEditor,
+  openEditor,
+  closeEditor,
+  isEditorOpen,
+  currentSweeperId,
 } from '../node-editor';
 import { _resetRegistryForTests } from '../node-editor/registry';
 import { _resetIdsForTests } from '../node-editor/graph';
 import type { NodeDefinition } from '../node-editor';
+import type { CanvasShape } from '../shapes';
+
+// Minimal DOM stub — the panel builds its shell lazily via ensureMounted().
+// We don't exercise any visual behaviour here, only the toggle logic, so a
+// pass-through stub is enough. tour.test.ts follows the same pattern.
+if (typeof document === 'undefined') {
+  function makeEl(): Record<string, unknown> {
+    const classes = new Set<string>();
+    const el: Record<string, unknown> = {
+      id: '',
+      className: '',
+      textContent: '',
+      innerHTML: '',
+      style: {} as Record<string, string>,
+      classList: {
+        add:    (c: string) => { classes.add(c); },
+        remove: (c: string) => { classes.delete(c); },
+        toggle: (c: string) => { classes.has(c) ? classes.delete(c) : classes.add(c); },
+        contains: (c: string) => classes.has(c),
+      },
+      setAttribute: () => {},
+      removeAttribute: () => {},
+      addEventListener: () => {},
+      append: () => {},
+      appendChild: () => {},
+      querySelector:   () => null,
+      querySelectorAll: () => [],
+      getBoundingClientRect: () => ({ left: 0, top: 0, right: 100, bottom: 100, width: 100, height: 100 }),
+    };
+    return el;
+  }
+  (globalThis as Record<string, unknown>).document = {
+    body: makeEl(),
+    createElement: () => makeEl(),
+    createElementNS: () => makeEl(),
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    getElementById: () => null,
+  };
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -116,6 +161,43 @@ describe('node-editor graph', () => {
       from: { nodeId: a.id, portId: 'out', dir: 'out' },
       to:   { nodeId: b.id, portId: 'in',  dir: 'in' },
     })).toThrow(/incompatible/);
+  });
+
+  it('openEditor is a toggle for the same sweeper id', () => {
+    // Minimal sweeper stub — only .type, .id, .sweepColor are read by the panel.
+    const fakeSweeper = { id: 7, type: 'sweeper', sweepColor: '#C084FC', graph: null, toStrudelCode: () => '// @shape-start-7\n// @shape-end-7' } as unknown as CanvasShape;
+    initNodeEditor({ resolveSweeper: id => (id === 7 ? fakeSweeper : null) });
+
+    // Starts closed.
+    if (isEditorOpen()) closeEditor();
+    expect(isEditorOpen()).toBe(false);
+
+    openEditor(7);
+    expect(isEditorOpen()).toBe(true);
+    expect(currentSweeperId()).toBe(7);
+
+    // Same id again → toggle closes.
+    openEditor(7);
+    expect(isEditorOpen()).toBe(false);
+    expect(currentSweeperId()).toBeNull();
+  });
+
+  it('openEditor repoints when called for a different sweeper', () => {
+    const sweepers: Record<number, CanvasShape> = {
+      7: { id: 7, type: 'sweeper', sweepColor: '#C084FC', graph: null, toStrudelCode: () => '// @shape-start-7\n// @shape-end-7' } as unknown as CanvasShape,
+      9: { id: 9, type: 'sweeper', sweepColor: '#E8A050', graph: null, toStrudelCode: () => '// @shape-start-9\n// @shape-end-9' } as unknown as CanvasShape,
+    };
+    initNodeEditor({ resolveSweeper: id => sweepers[id] ?? null });
+
+    if (isEditorOpen()) closeEditor();
+    openEditor(7);
+    expect(currentSweeperId()).toBe(7);
+
+    openEditor(9);
+    expect(isEditorOpen()).toBe(true);
+    expect(currentSweeperId()).toBe(9);
+
+    closeEditor();
   });
 
   it('rejects edges that would create a cycle', () => {
