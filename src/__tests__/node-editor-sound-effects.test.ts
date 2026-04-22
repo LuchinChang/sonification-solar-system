@@ -54,9 +54,10 @@ describe('sound-effects registration', () => {
     const def = getNodeDef('sound.distortion');
     expect(def).toBeDefined();
     expect(def?.side).toBe('sound');
-    expect(def?.inputs).toEqual([
-      { id: 'amount', label: 'amount', kind: 'number', continuous: true },
-    ]);
+    expect(def?.inputs).toHaveLength(1);
+    expect(def?.inputs?.[0]).toMatchObject({
+      id: 'amount', label: 'amount', kind: 'number', continuous: true,
+    });
     expect(def?.defaultParams).toEqual({ amount: 0.2 });
   });
 

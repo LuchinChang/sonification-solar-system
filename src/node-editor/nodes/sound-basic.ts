@@ -72,7 +72,10 @@ export const soundPitchDef: NodeDefinition = {
   type:  'sound.pitch',
   side:  'sound',
   label: 'Pitch',
-  inputs: [{ id: 'note', label: 'note', kind: 'pattern' }],
+  inputs: [{
+    id: 'note', label: 'note', kind: 'pattern',
+    description: 'Strudel pitch pattern (e.g. "c4 e4 g4"). When a signal is wired, it is quantised to the selected chromatic scale via the root + span params.',
+  }],
   // `note`  → literal Strudel pattern used when the port is unwired.
   // `root`  → root note of the chromatic scale used when a signal IS wired.
   // `span`  → number of semitones that map across the 0–1 input range.
@@ -146,8 +149,16 @@ export const soundFrequencyRangeDef: NodeDefinition = {
   side:  'sound',
   label: 'Frequency Range',
   inputs: [
-    { id: 'min', label: 'min', kind: 'number' },
-    { id: 'max', label: 'max', kind: 'number' },
+    {
+      id: 'min', label: 'min', kind: 'number',
+      min: 20, max: 20000, unit: 'Hz',
+      description: 'Lower bound of the sweeper\'s distance→frequency mapping.',
+    },
+    {
+      id: 'max', label: 'max', kind: 'number',
+      min: 20, max: 20000, unit: 'Hz',
+      description: 'Upper bound of the sweeper\'s distance→frequency mapping.',
+    },
   ],
   defaultParams: { min: 100, max: 1000 },
 
@@ -162,7 +173,11 @@ export const soundLpfDef: NodeDefinition = {
   type:  'sound.lpf',
   side:  'sound',
   label: 'Low-pass Filter',
-  inputs: [{ id: 'frequency', label: 'frequency', kind: 'number' }],
+  inputs: [{
+    id: 'frequency', label: 'frequency', kind: 'number',
+    min: 200, max: 4000, unit: 'Hz',
+    description: 'Cutoff frequency of the low-pass filter. Higher values let more treble through; low values darken the tone.',
+  }],
   defaultParams: { frequency: 1200 },
 
   codegen(ctx, params, inbound) {
@@ -178,7 +193,11 @@ export const soundGainDef: NodeDefinition = {
   type:  'sound.gain',
   side:  'sound',
   label: 'Gain',
-  inputs: [{ id: 'amp', label: 'amp', kind: 'number' }],
+  inputs: [{
+    id: 'amp', label: 'amp', kind: 'number',
+    min: 0, max: 1, unit: '0..1',
+    description: 'Output amplitude of this voice, normalised 0–1. Values above 1 will clip.',
+  }],
   defaultParams: { amp: 0.6 },
 
   codegen(ctx, params, inbound) {

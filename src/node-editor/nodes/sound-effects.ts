@@ -44,7 +44,11 @@ const distortionDef: NodeDefinition = {
   side:  'sound',
   label: 'Distortion',
   inputs: [
-    { id: 'amount', label: 'amount', kind: 'number', continuous: true },
+    {
+      id: 'amount', label: 'amount', kind: 'number', continuous: true,
+      min: 0, max: 1, unit: '0..1',
+      description: 'Waveshaper drive. 0 is clean; higher values add harmonic saturation and, beyond ~0.6, aggressive clipping.',
+    },
   ],
   defaultParams: { amount: 0.2 } satisfies DistortionParams,
   codegen: (ctx, params, inbound) => {
@@ -58,8 +62,16 @@ const reverbDef: NodeDefinition = {
   side:  'sound',
   label: 'Reverb',
   inputs: [
-    { id: 'room', label: 'room', kind: 'number', continuous: true },
-    { id: 'size', label: 'size', kind: 'number', continuous: true },
+    {
+      id: 'room', label: 'room', kind: 'number', continuous: true,
+      min: 0, max: 1, unit: '0..1',
+      description: 'Reverb wet amount. 0 is dry; 1 is fully wet.',
+    },
+    {
+      id: 'size', label: 'size', kind: 'number', continuous: true,
+      min: 0, max: 1, unit: '0..1',
+      description: 'Simulated room size. Larger values give longer, more diffuse tails.',
+    },
   ],
   defaultParams: { room: 0.4, size: 0.5 } satisfies ReverbParams,
   codegen: (ctx, params, inbound) => {

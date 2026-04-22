@@ -131,6 +131,18 @@ Surgical regex patching (`@rhythm-N`, `@shape-start/end-N` markers) updates rhyt
 | Tour | `tour.test.ts` | Step progression, action matching, localStorage |
 | Controls | `controls.test.ts` | Shape selection, deletion, cache rebuild |
 
+## Known follow-ups
+
+- **Port ranges are informational only.** The `min` / `max` / `unit` / `description`
+  fields on `PortSpec` feed hover tooltips and kind indicators in the node editor,
+  but the generated Strudel is byte-identical to the pre-tooltip behaviour:
+  connections still pass raw values straight through.
+- Runtime range-mapping (e.g. auto-scaling a `distance-to-sun` output with
+  `0..500 px` into an `lpf` input expecting `200..4000 Hz`) is tracked as a
+  separate effort. The entry points a future implementer should touch are
+  `src/node-editor/codegen-helpers.ts` and `signalRefFromEdge` in
+  `src/node-editor/nodes/sound-basic.ts`.
+
 ## Tech Stack
 
 - **Language**: TypeScript (strict mode)

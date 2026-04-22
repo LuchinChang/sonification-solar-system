@@ -30,6 +30,21 @@ export interface PortSpec {
   kind:  PortKind;
   /** Optional: hints that codegen can treat this as a hot signal vs snapshot. */
   continuous?: boolean;
+
+  // ── Informational metadata (Unit 7) ──────────────────────────────────────
+  //
+  // Purely documentary for tooltips / indicators. These fields do NOT affect
+  // codegen — connections still pass raw values through. Runtime range-mapping
+  // (scaling data ranges into sound-port ranges) is a planned follow-up and
+  // should be implemented around `signalRefFromEdge` in codegen-helpers.ts.
+  /** Lower end of the port's expected numeric range. */
+  min?: number;
+  /** Upper end of the port's expected numeric range. */
+  max?: number;
+  /** Short unit label (e.g. `"Hz"`, `"px"`, `"0..1"`). */
+  unit?: string;
+  /** Human-readable description shown in hover tooltips. */
+  description?: string;
 }
 
 // ── Port: concrete instance on a placed node ─────────────────────────────────
