@@ -44,6 +44,17 @@ function activeSweeper(): CanvasShape | null {
   return s && s.type === 'sweeper' ? s : null;
 }
 
+// Length changes mutate sweeper.size directly, but clusters/ticks derived from
+// it are stale until rebuildSweepTicks runs. main.ts owns linkLines/
+// orbitalMaxRadius + redraw + telemetry, so it registers a geometry-refresh
+// hook here following the same resolver pattern as setSweeperResolver above.
+type SweeperGeometryRefresh = (sweeper: CanvasShape) => void;
+let refreshSweeperGeometry: SweeperGeometryRefresh | null = null;
+
+export function setSweeperGeometryRefresh(fn: SweeperGeometryRefresh | null): void {
+  refreshSweeperGeometry = fn;
+}
+
 // ── Shared UI chrome (Martian Dusk tokens) ───────────────────────────────────
 
 const UI_FONT_MONO = 'var(--font-mono)';
@@ -217,7 +228,10 @@ registerNodeDef({
       const next = clamp(parseInt(slider.value, 10) || MIN_SHAPE_SIZE, MIN_SHAPE_SIZE, MAX_SHAPE_SIZE);
       readout.textContent = `${next}px`;
       const sweeper = activeSweeper();
-      if (sweeper) sweeper.size = next;
+      if (sweeper) {
+        sweeper.size = next;
+        refreshSweeperGeometry?.(sweeper);
+      }
       onChange({ params: { ...node.params, radius: next } });
     });
 
