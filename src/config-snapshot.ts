@@ -52,6 +52,7 @@ export interface ShapeConfig {
   sweepCount?: number;
   startAngle?: number;
   ticks?: number;
+  fineness?: number;
   freqLow?: number;
   freqHigh?: number;
   colorIndex?: number;
