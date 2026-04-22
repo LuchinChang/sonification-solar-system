@@ -31,12 +31,15 @@ export {
   removeEdge,
   incomingEdges,
   canAddEdge,
+  graphFromSnapshot,
 } from './graph';
 
 export {
   initCables,
   pathForEndpoints,
+  hasSelectedEdge,
   GRAPH_CHANGED_EVENT,
+  CABLE_REFLOW_EVENT,
 } from './cables';
 
 export {

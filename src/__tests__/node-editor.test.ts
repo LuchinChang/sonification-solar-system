@@ -16,6 +16,7 @@ import {
   addEdge,
   removeEdge,
   incomingEdges,
+  graphFromSnapshot,
   initNodeEditor,
   openEditor,
   closeEditor,
@@ -24,7 +25,9 @@ import {
 } from '../node-editor';
 import { _resetRegistryForTests } from '../node-editor/registry';
 import { _resetIdsForTests } from '../node-editor/graph';
-import type { NodeDefinition } from '../node-editor';
+import { _seedDefaultGraphForTests } from '../node-editor/panel';
+import type { NodeDefinition, NodeGraph } from '../node-editor';
+import type { NodeGraphSnapshot } from '../config-snapshot';
 import type { CanvasShape } from '../shapes';
 
 // Minimal DOM stub — the panel builds its shell lazily via ensureMounted().
@@ -200,6 +203,89 @@ describe('node-editor graph', () => {
     expect(currentSweeperId()).toBe(9);
 
     closeEditor();
+  });
+
+  it('round-trips through graphToSnapshot / graphFromSnapshot preserving ids, positions and counter', () => {
+    // Must register the data + sound defs the seed function wires together,
+    // otherwise seedDefaultGraph yields an empty graph and the test is a no-op.
+    registerNodeDef({
+      type: 'data.distance-to-sun',
+      side: 'data',
+      label: 'Distance',
+      outputs: [{ id: 'distance', label: 'distance', kind: 'number' }],
+      codegen: () => '',
+    });
+    registerNodeDef({
+      type: 'data.cluster-count',
+      side: 'data',
+      label: 'Count',
+      outputs: [{ id: 'count', label: 'count', kind: 'number' }],
+      codegen: () => '',
+    });
+    registerNodeDef({
+      type: 'sound.lpf',
+      side: 'sound',
+      label: 'LPF',
+      inputs: [{ id: 'frequency', label: 'frequency', kind: 'number' }],
+      codegen: () => '',
+    });
+    registerNodeDef({
+      type: 'sound.gain',
+      side: 'sound',
+      label: 'Gain',
+      inputs: [{ id: 'amp', label: 'amp', kind: 'number' }],
+      codegen: () => '',
+    });
+
+    // (1) seed + (2) mutate by adding one node at a known position.
+    const g = _seedDefaultGraphForTests(7);
+    const nodeCountBefore = g.nodes.length;
+    const edgeCountBefore = g.edges.length;
+    const added = addNode(g, {
+      type: 'data.cluster-count', side: 'data', x: 48, y: 72,
+    });
+    expect(g.nodes).toHaveLength(nodeCountBefore + 1);
+
+    // (3) Serialise — inline the same logic as panel.ts's graphToSnapshot so
+    //     the test doesn't depend on private exports.
+    const snapshot: NodeGraphSnapshot = {
+      nodes: g.nodes.map(n => ({
+        id: n.id, defType: n.type, x: n.x, y: n.y, params: { ...n.params },
+      })),
+      edges: g.edges.map(e => ({
+        id: e.id,
+        fromPort: `${e.from.nodeId}:${e.from.portId}`,
+        toPort:   `${e.to.nodeId}:${e.to.portId}`,
+      })),
+    };
+
+    // Record the largest numeric id the snapshot carries.
+    const maxNodeNum = Math.max(0, ...snapshot.nodes.map(n => Number(n.id.slice(1)) || 0));
+
+    // (4) Deserialise — fresh id counters, then hydrate.
+    _resetIdsForTests();
+    const restored: NodeGraph = graphFromSnapshot(snapshot);
+
+    // (5) Assertions.
+    expect(restored.nodes).toHaveLength(g.nodes.length);
+    expect(restored.edges).toHaveLength(edgeCountBefore);
+
+    const addedRestored = restored.nodes.find(n => n.id === added.id);
+    expect(addedRestored).toBeDefined();
+    expect(addedRestored!.x).toBe(48);
+    expect(addedRestored!.y).toBe(72);
+
+    // Ids should be byte-identical — we round-tripped without minting new ones.
+    expect(restored.nodes.map(n => n.id).sort()).toEqual(g.nodes.map(n => n.id).sort());
+    expect(restored.edges.map(e => e.id).sort()).toEqual(g.edges.map(e => e.id).sort());
+
+    // Counter advanced past the max id: the very next addNode must produce
+    // an id numerically larger than any id in the snapshot.
+    const freshNode = addNode(restored, {
+      type: 'data.cluster-count', side: 'data', x: 0, y: 0,
+    });
+    const freshNum = Number(freshNode.id.slice(1));
+    expect(freshNum).toBeGreaterThan(maxNodeNum);
   });
 
   it('rejects edges that would create a cycle', () => {

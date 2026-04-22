@@ -108,73 +108,42 @@
   color: var(--accent-amber);
 }
 
-/* ── Body grid — three columns ────────────────────────────── */
+/* ── Body — single freeform canvas (Unit 3 overhaul) ─────── */
 
 .node-editor-body {
   position: relative;
-  display: grid;
-  grid-template-columns: 240px 1fr 240px;
-  gap: 18px;
+  display: block;
   min-height: 0;
+  overflow: hidden;
 }
 
-.node-editor-col {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px;
-  background: rgba(255, 255, 255, 0.015);
+/* Freeform canvas: chips float here with absolute positioning. Faint 24px
+   dot-grid background provides a visual anchor for the snap-to-grid drag. */
+.node-editor-canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgba(255, 255, 255, 0.012);
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.06) 1px,
+    transparent 1px
+  );
+  background-size: 24px 24px;
+  background-position: 0 0;
   border: 1px solid var(--glass-border);
   border-radius: 14px;
-  overflow: auto;
 }
 
-.node-editor-col-title {
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.17em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  margin: 0 0 4px;
-}
-
-.node-editor-col-placeholder {
-  font-size: 9.5px;
-  letter-spacing: 0.07em;
-  color: var(--text-dim);
-  font-style: italic;
-  padding: 10px 4px;
-}
-
-/* ── Center — sweeper icon + cable layer ──────────────────── */
-
-.node-editor-center {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.node-editor-sweeper-icon {
-  width: 86px;
-  height: 86px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: radial-gradient(
-    circle,
-    rgba(255, 255, 255, 0.06) 0%,
-    rgba(255, 255, 255, 0) 70%
+[data-theme="light"] .node-editor-canvas {
+  background-color: rgba(92, 58, 33, 0.02);
+  background-image: radial-gradient(
+    rgba(35, 18, 6, 0.10) 1px,
+    transparent 1px
   );
-  border: 1.5px solid currentColor;
-  box-shadow: 0 0 28px currentColor;
-  color: inherit;
-  font-size: 11px;
-  letter-spacing: 0.17em;
-  text-transform: uppercase;
-  font-weight: 600;
 }
 
+/* Cables + overlaid delete buttons sit above the chip cards. */
 .node-editor-cable-layer {
   position: absolute;
   inset: 0;
@@ -183,41 +152,102 @@
   height: 100%;
 }
 
-/* ── Node cards + ports (Phase-2 integration) ─────────────── */
+.node-editor-edge-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.node-editor-edge-overlay > * { pointer-events: auto; }
 
+/* ── Node cards (freeform, colored by side) ───────────────── */
+
+/* Chips are absolutely positioned inside .node-editor-canvas. Left/top come
+   from inline styles set by panel.ts. Cursor: grab signals draggability;
+   the handler sets .ne-node-dragging while dragging to switch to grabbing. */
 .ne-node {
+  position: absolute;
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.035);
+  min-width: 140px;
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--glass-border);
+  border-left: 3px solid var(--ne-side-accent, var(--accent-copper));
   border-radius: 10px;
   font-family: var(--font-mono);
+  color: var(--text-primary);
+  cursor: grab;
+  user-select: none;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  z-index: 1;
+  transition: box-shadow var(--dur-fast) var(--ease-out-quart),
+              border-color var(--dur-fast) var(--ease-out-quart);
 }
+.ne-node:hover { border-color: var(--ne-side-accent, var(--accent-copper)); }
+.ne-node.ne-node-dragging {
+  cursor: grabbing;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+  z-index: 3;
+}
+
+/* Side-driven accent: the left border + title color change by category, so
+   data / sound / sweeper-playback chips are discoverable at a glance. */
+.ne-node[data-side="data"]     { --ne-side-accent: var(--accent-copper); }
+.ne-node[data-side="sound"]    { --ne-side-accent: var(--accent-coral);  }
+.ne-node[data-side="sweeper"]  { --ne-side-accent: var(--accent-amber);  }
+.ne-node[data-side="playback"] { --ne-side-accent: var(--accent-amber);  }
+
+.ne-node[data-side="data"]     { background: linear-gradient(180deg, rgba(200, 122, 46, 0.12) 0%, rgba(200, 122, 46, 0.04) 100%); }
+.ne-node[data-side="sound"]    { background: linear-gradient(180deg, rgba(232,  71, 44, 0.12) 0%, rgba(232,  71, 44, 0.04) 100%); }
+.ne-node[data-side="sweeper"],
+.ne-node[data-side="playback"] { background: linear-gradient(180deg, rgba(232, 160, 80, 0.12) 0%, rgba(232, 160, 80, 0.04) 100%); }
 
 .ne-node-title {
   font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.17em;
   text-transform: uppercase;
-  color: var(--accent-amber);
+  color: var(--ne-side-accent, var(--accent-amber));
 }
 
 .ne-node-ports {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
+  flex-direction: column;
+  gap: 4px;
+  align-items: stretch;
 }
-.ne-node-ports-in  { justify-content: flex-start; }
-.ne-node-ports-out { justify-content: flex-end; }
+.ne-node-ports-in  { margin-top: 2px; }
+.ne-node-ports-out { margin-top: 2px; }
+
+/* A port row: dot + inline label. Input rows: dot on the left, label after.
+   Output rows: label first, dot on the right (reverse the flex direction). */
+.ne-port-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 0;
+}
+.ne-port-row-out {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+}
+
+.port-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
 
 .port {
+  flex-shrink: 0;
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  border: 1.5px solid var(--accent-copper);
+  border: 1.5px solid var(--ne-side-accent, var(--accent-copper));
   background: rgba(20, 13, 11, 0.85);
   cursor: crosshair;
   transition: border-color var(--dur-fast) var(--ease-out-quart),
@@ -227,6 +257,67 @@
 .port.active {
   border-color: var(--accent-amber);
   box-shadow: 0 0 8px var(--accent-amber);
+}
+
+/* ── Light theme overrides (daylight readability) ─────────── */
+[data-theme="light"] .ne-node {
+  background: rgba(252, 250, 246, 0.92);
+  color: var(--text-primary);
+  box-shadow: 0 2px 10px rgba(100, 60, 20, 0.14);
+}
+[data-theme="light"] .ne-node[data-side="data"]     { background: linear-gradient(180deg, rgba(184, 68, 28, 0.10) 0%, rgba(252, 250, 246, 0.92) 100%); }
+[data-theme="light"] .ne-node[data-side="sound"]    { background: linear-gradient(180deg, rgba(224, 60, 49, 0.10) 0%, rgba(252, 250, 246, 0.92) 100%); }
+[data-theme="light"] .ne-node[data-side="sweeper"],
+[data-theme="light"] .ne-node[data-side="playback"] { background: linear-gradient(180deg, rgba(212, 98, 26, 0.10) 0%, rgba(252, 250, 246, 0.92) 100%); }
+[data-theme="light"] .port-label  { color: var(--text-primary); }
+[data-theme="light"] .ne-node-title { color: var(--ne-side-accent, var(--accent-amber)); }
+[data-theme="light"] .port { background: rgba(252, 250, 246, 0.95); }
+
+/* ── Cable delete button (× at Bézier midpoint) ──────────── */
+.edge-delete-btn {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  transition: opacity var(--dur-fast) var(--ease-out-quart),
+              background var(--dur-fast) var(--ease-out-quart),
+              color var(--dur-fast) var(--ease-out-quart),
+              border-color var(--dur-fast) var(--ease-out-quart);
+}
+
+/* Revealed on hover (of the button itself) or when the cable is selected
+   (.is-visible toggled by cables.ts). Edge-hover → show is wired from JS
+   because SVG edges + the HTML overlay are siblings, not ancestors. */
+.edge-delete-btn.is-visible,
+.edge-delete-btn:hover {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.edge-delete-btn:hover {
+  background: var(--accent-coral);
+  color: #fff;
+  border-color: var(--accent-coral);
+}
+
+[data-theme="light"] .edge-delete-btn {
+  background: rgba(252, 250, 246, 0.96);
+  border-color: var(--glass-border);
+  color: var(--text-primary);
 }
 
 /* ── Port-dot styling placeholder (Unit 11 wires interactions) ── */
@@ -410,13 +501,12 @@
   transform: translate(-50%, -50%) scale(1.04);
 }
 
-/* ── Drop-target highlight on the receiving column ─────────── */
+/* ── Drop-target highlight on the receiving canvas ────────── */
 
-.node-editor-col.ne-drop-target,
-.node-editor-center.ne-drop-target {
+.node-editor-canvas.ne-drop-target {
   outline: 1px dashed var(--accent-amber);
   outline-offset: -4px;
-  background: rgba(232, 160, 80, 0.04);
+  background-color: rgba(232, 160, 80, 0.06);
 }
 
 /* ── Poof ripple on successful drop ───────────────────────── */
