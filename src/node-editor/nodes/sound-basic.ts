@@ -167,11 +167,11 @@ export const soundPitchDef: NodeDefinition = {
   codegen(ctx, params, inbound) {
     const noteEdge = inbound.find(e => e.to.portId === 'note');
     if (!noteEdge) {
-      return `.note("${paramString(params, 'note', 'c4')}")`;
+      return `.note(\`${paramString(params, 'note', 'c4')}\`)`;
     }
     const stack = ctx.resolveInboundStack(noteEdge.to.nodeId, 'note');
     if (!stack) {
-      return `.note("${paramString(params, 'note', 'c4')}")`;
+      return `.note(\`${paramString(params, 'note', 'c4')}\`)`;
     }
     const root  = paramString(params, 'root', 'c4');
     const span  = paramNumber(params, 'span', 12);
@@ -180,7 +180,11 @@ export const soundPitchDef: NodeDefinition = {
     for (let i = 0; i < notes.length; i += 8) {
       rows.push(notes.slice(i, i + 8).join(' '));
     }
-    return `.note("${rows.join('\n    ')}")`;
+    // Backticks (template literals) let the baked multi-line pattern survive
+    // Strudel's JS transpiler pass — raw "\n" inside `"..."` is a
+    // SyntaxError (unterminated string constant). Whitespace inside backticks
+    // is just pattern-separator for Strudel's mini-notation.
+    return `.note(\`${rows.join('\n    ')}\`)`;
   },
 
   ui(node, onChange) {
@@ -262,7 +266,7 @@ export const soundFrequencyDef: NodeDefinition = {
     }
     const stack = _ctx.resolveInboundStack(getCodegenNodeId(inbound), 'frequency');
     if (!stack) return `.freq(${mapValue(0.5, min, max, 'exp').toFixed(2)})`;
-    return `.freq("${bakePattern(stack, min, max, 'exp')}")`;
+    return `.freq(\`${bakePattern(stack, min, max, 'exp')}\`)`;
   },
 
   ui(node, onChange) {
@@ -294,7 +298,7 @@ export const soundLpfDef: NodeDefinition = {
     if (!edge) return `.lpf(${mapValue(0.5, min, max, 'exp').toFixed(2)})`;
     const stack = _ctx.resolveInboundStack(getCodegenNodeId(inbound), 'frequency');
     if (!stack) return `.lpf(${mapValue(0.5, min, max, 'exp').toFixed(2)})`;
-    return `.lpf("${bakePattern(stack, min, max, 'exp')}")`;
+    return `.lpf(\`${bakePattern(stack, min, max, 'exp')}\`)`;
   },
 
   ui(node, onChange) {
@@ -326,7 +330,7 @@ export const soundGainDef: NodeDefinition = {
     if (!edge) return `.gain(${mapValue(0.5, min, max, 'quadratic').toFixed(3)})`;
     const stack = _ctx.resolveInboundStack(getCodegenNodeId(inbound), 'amp');
     if (!stack) return `.gain(${mapValue(0.5, min, max, 'quadratic').toFixed(3)})`;
-    return `.gain("${bakePattern(stack, min, max, 'quadratic', 3)}")`;
+    return `.gain(\`${bakePattern(stack, min, max, 'quadratic', 3)}\`)`;
   },
 
   ui(node, onChange) {

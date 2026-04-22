@@ -238,6 +238,41 @@ describe('cable drag + connect', () => {
     expect(graph.edges).toHaveLength(0);
   });
 
+  // Bug 2 regression: pre-existing edges (hydrated from a snapshot or seeded
+  // by the default-graph logic) must materialize SVG paths when a
+  // `graphChanged` fires — otherwise the user opens the panel and sees
+  // disconnected chips even though the underlying graph is fully wired.
+  it('materializes edges that are already in the graph when graphChanged fires', () => {
+    const { root, svg, outPort, inPort } = setupHarness();
+
+    // Seed the graph with an edge BEFORE initCables / before any drag.
+    // This mimics panel.ts hydrating shape.graph or calling seedDefaultGraph.
+    graph.edges.push({
+      id:   'preseeded-1',
+      from: { nodeId: 'nSrc',  portId: 'out', dir: 'out' },
+      to:   { nodeId: 'nSink', portId: 'in',  dir: 'in'  },
+    });
+
+    cleanup = initCables(root, svg, { getGraph: () => graph });
+
+    // No path yet — onGraphChanged reconciles synchronously when fired.
+    expect(svg.querySelectorAll('#edges .edge').length).toBe(0);
+
+    root.dispatchEvent(new CustomEvent(GRAPH_CHANGED_EVENT, { bubbles: true }));
+
+    const edges = svg.querySelectorAll('#edges .edge');
+    expect(edges.length).toBe(1);
+    expect(edges[0].getAttribute('data-edge-id')).toBe('preseeded-1');
+
+    // Ports were mocked with getBoundingClientRect so the path picked up a
+    // real `d`. Sanity: the path endpoints should reflect those anchors.
+    expect(edges[0].getAttribute('d')).toMatch(/^M\s/);
+
+    // Silence the unused lint on outPort / inPort — they're used by the
+    // setupHarness mocks that the anchor calculation pulls from.
+    void outPort; void inPort;
+  });
+
   it('selects an edge on click and deletes it on Backspace', () => {
     const { root, svg, outPort, inPort } = setupHarness();
     cleanup = initCables(root, svg, { getGraph: () => graph });

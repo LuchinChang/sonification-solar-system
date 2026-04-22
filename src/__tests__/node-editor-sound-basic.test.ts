@@ -72,18 +72,20 @@ describe('sound-basic node definitions', () => {
 // ── Unwired (static) codegen ─────────────────────────────────────────────────
 
 describe('sound-basic codegen — unwired (static)', () => {
-  it('sound.pitch emits .note("<pattern>") with the literal param', () => {
+  it('sound.pitch emits .note(`<pattern>`) with the literal param', () => {
     const g = createGraph(1);
     const n = addNode(g, { type: 'sound.pitch', side: 'sound', x: 0, y: 0, params: { note: 'e4 g4' } });
     const out = getNodeDef('sound.pitch')!.codegen(makeCtx(1, g), n.params, []);
-    expect(out).toBe('.note("e4 g4")');
+    // Backticks (not double quotes) — a baked multi-line pattern inside
+    // "..." is a JS SyntaxError under Strudel's transpiler.
+    expect(out).toBe('.note(`e4 g4`)');
   });
 
   it('sound.pitch falls back to c4 when note param is missing', () => {
     const g = createGraph(1);
     const n = addNode(g, { type: 'sound.pitch', side: 'sound', x: 0, y: 0 });
     const out = getNodeDef('sound.pitch')!.codegen(makeCtx(1, g), n.params, []);
-    expect(out).toBe('.note("c4")');
+    expect(out).toBe('.note(`c4`)');
   });
 
   it('sound.frequency emits a scalar .freq(mid) when unwired (exp midpoint)', () => {
@@ -151,8 +153,10 @@ describe('sound-basic codegen — wired (baked pattern)', () => {
   it('sound.frequency bakes an exp-curve pattern from the inbound stack', () => {
     const stack = [0, 0.5, 1];
     const out = wireDataToSound(7, 'sound.frequency', { min: 100, max: 1000 }, 'frequency', stack);
-    // v=0 → 100, v=0.5 → 100*sqrt(10) ≈ 316.23, v=1 → 1000
-    expect(out).toContain('.freq("');
+    // v=0 → 100, v=0.5 → 100*sqrt(10) ≈ 316.23, v=1 → 1000. The pattern is
+    // wrapped in backticks (template-literal) so the "\n    " row breaks
+    // that `bakePattern` inserts for 120/360-long patterns remain valid JS.
+    expect(out).toContain('.freq(`');
     expect(out).toContain('100.00');
     expect(out).toContain('316.23');
     expect(out).toContain('1000.00');
@@ -161,7 +165,7 @@ describe('sound-basic codegen — wired (baked pattern)', () => {
   it('sound.lpf bakes an exp-curve pattern over [40, 200]', () => {
     const stack = [0, 1];
     const out = wireDataToSound(2, 'sound.lpf', { min: 40, max: 200 }, 'frequency', stack);
-    expect(out).toContain('.lpf("');
+    expect(out).toContain('.lpf(`');
     expect(out).toContain('40.00');
     expect(out).toContain('200.00');
   });
@@ -170,7 +174,7 @@ describe('sound-basic codegen — wired (baked pattern)', () => {
     const stack = [0, 0.5, 1];
     const out = wireDataToSound(3, 'sound.gain', { min: 0, max: 1 }, 'amp', stack);
     // quadratic: 0 → 0.000, 0.5 → 0.250, 1 → 1.000
-    expect(out).toContain('.gain("');
+    expect(out).toContain('.gain(`');
     expect(out).toContain('0.000');
     expect(out).toContain('0.250');
     expect(out).toContain('1.000');
@@ -179,7 +183,7 @@ describe('sound-basic codegen — wired (baked pattern)', () => {
   it('sound.pitch bakes chromatic notes from the inbound 0..1 stack', () => {
     const stack = [0, 0.5, 0.999];
     const out = wireDataToSound(9, 'sound.pitch', { note: 'c4', root: 'c4', span: 12 }, 'note', stack);
-    expect(out).toContain('.note("');
+    expect(out).toContain('.note(`');
     expect(out).toContain('c4');
     expect(out).toContain('f#4');
     expect(out).toContain('b4');

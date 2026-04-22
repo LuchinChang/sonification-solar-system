@@ -126,10 +126,13 @@ describe('compileGraphToStrudel — wired sound chip', () => {
     const out = compileGraphToStrudel(s.id, g, s);
 
     // 0.5 → 150 Hz. shape.ticks = 8 so the pattern is eight "150"s.
-    expect(out).toContain('.freq("150 150 150 150 150 150 150 150")');
+    // Note: the first fragment has its leading `.` stripped so it acts as
+    // the pattern's structure root (Strudel inherits time-structure from
+    // the leftmost creator). The `.s("<instrument>")` goes at the tail.
+    expect(out).toContain('freq("150 150 150 150 150 150 150 150")');
 
-    // Voice is wrapped in `s("<instrument>")` per arm and includes .p(id).
-    expect(out).toContain(`s("${s.instrument}")`);
+    // Voice ends with `.s("<instrument>")` and includes .p(id).
+    expect(out).toContain(`.s("${s.instrument}")`);
     expect(out).toContain(`.p((${s.id}).toString())`);
     expect(out).toContain(`// @shape-start-${s.id}`);
     expect(out).toContain(`// @shape-end-${s.id}`);
@@ -152,7 +155,9 @@ describe('compileGraphToStrudel — wired sound chip', () => {
     addNode(g, { type: 'sound.f', side: 'sound', x: 0, y: 0 });
 
     const out = compileGraphToStrudel(s.id, g, s);
-    expect(out).toContain('.freq(100)');
+    // Single-fragment voice: `.freq(100)` has its leading `.` stripped so
+    // the voice is `freq(100).s("<instrument>")`.
+    expect(out).toContain('freq(100)');
     expect(out).not.toContain('should-not-reach');
   });
 
@@ -232,7 +237,8 @@ describe('compileGraphToStrudel — fan-out', () => {
 
     const out = compileGraphToStrudel(s.id, g, s);
     // 0.25 * 1000 = 250, 0.25 * 10 = 2.5 — both patterns of length 8.
-    expect(out).toContain('.hi("250 250 250 250 250 250 250 250")');
+    // The first fragment loses its leading `.`; the second keeps it.
+    expect(out).toContain('hi("250 250 250 250 250 250 250 250")');
     expect(out).toContain('.lo("2.5 2.5 2.5 2.5 2.5 2.5 2.5 2.5")');
   });
 });
@@ -270,6 +276,88 @@ describe('compileGraphToStrudel — playback mode', () => {
 
     const out = compileGraphToStrudel(s.id, g, s);
     expect(out).not.toContain('.palindrome()');
+  });
+});
+
+// ── Bug 1 regression: voice structure ───────────────────────────────────────
+//
+// Strudel inherits time-structure from the leftmost pattern creator. If the
+// voice begins with `s("sawtooth")` (1 event per cycle) and a baked
+// `.freq("v0 v1 … v119")` follows, all 120 freq values collapse into that
+// single event's (0,1) span and fire simultaneously as a chord — losing
+// the per-tick pattern AND making generator switches (sine↔sawtooth) barely
+// audible. The fix is to put `.s("<instrument>")` at the TAIL, same shape
+// as `toStrudelCode()`'s legacy path.
+
+describe('compileGraphToStrudel — voice structure (Bug 1 regression)', () => {
+  beforeEach(() => {
+    _resetRegistryForTests();
+    _resetIdsForTests();
+  });
+
+  it('does NOT start with s("<instrument>") — that would collapse pattern structure', () => {
+    registerNodeDef(makeDef({
+      type: 'data.c', side: 'data',
+      outputs: [{ id: 'v', label: 'v', kind: 'number' }],
+      perTickValue: () => 0.5,
+    }));
+    registerNodeDef(makeDef({
+      type: 'sound.f', side: 'sound',
+      inputs: [{ id: 'in', label: 'in', kind: 'number' }],
+      codegen(ctx, _params, inbound) {
+        const edge = inbound[0];
+        const stack = edge ? ctx.resolveInboundStack(edge.to.nodeId, edge.to.portId) : null;
+        return stack ? `.freq("${stack.map(() => '150').join(' ')}")` : '.freq(150)';
+      },
+    }));
+    const s = makeSweeper();
+    s.instrument = 'sawtooth';
+    const g = createGraph(s.id);
+    const d = addNode(g, { type: 'data.c',  side: 'data',  x: 0, y: 0 });
+    const f = addNode(g, { type: 'sound.f', side: 'sound', x: 0, y: 0 });
+    addEdge(g, {
+      from: { nodeId: d.id, portId: 'v',  dir: 'out' },
+      to:   { nodeId: f.id, portId: 'in', dir: 'in' },
+    });
+    const out = compileGraphToStrudel(s.id, g, s);
+    // The voice must NOT open with `s("sawtooth")` — that would sit to the
+    // left of freq() and swallow the pattern structure.
+    const voiceStart = out.indexOf(`s("sawtooth")`);
+    const freqStart  = out.indexOf('freq("');
+    expect(freqStart).toBeGreaterThan(-1);
+    expect(voiceStart).toBeGreaterThan(freqStart);
+  });
+
+  it('ends the voice with .s("<instrument>") after freq/gain modifiers', () => {
+    registerNodeDef(makeDef({
+      type: 'sound.g', side: 'sound',
+      codegen: () => '.gain(0.5)',
+    }));
+    const s = makeSweeper();
+    s.instrument = 'triangle';
+    const g = createGraph(s.id);
+    addNode(g, { type: 'sound.g', side: 'sound', x: 0, y: 0 });
+    const out = compileGraphToStrudel(s.id, g, s);
+    // With one fragment `.gain(0.5)`, the voice is `gain(0.5).s("triangle")`.
+    expect(out).toContain(`gain(0.5).s("triangle")`);
+  });
+
+  it('empty-fragments voice falls back to bare s("<instrument>")', () => {
+    // A sound chip whose codegen returns '' should skip its fragment. If the
+    // whole voice has nothing, emit `s("<instrument>")` (one-event drone)
+    // rather than a malformed leading `.s(...)`.
+    registerNodeDef(makeDef({
+      type: 'sound.noop', side: 'sound',
+      codegen: () => '',
+    }));
+    const s = makeSweeper();
+    s.instrument = 'square';
+    const g = createGraph(s.id);
+    addNode(g, { type: 'sound.noop', side: 'sound', x: 0, y: 0 });
+    const out = compileGraphToStrudel(s.id, g, s);
+    // Voice fragment: bare `s("square")`. Must not start with `.s`.
+    expect(out).toContain(`s("square")`);
+    expect(out).not.toMatch(/\n\s*\.s\("square"\)/);
   });
 });
 

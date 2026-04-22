@@ -144,6 +144,14 @@ export function openEditor(sweeperId: number): void {
   graphChangedHandler = () => renderAllNodes();
   refs.root.addEventListener('graphChanged', graphChangedHandler);
 
+  // Hydrated / seeded graphs arrive with edges already in the model but no
+  // SVG paths painted yet. Fire `graphChanged` so cables.ts's reconciler
+  // materializes the missing paths on the next animation frame — node DOM
+  // (with port dots) is already in place, so findPortEl() can resolve
+  // anchors. Without this, first-open default wiring (distance→frequency,
+  // cluster-count→gain) stayed invisible even though codegen worked.
+  emitGraphChanged();
+
   refs.root.classList.remove('hidden');
   refs.root.removeAttribute('aria-hidden');
   refs.root.removeAttribute('inert');

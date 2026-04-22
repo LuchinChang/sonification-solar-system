@@ -135,8 +135,19 @@ function buildVoiceForArm(
     fragments.push(frag.startsWith('.') ? frag : `.${frag}`);
   }
 
+  // Strudel's pattern combinators inherit time-structure from the LEFTMOST
+  // creator. If we start with `s("sawtooth")` (one event per cycle) and chain
+  // `.freq("v0 v1 … v119")` after it, all 120 freq values collapse into that
+  // single event's (0,1) span and play simultaneously — no sequential pitch
+  // pattern, and generator changes barely affect the resulting drone. The
+  // legacy `toStrudelCode()` avoids this by putting `.s("…")` at the TAIL:
+  // the first baked fragment (`freq("…")`) owns the structure, modifiers
+  // chain, and the synth voice is selected last. Mirror that shape here.
+  const body = fragments.join('');
   const instrument = shape.instrument;
-  return `s("${instrument}")${fragments.join('')}`;
+  if (body === '') return `s("${instrument}")`;
+  const head = body.startsWith('.') ? body.slice(1) : body;
+  return `${head}.s("${instrument}")`;
 }
 
 // ── Block assembly ──────────────────────────────────────────────────────────
@@ -203,9 +214,14 @@ function topoFilter(g: NodeGraph, restrictTo: Node[]): Node[] {
 
 /**
  * Map a raw 0..1 stack through a curve and min/max range, formatting the
- * result as a Strudel pattern-string fragment: `"v0 v1 … vN"`. Whitespace
- * inside the quotes is interpreted by Strudel's mini-notation as event
- * separators, so newlines are safe for readability.
+ * result as a Strudel pattern-string fragment: `v0 v1 … vN`.
+ *
+ * Callers wrap the returned string in backticks (template literals), e.g.
+ * `.freq(\`${bakePattern(stack, 100, 1000, 'exp')}\`)`. We chunk values
+ * 8-per-line for readability, which means the baked string contains raw
+ * newlines — valid inside backticks, but a SyntaxError inside `"..."`
+ * ("unterminated string constant"). Strudel's mini-notation treats
+ * whitespace (including newlines) as event separators.
  */
 export function bakePattern(
   stack: SweepStack,

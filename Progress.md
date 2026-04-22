@@ -1,5 +1,126 @@
 # Progress & lessons-learned
 
+## 2026-04-22 — Voice structure + default-edge rendering (bug-fix round 2)
+
+Two bugs surfaced after the round-1 pre-bake refactor landed, both caused by
+details of the pipeline that only became important once the default graph
+was actively seeding/rendering cables and the compiled textarea was the
+canonical sound source.
+
+### Bug A — Generator changes barely altered the sound
+
+**Symptom.** Switching the Generator chip (sine → sawtooth → triangle) from
+the sidebar dropdown did *almost nothing* to the audible sound. The textarea
+showed the new instrument name, Strudel reported `✓ synced`, but the tone
+didn't obviously shift.
+
+**Root cause — Strudel pattern structure inheritance.** When patterns combine,
+the **leftmost pattern creator owns the time-structure**. My voice shape was:
+
+```js
+s("sawtooth").freq("v0 v1 … v119").gain("g0 g1 … g119")
+```
+
+`s("sawtooth")` alone is one event per cycle spanning (0, 1). `.freq("…")`
+gets 120 events per cycle from its mini-notation, but Strudel collapses
+them into the single `s()` span — all 120 freq values fire simultaneously
+as a sustained chord. Verified by querying the pattern:
+
+```js
+g.s('sawtooth').freq(m('100 200 300 400')).queryArc(0, 1)
+// → 4 events, ALL at (b:0, e:1) — a simultaneous 4-note chord
+g.freq(m('100 200 300 400')).s('sawtooth').queryArc(0, 1)
+// → events at (0, .25), (.25, .5), (.5, .75), (.75, 1) — sequential
+```
+
+The legacy `shape.toStrudelCode()` path avoided this by ending the chain
+with `.s("…")` — the freq() pattern's structure is what wins. The
+pre-baked codegen didn't match that shape.
+
+**Fix.** Rebuild the voice with `.s(instrument)` at the TAIL. `buildVoiceForArm`
+now joins fragments (which all start with `.`), strips the first dot so the
+leading fragment is a standalone pattern creator, and appends `.s("<instrument>")`:
+
+```ts
+const body = fragments.join('');                  // ".freq(…).gain(…)"
+if (body === '') return `s("${instrument}")`;    // drone fallback
+const head = body.startsWith('.') ? body.slice(1) : body;
+return `${head}.s("${instrument}")`;              // "freq(…).gain(…).s(…)"
+```
+
+**Secondary fix — backticks for multi-line mini-notation.** `bakePattern`
+chunks 120 values into 8-per-line rows joined by `\n    ` for readability.
+That's fine inside Strudel's mini-notation, but a JS SyntaxError (`unterminated
+string constant`) when emitted inside `"…"`. Swapped every sound-chip wrapper
+to template literals — `.freq(\`…\`)` / `.gain(\`…\`)` / `.lpf(\`…\`)` / etc.
+Matches `toStrudelCode`'s pre-existing convention.
+
+### Bug B — Default-seeded cables weren't visible in the editor
+
+**Symptom.** First open of the node editor showed four chips (Frequency,
+Gain, Distance to Sun, Cluster Count) but **no cables between them** — yet
+the generated Strudel code reflected the wiring and produced audio. Users
+asked whether the chips were actually connected.
+
+**Root cause.** `panel.ts` `renderAllNodes()` paints `.ne-node` cards with
+port dots, but never paints the SVG paths. `cables.ts` `renderEdge()` was
+only called inside `endDrag` (user-initiated drag commit) — the seeded/
+hydrated branch never materialized existing edges. The edges lived in
+`activeGraph.edges` (which is why codegen worked), just not in the DOM.
+
+**Fix.**
+- `reflowAllEdges` now *reconciles* the DOM against `graph.edges`: existing
+  paths re-anchor, orphaned paths prune (unchanged), and edges in the graph
+  without a matching DOM path get `renderEdge()`-ed.
+- `openEditor` emits a `graphChanged` event right after `renderAllNodes()`,
+  which cables.ts's handler picks up and runs reconciliation against the
+  seeded/hydrated graph.
+- `onGraphChanged` runs synchronously instead of via `scheduleReflow`'s rAF.
+  Structural changes (edges appearing/disappearing) want immediate paint; the
+  rAF batching only ever mattered for per-frame drag reflows (`cableReflow`
+  still batches).
+
+### Verification
+
+- 253 unit tests pass (+4 skipped); new regressions:
+  - `node-editor-codegen.test.ts` — voice structure Bug 1 regression: voice
+    must NOT begin with `s("…")`; must end with `.s("<instrument>")`; empty-
+    fragments voice falls back to bare `s("…")`.
+  - `node-editor-cables.test.ts` — cables Bug 2 regression: pre-existing
+    graph edges materialize SVG paths when `graphChanged` fires.
+- Browser verification at 1400×900:
+  - Seeded editor shows 4 chips + 2 cables visible (`edgeCount: 2`, screenshot
+    captured).
+  - Changing generator in sidebar → close panel → textarea block starts with
+    `freq(\`…\`).gain(\`…\`).s("sawtooth")`, comment header updates to
+    `s="sawtooth"`, Strudel status stays `✓ synced` during playback.
+  - Direct `queryArc(0, 1)` on the fixed pattern shape produces sequential
+    event spans (confirming the sound-structure bug is gone).
+
+### Lessons for next time
+
+- **Don't assume commutativity of Strudel's pattern combinators.** `s("…")`
+  and `.s("…")` look interchangeable but produce wildly different time
+  structures. When in doubt, `p.queryArc(0, 1)` returns the actual event
+  spans — use it as a debugger, not just a test tool.
+
+- **The data model is the source of truth, but the DOM is what the user
+  sees.** When a refactor changes who *creates* objects (here: seed/hydrate
+  vs. user-drag), remember that the rendering pipeline probably only hooks
+  one of those paths. Seed/hydrate producing an identical graph that
+  *looks* disconnected is a classic "graph and view diverged" bug.
+
+- **JS template literals > double-quoted strings for multi-line DSLs.**
+  Any baked output that crosses line boundaries should be wrapped in
+  backticks. Strudel's mini-notation treats whitespace identically either
+  way, but JS only forgives newlines inside template literals.
+
+Files touched: `src/node-editor/codegen.ts`, `src/node-editor/cables.ts`,
+`src/node-editor/panel.ts`, `src/node-editor/nodes/sound-basic.ts`,
+`src/node-editor/nodes/sound-effects.ts`, plus test updates in
+`node-editor-codegen.test.ts`, `node-editor-cables.test.ts`,
+`node-editor-sound-basic.test.ts`, `node-editor-sound-effects.test.ts`.
+
 ## 2026-04-22 — Pre-baked-pattern refactor + arm-length fix (bug-fix round 1)
 
 Five related sweeper bugs fixed as a single architectural consolidation.

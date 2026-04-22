@@ -97,7 +97,7 @@ describe('sound.distortion codegen', () => {
     const ctx  = makeCtx(3, { 'n-fx:amount': stack });
     const edge = makeEdge('amount');
     const out  = distortionDef.codegen(ctx, { min: 0, max: 1 }, [edge]);
-    expect(out).toContain('.shape("');
+    expect(out).toContain('.shape(`');
     expect(out).toContain('0.000');
     expect(out).toContain('0.500');
     expect(out).toContain('1.000');
@@ -123,7 +123,7 @@ describe('sound.reverb codegen', () => {
     const out   = reverbDef.codegen(ctx, {
       roomMin: 0, roomMax: 1, sizeMin: 0, sizeMax: 1,
     }, [edge]);
-    expect(out).toContain('.room("');
+    expect(out).toContain('.room(`');
     expect(out).toContain('.size(0.500)');
   });
 
@@ -138,8 +138,8 @@ describe('sound.reverb codegen', () => {
     const out = reverbDef.codegen(ctx, {
       roomMin: 0, roomMax: 1, sizeMin: 0, sizeMax: 1,
     }, edges);
-    expect(out).toContain('.room("');
-    expect(out).toContain('.size("');
+    expect(out).toContain('.room(`');
+    expect(out).toContain('.size(`');
     expect(out).not.toContain('signal(');
   });
 });

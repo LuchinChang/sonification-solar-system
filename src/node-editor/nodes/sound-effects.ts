@@ -31,7 +31,11 @@ function bakeOrScalar(
   if (!edge) return `.${method}(${mapValue(0.5, min, max, 'linear').toFixed(precision)})`;
   const stack = ctx.resolveInboundStack(edge.to.nodeId, portId);
   if (!stack) return `.${method}(${mapValue(0.5, min, max, 'linear').toFixed(precision)})`;
-  return `.${method}("${bakePattern(stack, min, max, 'linear', precision)}")`;
+  // Backticks: `bakePattern` wraps lines with "\n    " for readability.
+  // Inside `"..."` that's a JS SyntaxError ("unterminated string constant");
+  // template literals accept raw newlines, and Strudel's mini-notation
+  // treats whitespace as the event separator either way.
+  return `.${method}(\`${bakePattern(stack, min, max, 'linear', precision)}\`)`;
 }
 
 // ── Shared min/max slider UI (mirrors sound-basic.ts buildRangeUi) ──────────
