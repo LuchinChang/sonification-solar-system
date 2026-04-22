@@ -23,7 +23,7 @@ import type { NodeGraphSnapshot } from '../config-snapshot';
 import type { CanvasShape } from '../shapes';
 import { CABLE_REFLOW_EVENT, initCables } from './cables';
 import { compileGraphToStrudel } from './codegen';
-import { addEdge, addNode, createGraph, graphFromSnapshot } from './graph';
+import { addEdge, addNode, createGraph, graphFromSnapshot, removeNode } from './graph';
 import { getNodeDef } from './registry';
 import { applyPlaybackNode } from './nodes/playback';
 import { openSidebar, closeSidebar } from './sidebar';
@@ -188,11 +188,28 @@ function renderNode(node: Node, def: NodeDefinition): HTMLDivElement {
   card.dataset['side']   = def.side;
   card.style.left = `${node.x}px`;
   card.style.top  = `${node.y}px`;
+  // Focusable so the panel keydown handler can route Delete/Backspace to
+  // the focused chip.
+  card.tabIndex = 0;
 
   const title = document.createElement('div');
   title.className = 'ne-node-title';
   title.textContent = def.label;
   card.appendChild(title);
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.type = 'button';
+  deleteBtn.className = 'ne-node-delete-btn';
+  deleteBtn.textContent = '×';
+  deleteBtn.setAttribute('aria-label', `Delete ${def.label} node`);
+  // stopPropagation prevents the card's pointerdown drag handler from firing.
+  deleteBtn.addEventListener('pointerdown', (ev) => { ev.stopPropagation(); });
+  deleteBtn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    ev.preventDefault();
+    deleteNodeAndRerender(node.id);
+  });
+  card.appendChild(deleteBtn);
 
   // Inputs (top row)
   if (def.inputs && def.inputs.length > 0) {
@@ -305,6 +322,21 @@ function mountDragHandler(card: HTMLDivElement, node: Node): void {
 
 function snapToGrid(v: number): number {
   return Math.round(v / GRID_SNAP_PX) * GRID_SNAP_PX;
+}
+
+/**
+ * Remove a node from the live graph, re-render chips, and notify listeners
+ * so cables.ts drops any incident edges' DOM elements (removeNode already
+ * cascaded them out of the graph model).
+ *
+ * Deferred-commit: no codegen runs here. The compile happens on closeEditor().
+ */
+function deleteNodeAndRerender(nodeId: string): void {
+  if (activeGraph === null) return;
+  const removed = removeNode(activeGraph, nodeId);
+  if (!removed) return;
+  renderAllNodes();
+  emitGraphChanged();
 }
 
 /**
@@ -514,7 +546,19 @@ function attachKeyHandler(): void {
       e.preventDefault();
       e.stopPropagation();
       closeEditor();
+      return;
     }
+    // Delete / Backspace on a focused .ne-node deletes the node + its edges.
+    // Edge-selected deletion is owned by cables.ts in its own listener.
+    if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement)) return;
+    if (!active.classList.contains('ne-node')) return;
+    const nodeId = active.dataset['nodeId'];
+    if (nodeId === undefined) return;
+    e.preventDefault();
+    e.stopPropagation();
+    deleteNodeAndRerender(nodeId);
   };
   document.addEventListener('keydown', keyHandler, true);
 }

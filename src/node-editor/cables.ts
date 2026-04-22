@@ -301,7 +301,11 @@ export function initCables(
 
   /** Recompute every existing edge's `d` + × position against current DOM
    *  anchors. Called on node drag (`cableReflow`) and after graph mutations
-   *  that might have shifted endpoints. Cheap — no DOM churn. */
+   *  that might have shifted endpoints. Cheap — no DOM churn.
+   *
+   *  Also prunes orphaned SVG paths + × buttons whose edge was removed from
+   *  the graph (e.g. via node deletion cascading through removeNode). Without
+   *  this, deleted cables would remain visually until the panel re-rendered. */
   const reflowAllEdges = (): void => {
     const paths = edgesGroup.querySelectorAll<SVGPathElement>('.edge');
     const g = getGraph();
@@ -309,7 +313,14 @@ export function initCables(
       const edgeId = path.getAttribute('data-edge-id');
       if (edgeId === null) return;
       const edge = g?.edges.find(e => e.id === edgeId);
-      if (edge === undefined) return;
+      if (edge === undefined) {
+        // Graph no longer has this edge — drop the stale DOM bits.
+        const btn = findDeleteBtn(path);
+        if (btn !== null) btn.remove();
+        if (selectedEdgeEl === path) selectEdge(null);
+        path.remove();
+        return;
+      }
       const from = findPortEl(edge.from);
       const to   = findPortEl(edge.to);
       if (from === null || to === null) return;
