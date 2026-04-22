@@ -190,3 +190,50 @@
   border-color: var(--accent-amber);
   box-shadow: 0 0 8px var(--accent-amber);
 }
+
+/* ── Unit 12 — Cable connection animations ────────────────────
+   snap-pop:      300ms scale oscillation on a target port.
+   hue-fade:      600ms stroke copper → amber → copper.
+   particle trail: positioned via inline styles from JS.
+   All three collapse to no-ops / instant snaps when the user
+   has requested reduced motion.
+   ─────────────────────────────────────────────────────────── */
+
+@keyframes ne-snap-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.3); }
+  70%  { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+
+.ne-snap-pop {
+  animation: ne-snap-pop 300ms var(--ease-out-quart);
+  transform-origin: center center;
+  will-change: transform;
+}
+
+@keyframes ne-hue-fade {
+  0%   { stroke: var(--accent-copper); }
+  50%  { stroke: var(--accent-amber); }
+  100% { stroke: var(--accent-copper); }
+}
+
+.ne-hue-fade {
+  animation: ne-hue-fade 600ms var(--ease-out-quart);
+}
+
+.ne-particle-dot {
+  /* Positioned from JS; presentation-only rules live here. */
+  pointer-events: none;
+  will-change: opacity, transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ne-snap-pop,
+  .ne-hue-fade {
+    animation: none !important;
+  }
+  .ne-particle-dot {
+    display: none !important;
+  }
+}
