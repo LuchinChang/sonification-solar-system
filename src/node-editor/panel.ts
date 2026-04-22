@@ -248,22 +248,58 @@ function makePortEl(node: Node, port: PortSpec, direction: 'in' | 'out'): HTMLDi
   const row = document.createElement('div');
   row.className = `ne-port-row ne-port-row-${direction}`;
 
+  // Tooltip strings are informational only; codegen never reads these.
+  const displayLabel = port.label ?? port.id;
+  const rangeSuffix = (port.min != null && port.max != null)
+    ? ` (${port.min}–${port.max})`
+    : '';
+  const unitSuffix = port.unit ? ` in ${port.unit}` : '';
+  const shortTip   = `${displayLabel} — ${port.kind}${unitSuffix}${rangeSuffix}`;
+  const longTip    = port.description ? `${shortTip}\n${port.description}` : shortTip;
+
   const dot = document.createElement('div');
   dot.className = 'port';
   dot.dataset['nodeId']    = node.id;
   dot.dataset['portId']    = port.id;
   dot.dataset['direction'] = direction;
   dot.dataset['kind']      = port.kind;
-  dot.title                = `${port.label ?? port.id} (${port.kind})`;
+  dot.title                = longTip;
 
   const label = document.createElement('span');
   label.className = 'port-label';
-  label.textContent = `${port.label ?? port.id} : ${port.kind}`;
+  label.textContent = `${displayLabel} : ${port.kind}`;
+  label.title = longTip;
+
+  const indicator = document.createElement('span');
+  indicator.className = 'port-kind-indicator';
+  indicator.dataset['kind'] = port.kind;
+  indicator.textContent = kindGlyph(port.kind);
+  indicator.setAttribute('aria-hidden', 'true');
+  indicator.title = shortTip;
+
+  const help = document.createElement('span');
+  help.className = 'port-help';
+  help.textContent = '?';
+  help.setAttribute('aria-label', `About ${displayLabel}`);
+  help.title = longTip;
 
   // Output rows reverse via `flex-direction: row-reverse` in CSS, so the
-  // append order here stays (dot, label) for both directions.
-  row.append(dot, label);
+  // append order here works for both directions.
+  row.append(dot, indicator, label, help);
   return row;
+}
+
+/** Short single-glyph indicator per port kind. Keep in sync with styles.css. */
+function kindGlyph(kind: PortSpec['kind']): string {
+  switch (kind) {
+    case 'pattern': return '\u25C6'; // ◆
+    case 'signal':  return '~';
+    case 'trigger': return '!';
+    case 'string':  return 'A';
+    case 'any':     return '*';
+    case 'number':
+    default:        return '\u25CF'; // ●
+  }
 }
 
 /**

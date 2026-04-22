@@ -42,7 +42,11 @@ export const clusterToleranceDef: NodeDefinition = {
   type:  'data.cluster-tolerance',
   side:  'data',
   label: 'Cluster Tolerance',
-  outputs: [{ id: 'tolerance', label: 'tolerance', kind: 'number', continuous: true }],
+  outputs: [{
+    id: 'tolerance', label: 'tolerance', kind: 'number', continuous: true,
+    min: 0, max: 40, unit: 'px',
+    description: 'Proximity threshold used by the cluster detector (pixels). Larger values merge nearby intersections.',
+  }],
   codegen: (ctx: CodegenCtx, _params, _inbound: Edge[]): string =>
     signalFragment(`__sw_${ctx.sweeperId}_tol`),
 };
@@ -52,7 +56,11 @@ export const clusterCountDef: NodeDefinition = {
   type:  'data.cluster-count',
   side:  'data',
   label: 'Cluster Count',
-  outputs: [{ id: 'count', label: 'count', kind: 'number', continuous: true }],
+  outputs: [{
+    id: 'count', label: 'count', kind: 'number', continuous: true,
+    min: 0, max: 12, unit: 'clusters',
+    description: 'Live number of intersection clusters detected along the sweeper ray (0 when the ray is clear).',
+  }],
   codegen: (ctx: CodegenCtx, _params, _inbound: Edge[]): string =>
     signalFragment(`__sw_${ctx.sweeperId}_count`),
 };
@@ -64,7 +72,11 @@ export const distanceToSunDef: NodeDefinition = {
   type:  'data.distance-to-sun',
   side:  'data',
   label: 'Distance to Sun',
-  outputs: [{ id: 'distance', label: 'distance', kind: 'number', continuous: true }],
+  outputs: [{
+    id: 'distance', label: 'distance', kind: 'number', continuous: true,
+    min: 0, max: 500, unit: 'px',
+    description: 'Distance from the selected cluster centroid to the Sun, in pixels. Useful as a spatial driver for pitch / filter cutoff.',
+  }],
   defaultParams: { slot: 0 },
   codegen: (ctx: CodegenCtx, params, _inbound: Edge[]): string =>
     signalFragment(`__sw_${ctx.sweeperId}_dist_${readSlot(params)}`),
@@ -75,7 +87,11 @@ export const angleVarianceDef: NodeDefinition = {
   type:  'data.angle-variance',
   side:  'data',
   label: 'Angle Variance',
-  outputs: [{ id: 'variance', label: 'variance', kind: 'number', continuous: true }],
+  outputs: [{
+    id: 'variance', label: 'variance', kind: 'number', continuous: true,
+    min: 0, max: Math.PI, unit: 'rad',
+    description: 'Standard deviation of link-line angles inside the selected cluster (radians). High values indicate chaotic local geometry.',
+  }],
   defaultParams: { slot: 0 },
   codegen: (ctx: CodegenCtx, params, _inbound: Edge[]): string =>
     signalFragment(`__sw_${ctx.sweeperId}_angvar_${readSlot(params)}`),
