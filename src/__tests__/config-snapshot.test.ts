@@ -126,6 +126,14 @@ describe('ShapeConfig property coverage', () => {
     'sweepTicks',
     'sweepAudioRefTime',
     'sweepPhaseAtRef',
+    // Unit 10: per-mode arm-kinematic runtime state. The *mode selector*
+    // lives in the per-sweeper node graph (shape.graph.nodes[...].params),
+    // not on the shape — these fields are recomputed as the arm moves.
+    'playbackMode',
+    'sweepDirection',
+    'sweepPingPongAccum',
+    'springTargetAngle',
+    'springVelocity',
   ]);
 
   it('every CanvasShape property is in ShapeConfig or DERIVED_PROPS', () => {
