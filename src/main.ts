@@ -23,7 +23,7 @@ import {
 import './node-editor/nodes/sound-basic';     // side-effect register: pitch, freq-range, lpf, gain
 import './node-editor/nodes/sweeper';          // side-effect register: 4 sweeper-self nodes
 import { registerPlaybackModeNode } from './node-editor/nodes/playback';
-import { setSweeperResolver } from './node-editor/nodes/sweeper';
+import { setSweeperResolver, setSweeperGeometryRefresh } from './node-editor/nodes/sweeper';
 import { installQuantizeHelper } from './node-editor/codegen-helpers';
 
 // Expose __sw_quantizeNote on globalThis so generated Strudel code can call
@@ -49,6 +49,14 @@ setupEventHandlers(state, dom, tour);
 registerDataNodes();
 registerPlaybackModeNode();
 setSweeperResolver(id => state.shapes.find(s => s.id === id && s.type === 'sweeper') ?? null);
+// Unit 2 — sweeper.length slider mutates shape.size; derived clusters/ticks
+// must be rebuilt and the canvas repainted immediately. Mirrors the
+// startAngle wheel handler in controls.ts:648.
+setSweeperGeometryRefresh(sweeper => {
+  sweeper.rebuildSweepTicks(state.linkLines, state.orbitalMaxRadius);
+  drawScene(dom.ctx, state);
+  updateTelemetry(dom, state);
+});
 // Unit 2 — Shape-options sidebar. Houses sweeper-self + playback controls
 // that never participate in the cable graph (playback mode, arm length,
 // fineness, cluster count, generator). Opens/closes with the editor.

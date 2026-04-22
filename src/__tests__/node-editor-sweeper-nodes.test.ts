@@ -5,7 +5,9 @@
 // side / ports / defaultParams, that codegen returns '', and that the
 // fineness field on CanvasShape quantizes the playhead angle.
 
-import { beforeEach, describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 // Side-effect import registers the four sweeper-self nodes at load time.
 // Do NOT _resetRegistryForTests() in this file; the registrations only run
 // on first module evaluation.
@@ -13,6 +15,9 @@ import '../node-editor/nodes/sweeper';
 import { getNodeDef } from '../node-editor';
 import { CanvasShape, resetNextId } from '../shapes';
 import { MIN_SHAPE_SIZE, MAX_SHAPE_SIZE } from '../state';
+import { setSweeperResolver, setSweeperGeometryRefresh } from '../node-editor/nodes/sweeper';
+import { initNodeEditor, openEditor, closeEditor } from '../node-editor/panel';
+import type { Node } from '../node-editor/types';
 
 describe('sweeper-self node registrations', () => {
   const expected: Array<{
@@ -95,5 +100,60 @@ describe('CanvasShape.fineness quantizes the playhead angle', () => {
     // With no quantization the angle is the raw advance, not a round step.
     const expected = (17 / 1000) * Math.PI * 2;
     expect(s.playheadAngle).toBeCloseTo(expected, 9);
+  });
+});
+
+describe('sweeper.length slider triggers geometry refresh', () => {
+  beforeEach(() => {
+    resetNextId(0);
+    setSweeperGeometryRefresh(null);
+    setSweeperResolver(null);
+    closeEditor();
+  });
+
+  it('mutates sweeper.size AND invokes the geometry-refresh hook on input', () => {
+    const sweeper = new CanvasShape(0, 0, 'sweeper', 100);
+    const resolver = (id: number) => (id === sweeper.id ? sweeper : null);
+    initNodeEditor({ resolveSweeper: resolver });
+    setSweeperResolver(resolver);
+    const refresh = vi.fn();
+    setSweeperGeometryRefresh(refresh);
+    openEditor(sweeper.id);
+
+    const def = getNodeDef('sweeper.length')!;
+    const node: Node = {
+      id: 'n1', type: 'sweeper.length', side: 'sweeper',
+      x: 0, y: 0, params: { radius: sweeper.size },
+    };
+    const el = def.ui!(node, () => {});
+    const slider = el.querySelector('input[type="range"]') as HTMLInputElement;
+    expect(slider).not.toBeNull();
+
+    slider.value = '123';
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(sweeper.size).toBe(123);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledWith(sweeper);
+  });
+
+  it('does not throw when no geometry-refresh hook is registered', () => {
+    const sweeper = new CanvasShape(0, 0, 'sweeper', 100);
+    const resolver = (id: number) => (id === sweeper.id ? sweeper : null);
+    initNodeEditor({ resolveSweeper: resolver });
+    setSweeperResolver(resolver);
+    openEditor(sweeper.id);
+
+    const def = getNodeDef('sweeper.length')!;
+    const node: Node = {
+      id: 'n1', type: 'sweeper.length', side: 'sweeper',
+      x: 0, y: 0, params: { radius: sweeper.size },
+    };
+    const el = def.ui!(node, () => {});
+    const slider = el.querySelector('input[type="range"]') as HTMLInputElement;
+
+    slider.value = '77';
+    expect(() => slider.dispatchEvent(new Event('input', { bubbles: true }))).not.toThrow();
+    expect(sweeper.size).toBe(77);
   });
 });
