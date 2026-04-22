@@ -16,11 +16,16 @@
 // the single commit point. Unit 14 will slot its codegen call at the
 // marked hook below.
 
+import type { NodeGraphSnapshot } from '../config-snapshot';
 import type { CanvasShape } from '../shapes';
 import { initCables } from './cables';
-import { createGraph } from './graph';
+import { addEdge, addNode, createGraph } from './graph';
+import { getNodeDef } from './registry';
 import { mountToolbox, refreshToolbox } from './toolbox';
 import type { NodeGraph } from './types';
+// Side-effect import: registers the four sound-basic NodeDefinitions so the
+// default-graph seeding below can find them via getNodeDef().
+import './nodes/sound-basic';
 
 // ── Module state ─────────────────────────────────────────────────────────────
 
@@ -72,8 +77,17 @@ export function openEditor(sweeperId: number): void {
   }
 
   activeSweeperId = sweeperId;
-  // Phase 2+ will persist graphs per-sweeper; for Unit 4 we spin a fresh one.
-  activeGraph = createGraph(sweeperId);
+
+  // Unit 8: if the sweeper has no saved graph yet, seed the default wiring
+  // (distance → lpf, cluster-count → gain) that mirrors the pre-overhaul
+  // behaviour so audio never drops out when a sweeper first spawns.
+  //
+  // TODO(Unit 14): hydrate from `sweeper.graph` (NodeGraphSnapshot) when it is
+  // present, so saved scenes round-trip through the editor. For now we always
+  // seed a fresh default when we see no snapshot.
+  activeGraph = sweeper.graph === null
+    ? seedDefaultGraph(sweeperId)
+    : createGraph(sweeperId);
 
   const color = sweeper.sweepColor;
   refs.swatch.style.color          = color;
@@ -102,6 +116,17 @@ export function closeEditor(): void {
   refs.root.classList.add('hidden');
   refs.root.setAttribute('aria-hidden', 'true');
   refs.root.setAttribute('inert', '');
+
+  // Persist the in-memory graph back to sweeper.graph (Unit 5's
+  // NodeGraphSnapshot field) so subsequent opens reuse it and save/load
+  // carries it through. TODO(Unit 14): the snapshot conversion + codegen
+  // hook will both plug in here.
+  if (activeGraph !== null && activeSweeperId !== null && resolveSweeper !== null) {
+    const sweeper = resolveSweeper(activeSweeperId);
+    if (sweeper !== null) {
+      sweeper.graph = snapshotFromGraph(activeGraph);
+    }
+  }
 
   // TODO(Unit 14): compileGraphToStrudel(activeGraph) here.
   //   - Walk nodes in topological order.
@@ -268,4 +293,78 @@ function detachKeyHandler(): void {
 /** Test helper — true iff the panel root is currently visible. */
 export function isEditorOpen(): boolean {
   return refs !== null && !refs.root.classList.contains('hidden');
+}
+
+// ── Default-graph seeding (Unit 8) ───────────────────────────────────────────
+//
+// First-open default wiring that mirrors the pre-overhaul sweeper:
+//   data.distance-to-sun ──▶ sound.lpf
+//   data.cluster-count   ──▶ sound.gain
+//
+// Unit 6's data nodes may not be registered yet — we guard every lookup and
+// fall back to just the two sound nodes (with their defaultParams) so this
+// unit can land independently. Layout (x/y) is filled in by Units 11-13.
+//
+// TODO(Unit 6/14): spec says "cluster density" for gain; Unit 6 currently
+// exposes cluster-count as the closest density sensor. Revisit if Unit 6 ships
+// a dedicated density port.
+
+function tryWireDefaultEdge(
+  g: NodeGraph,
+  fromType: string,
+  fromPortId: string,
+  toNodeId: string,
+  toPortId: string,
+): void {
+  const fromDef = getNodeDef(fromType);
+  if (fromDef === undefined) return;
+  const fromNode = addNode(g, { type: fromType, side: 'data', x: 0, y: 0 });
+  const outPort = fromDef.outputs?.find(p => p.id === fromPortId) ?? fromDef.outputs?.[0];
+  if (outPort === undefined) return;
+  try {
+    addEdge(g, {
+      from: { nodeId: fromNode.id, portId: outPort.id, dir: 'out' },
+      to:   { nodeId: toNodeId,    portId: toPortId,   dir: 'in' },
+    });
+  } catch (err) {
+    // Port kinds incompatible — data node stays in the graph but unwired.
+    console.warn(`[node-editor] default ${fromType}→${toPortId} wiring skipped:`, err);
+  }
+}
+
+function seedDefaultGraph(sweeperId: number): NodeGraph {
+  const g = createGraph(sweeperId);
+  const lpf  = addNode(g, { type: 'sound.lpf',  side: 'sound', x: 0, y: 0 });
+  const gain = addNode(g, { type: 'sound.gain', side: 'sound', x: 0, y: 0 });
+  tryWireDefaultEdge(g, 'data.distance-to-sun', 'distance', lpf.id,  'frequency');
+  tryWireDefaultEdge(g, 'data.cluster-count',   'count',    gain.id, 'amp');
+  return g;
+}
+
+/**
+ * Serialize a live NodeGraph to the on-disk NodeGraphSnapshot shape. Minimal
+ * projection that preserves identity + params + edge port endpoints.
+ * TODO(Unit 14): align this with the richer snapshot format once codegen
+ * finalises which fields round-trip.
+ */
+function snapshotFromGraph(g: NodeGraph): NodeGraphSnapshot {
+  return {
+    nodes: g.nodes.map(n => ({
+      id:      n.id,
+      defType: n.type,
+      x:       n.x,
+      y:       n.y,
+      params:  { ...n.params },
+    })),
+    edges: g.edges.map(e => ({
+      id:       e.id,
+      fromPort: `${e.from.nodeId}:${e.from.portId}`,
+      toPort:   `${e.to.nodeId}:${e.to.portId}`,
+    })),
+  };
+}
+
+/** Test-only: expose the default-graph seeder so the test file can drive it. */
+export function _seedDefaultGraphForTests(sweeperId: number): NodeGraph {
+  return seedDefaultGraph(sweeperId);
 }
