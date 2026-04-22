@@ -138,21 +138,19 @@ afterEach(() => {
 // ── Geometry ─────────────────────────────────────────────────────────────────
 
 describe('pathForEndpoints', () => {
-  it('produces a well-formed M … Q … path', () => {
+  it('produces a straight M … L … path', () => {
     const d = pathForEndpoints(0, 0, 100, 0);
-    expect(d).toMatch(/^M 0\.00 0\.00 Q [-\d.]+ [-\d.]+ 100\.00 0\.00$/);
+    expect(d).toBe('M 0.00 0.00 L 100.00 0.00');
   });
 
-  it('clamps control-point offset to 40..80 px', () => {
-    // Zero-length: nearest degenerate direction; still produces a path.
+  it('handles degenerate and long segments without curvature', () => {
+    // Zero-length: collapses to a point but still produces a valid path.
     const dZero = pathForEndpoints(50, 50, 50, 50);
-    expect(dZero.startsWith('M 50.00 50.00')).toBe(true);
-    // Very long: cap at 80.
+    expect(dZero).toBe('M 50.00 50.00 L 50.00 50.00');
+    // Very long: endpoints preserved exactly, no Bézier control terms.
     const dLong = pathForEndpoints(0, 0, 10000, 0);
-    // Control-point y should be exactly perpendicular offset = 80.
-    const m = dLong.match(/Q ([-\d.]+) ([-\d.]+)/);
-    expect(m).not.toBeNull();
-    expect(Number(m![2])).toBeCloseTo(80, 5);
+    expect(dLong).toBe('M 0.00 0.00 L 10000.00 0.00');
+    expect(dLong).not.toContain('Q');
   });
 });
 
