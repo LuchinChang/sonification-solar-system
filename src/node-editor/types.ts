@@ -2,10 +2,14 @@
 //
 // Core type definitions for the sweeper node-editor.
 //
-// Phase 2+ units will register concrete NodeDefinitions via `registerNodeDef`
-// (see registry.ts). The graph itself is plain data — no behaviour — so it
-// serialises cleanly and is easy to diff. Codegen (Unit 14) walks the graph
-// using the inbound-edge list + each node's `codegen()` fn.
+// Pre-baked codegen (round 1 bug-fix): data-side chips declare a
+// `perTickValue(shape, arm, tick, slot, maxR) -> 0..1` that the codegen
+// driver calls to build a shared `SweepStack`. Sound-side chips receive the
+// resolved stack via `CodegenCtx.resolveInboundStack`, apply their own
+// curve/range transform, and emit a static Strudel pattern string (e.g.
+// `.freq("100 141 200 …")`). No live signal(() => globalThis.__sw_…) reads.
+
+import type { CanvasShape } from '../shapes';
 
 // ── Side: which column a node lives in inside the editor ─────────────────────
 
@@ -31,12 +35,12 @@ export interface PortSpec {
   /** Optional: hints that codegen can treat this as a hot signal vs snapshot. */
   continuous?: boolean;
 
-  // ── Informational metadata (Unit 7) ──────────────────────────────────────
+  // ── Informational metadata ───────────────────────────────────────────────
   //
   // Purely documentary for tooltips / indicators. These fields do NOT affect
-  // codegen — connections still pass raw values through. Runtime range-mapping
-  // (scaling data ranges into sound-port ranges) is a planned follow-up and
-  // should be implemented around `signalRefFromEdge` in codegen-helpers.ts.
+  // codegen. In the pre-baked pipeline, range-mapping is owned by each
+  // sound chip's `codegen` via the `bakePattern(stack, min, max, curve)`
+  // helper — this metadata only shapes the hover/tooltip UI.
   /** Lower end of the port's expected numeric range. */
   min?: number;
   /** Upper end of the port's expected numeric range. */
@@ -84,7 +88,16 @@ export interface NodeGraph {
   edges:    Edge[];
 }
 
-// ── Codegen context, handed to NodeDefinition.codegen() by Unit 14 ──────────
+// ── Sweep stack: baked 0..1 values, one per (arm, tick) slot ─────────────────
+//
+// Length = `shape.sweepCount * shape.ticks`. Index `arm * shape.ticks + tick`.
+// Produced by the codegen driver by calling a data-chip's `perTickValue` over
+// every (arm, tick) coordinate. Shared across sound chips: if two sound chips
+// are wired to the same data chip, they read the same stack (computed once).
+
+export type SweepStack = number[];
+
+// ── Codegen context, handed to NodeDefinition.codegen() ─────────────────────
 
 export interface CodegenCtx {
   sweeperId: number;
@@ -94,6 +107,13 @@ export interface CodegenCtx {
   incoming(nodeId: string, portId: string): Edge[];
   /** Read a node's params (typed by the caller). */
   paramsOf<T = Record<string, unknown>>(nodeId: string): T;
+  /**
+   * Resolve the first inbound edge on (nodeId, portId) to its baked 0..1
+   * stack. Returns null if the port is unwired or the source chip has no
+   * `perTickValue` implementation. Sound chips call this to get their
+   * input values without caring where they came from.
+   */
+  resolveInboundStack(nodeId: string, portId: string): SweepStack | null;
 }
 
 // ── NodeDefinition: registry entry ───────────────────────────────────────────
@@ -122,4 +142,22 @@ export interface NodeDefinition {
    * (sliders, enum pickers…). Phase 2 will populate this.
    */
   ui?: (node: Node, onChange: (patch: Partial<Node>) => void) => HTMLElement;
+
+  /**
+   * Data-side only: compute a 0..1 value at a given (arm, tick, slot)
+   * coordinate. The codegen driver calls this over every (arm, tick) to
+   * produce a `SweepStack`. Missing data (e.g. slot out of range) should
+   * return 0. Values MUST be in `[0, 1]` — sound chips rely on that
+   * invariant when applying their own min/max transform.
+   *
+   * `slot` is the intra-tick cluster index (`0..shape.k-1`); chips that
+   * don't have per-cluster state (e.g. cluster-count, tolerance) ignore it.
+   */
+  perTickValue?: (
+    shape: CanvasShape,
+    arm:   number,
+    tick:  number,
+    slot:  number,
+    maxR:  number,
+  ) => number;
 }

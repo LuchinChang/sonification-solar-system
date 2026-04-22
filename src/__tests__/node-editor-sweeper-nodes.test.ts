@@ -51,6 +51,7 @@ describe('sweeper-self node registrations', () => {
         nodeVar: (s: string) => s,
         incoming: () => [],
         paramsOf: <T>() => ({} as T),
+        resolveInboundStack: () => null,
       };
       expect(def!.codegen(ctx, e.defaultParams, [])).toBe('');
     });

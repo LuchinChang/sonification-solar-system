@@ -124,6 +124,7 @@ describe('ShapeConfig property coverage', () => {
     'intersectionCount',
     'sweepClusters',
     'sweepTicks',
+    'sweepMaxR',
     'sweepAudioRefTime',
     'sweepPhaseAtRef',
     // Unit 10: per-mode arm-kinematic runtime state. The *mode selector*

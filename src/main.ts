@@ -5,7 +5,7 @@
 
 import './style.css';
 import { getAudioContext } from '@strudel/webaudio';
-import { createInitialState } from './state';
+import { createInitialState, sweeperMaxR } from './state';
 import { resolveDomElements } from './dom';
 import { initDust } from './renderer';
 import { drawScene } from './renderer';
@@ -53,7 +53,7 @@ setSweeperResolver(id => state.shapes.find(s => s.id === id && s.type === 'sweep
 // must be rebuilt and the canvas repainted immediately. Mirrors the
 // startAngle wheel handler in controls.ts:648.
 setSweeperGeometryRefresh(sweeper => {
-  sweeper.rebuildSweepTicks(state.linkLines, state.orbitalMaxRadius);
+  sweeper.rebuildSweepTicks(state.linkLines, sweeperMaxR(sweeper, state));
   drawScene(dom.ctx, state);
   updateTelemetry(dom, state);
 });
@@ -154,7 +154,7 @@ function animate(now: number): void {
         console.debug('[audio] AC clock fallback:', e);
         shape.stepPlayhead(dt, state.cpm);
       }
-      shape.computeSweepClusters(state.linkLines, state.orbitalMaxRadius);
+      shape.computeSweepClusters(state.linkLines, sweeperMaxR(shape, state));
       // LEGACY: disabled 2026-04-21 — non-sweeper rAF branch (stepPlayhead +
       // checkAndFireCollisions + triggerAt + stepAnimations + telem flash).
       // Sweepers do not produce angle-crossing events; they use cluster signals.

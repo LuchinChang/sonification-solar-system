@@ -1,15 +1,13 @@
 // src/__tests__/node-editor-data-nodes.test.ts
 //
-// Unit 6 — data-side sensor node coverage.
+// Data-side sensor nodes — new 0..1 `perTickValue` contract.
 //
-// Verifies that:
+// Verifies:
 //   1. All four NodeDefinitions register correctly on the 'data' side.
-//   2. Each node's codegen() returns the canonical
-//      `signal(() => globalThis.__sw_<id>_<name>)` fragment.
-//   3. CanvasShape.computeSweepClusters() publishes live values onto
-//      globalThis for the sweeper (tol / count / dist_i / angvar_i), with
-//      empty slots zeroed up to shape.k.
-//   4. SweepCluster exposes a finite angleVariance field.
+//   2. `codegen()` returns the empty string (data chips never emit chain
+//      fragments; their values are baked into sound chips via SweepStack).
+//   3. `perTickValue(shape, arm, tick, slot, maxR)` returns a value in [0, 1]
+//      across synthetic shape states. Missing slot → 0. maxR <= 0 → 0.
 
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -18,23 +16,12 @@ import {
   getNodeDef,
   registerDataNodes,
 } from '../node-editor';
-import type { CodegenCtx } from '../node-editor';
 import { _resetRegistryForTests } from '../node-editor/registry';
 import { CanvasShape } from '../shapes';
 import { angleStdev } from '../geometry';
 import type { Point } from '../geometry';
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
-
-/** Minimal CodegenCtx stub — data nodes only read `sweeperId`. */
-function makeCtx(sweeperId: number): CodegenCtx {
-  return {
-    sweeperId,
-    nodeVar:   (nodeId: string) => `sw_${sweeperId}_${nodeId}`,
-    incoming:  () => [],
-    paramsOf:  <T = Record<string, unknown>>() => ({} as T),
-  };
-}
 
 function makeCrossLines(cx: number, cy: number, radius: number): { p1: Point; p2: Point }[] {
   return [0, Math.PI / 4, Math.PI / 2, (3 * Math.PI) / 4].map(angle => ({
@@ -68,7 +55,7 @@ describe('data-node registration', () => {
     ]);
   });
 
-  it('each def declares a single number output and no inputs', () => {
+  it('each def declares a single number output, no inputs, and perTickValue', () => {
     for (const type of [
       'data.cluster-tolerance',
       'data.cluster-count',
@@ -80,99 +67,103 @@ describe('data-node registration', () => {
       expect(def.inputs ?? []).toEqual([]);
       expect(def.outputs).toHaveLength(1);
       expect(def.outputs![0].kind).toBe('number');
+      expect(typeof def.perTickValue).toBe('function');
+      expect(def.codegen(
+        // dummy ctx — codegen returns '' so fields go unused.
+        {
+          sweeperId: 0,
+          nodeVar: () => '',
+          incoming: () => [],
+          paramsOf: <T>() => ({} as T),
+          resolveInboundStack: () => null,
+        },
+        {},
+        [],
+      )).toBe('');
     }
   });
 });
 
-// ── Codegen fragments ────────────────────────────────────────────────────────
+// ── perTickValue: 0..1 contract ──────────────────────────────────────────────
 
-describe('data-node codegen', () => {
-  it('cluster-tolerance → __sw_<id>_tol', () => {
+describe('data-node perTickValue — 0..1 contract', () => {
+  function buildSweeper(k: number): CanvasShape {
+    const s = new CanvasShape(0, 0, 'sweeper', 400);
+    s.k = k;
+    s.ticks = 60;
+    s.rebuildSweepTicks(makeCrossLines(0, 0, 100), 315);
+    return s;
+  }
+
+  it('cluster-tolerance is a constant 0..1 value (threshold 2 / 40 ≈ 0.05)', () => {
     const def = getNodeDef('data.cluster-tolerance')!;
-    expect(def.codegen(makeCtx(7), {}, [])).toBe(
-      'signal(() => globalThis.__sw_7_tol)',
-    );
+    const v = def.perTickValue!(buildSweeper(4), 0, 0, 0, 315);
+    expect(v).toBeGreaterThanOrEqual(0);
+    expect(v).toBeLessThanOrEqual(1);
+    expect(v).toBeCloseTo(2 / 40, 6);
   });
 
-  it('cluster-count → __sw_<id>_count', () => {
+  it('cluster-count normalizes by shape.k', () => {
     const def = getNodeDef('data.cluster-count')!;
-    expect(def.codegen(makeCtx(3), {}, [])).toBe(
-      'signal(() => globalThis.__sw_3_count)',
-    );
+    const s   = buildSweeper(4);
+    for (let arm = 0; arm < s.sweepCount; arm++) {
+      for (let t = 0; t < s.ticks; t++) {
+        const v = def.perTickValue!(s, arm, t, 0, 315);
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThanOrEqual(1);
+      }
+    }
   });
 
-  it('distance-to-sun picks slot from params (default 0)', () => {
+  it('distance-to-sun normalizes by maxR and clamps to [0, 1]', () => {
     const def = getNodeDef('data.distance-to-sun')!;
-    expect(def.codegen(makeCtx(2), {}, [])).toBe(
-      'signal(() => globalThis.__sw_2_dist_0)',
-    );
-    expect(def.codegen(makeCtx(2), { slot: 3 }, [])).toBe(
-      'signal(() => globalThis.__sw_2_dist_3)',
-    );
+    const s   = buildSweeper(4);
+    const maxR = s.sweepMaxR;
+    expect(maxR).toBeGreaterThan(0);
+    for (let arm = 0; arm < s.sweepCount; arm++) {
+      for (let t = 0; t < s.ticks; t++) {
+        const v = def.perTickValue!(s, arm, t, 0, maxR);
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThanOrEqual(1);
+      }
+    }
   });
 
-  it('angle-variance picks slot from params (default 0)', () => {
+  it('distance-to-sun returns 0 when the slot is out of range', () => {
+    const def = getNodeDef('data.distance-to-sun')!;
+    const s   = buildSweeper(1);
+    const v   = def.perTickValue!(s, 0, 0, /* out-of-range slot */ 99, s.sweepMaxR);
+    expect(v).toBe(0);
+  });
+
+  it('distance-to-sun returns 0 when maxR <= 0 (defensive)', () => {
+    const def = getNodeDef('data.distance-to-sun')!;
+    const s   = buildSweeper(4);
+    expect(def.perTickValue!(s, 0, 0, 0, 0)).toBe(0);
+    expect(def.perTickValue!(s, 0, 0, 0, -5)).toBe(0);
+  });
+
+  it('angle-variance normalizes by π and stays within [0, 1]', () => {
     const def = getNodeDef('data.angle-variance')!;
-    expect(def.codegen(makeCtx(5), {}, [])).toBe(
-      'signal(() => globalThis.__sw_5_angvar_0)',
-    );
-    expect(def.codegen(makeCtx(5), { slot: 2 }, [])).toBe(
-      'signal(() => globalThis.__sw_5_angvar_2)',
-    );
+    const s   = buildSweeper(4);
+    for (let arm = 0; arm < s.sweepCount; arm++) {
+      for (let t = 0; t < s.ticks; t++) {
+        const v = def.perTickValue!(s, arm, t, 0, s.sweepMaxR);
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThanOrEqual(1);
+      }
+    }
   });
 
-  it('slot param is coerced safely for bad inputs', () => {
-    const def = getNodeDef('data.distance-to-sun')!;
-    expect(def.codegen(makeCtx(1), { slot: -4 },       [])).toContain('_dist_0');
-    expect(def.codegen(makeCtx(1), { slot: 2.7 },      [])).toContain('_dist_2');
-    expect(def.codegen(makeCtx(1), { slot: 'oops' },   [])).toContain('_dist_0');
+  it('angle-variance returns 0 for missing slot', () => {
+    const def = getNodeDef('data.angle-variance')!;
+    const s   = buildSweeper(1);
+    const v   = def.perTickValue!(s, 0, 0, 99, s.sweepMaxR);
+    expect(v).toBe(0);
   });
 });
 
-// ── Live global publication (shapes.ts wiring) ───────────────────────────────
-
-describe('CanvasShape sensor globals', () => {
-  it('publishes tol + count + per-slot dist/angvar every frame', () => {
-    const s = new CanvasShape(0, 0, 'sweeper', 400);
-    s.k = 3;
-    s.computeSweepClusters(makeCrossLines(0, 0, 100), 315);
-
-    const g = globalThis as unknown as Record<string, number>;
-    expect(g[`__sw_${s.id}_tol`]).toBe(2);
-    expect(g[`__sw_${s.id}_count`]).toBe(s.sweepClusters.length);
-
-    for (let i = 0; i < s.k; i++) {
-      expect(typeof g[`__sw_${s.id}_dist_${i}`]).toBe('number');
-      expect(typeof g[`__sw_${s.id}_angvar_${i}`]).toBe('number');
-    }
-  });
-
-  it('zeroes slots with no live cluster', () => {
-    const s = new CanvasShape(0, 0, 'sweeper', 400);
-    s.k = 8; // way more slots than the 4 cross-lines can fill
-    s.computeSweepClusters(makeCrossLines(0, 0, 100), 315);
-
-    const g = globalThis as unknown as Record<string, number>;
-    const filled = s.sweepClusters.length;
-    for (let i = filled; i < s.k; i++) {
-      expect(g[`__sw_${s.id}_dist_${i}`]).toBe(0);
-      expect(g[`__sw_${s.id}_angvar_${i}`]).toBe(0);
-    }
-  });
-
-  it('each cluster exposes a finite, non-negative angleVariance', () => {
-    const s = new CanvasShape(0, 0, 'sweeper', 400);
-    s.k = 4;
-    s.computeSweepClusters(makeCrossLines(0, 0, 100), 315);
-
-    for (const c of s.sweepClusters) {
-      expect(Number.isFinite(c.angleVariance)).toBe(true);
-      expect(c.angleVariance).toBeGreaterThanOrEqual(0);
-    }
-  });
-});
-
-// ── geometry.angleStdev unit tests ───────────────────────────────────────────
+// ── geometry.angleStdev unit tests (unchanged) ──────────────────────────────
 
 describe('angleStdev', () => {
   it('returns 0 for empty or single-element input', () => {
@@ -181,7 +172,6 @@ describe('angleStdev', () => {
   });
 
   it('returns 0 for a set of parallel (direction-flipped) lines', () => {
-    // A line with direction θ and one with θ+π are the same line.
     expect(angleStdev([0.3, 0.3 + Math.PI])).toBeCloseTo(0, 6);
   });
 

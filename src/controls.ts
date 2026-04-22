@@ -13,7 +13,7 @@ import {
   // MIN_SHAPE_SIZE,
   MAX_SHAPE_SIZE,
   KNOB_SENSITIVITY, CPM_SENSITIVITY, DRAG_THRESHOLD,
-  sunPos,
+  sunPos, sweeperMaxR,
 } from './state';
 import type { DomElements } from './dom';
 import type { TourController } from './tour';
@@ -87,7 +87,7 @@ export function calculateLines(state: AppState, canvas: HTMLCanvasElement): void
 export function rebuildAllCaches(state: AppState): void {
   for (const s of state.shapes) {
     s.rebuildIntersectionCache(state.linkLines);
-    if (s.type === 'sweeper') s.rebuildSweepTicks(state.linkLines, state.orbitalMaxRadius);
+    if (s.type === 'sweeper') s.rebuildSweepTicks(state.linkLines, sweeperMaxR(s, state));
   }
 }
 
@@ -108,7 +108,7 @@ export function spawnShape(
   }
   state.shapes.push(s);
   s.rebuildIntersectionCache(state.linkLines);
-  if (s.type === 'sweeper') s.rebuildSweepTicks(state.linkLines, state.orbitalMaxRadius);
+  if (s.type === 'sweeper') s.rebuildSweepTicks(state.linkLines, sweeperMaxR(s, state));
   setActiveShape(state, s);
   updateTelemetry(dom, state);
   if (state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value, false);
@@ -486,7 +486,7 @@ function restoreFromSnapshot(state: AppState, dom: DomElements, snap: ConfigSnap
   for (const cfg of snap.shapes) {
     const s = CanvasShape.fromConfig(cfg);
     s.rebuildIntersectionCache(state.linkLines);
-    if (s.type === 'sweeper') s.rebuildSweepTicks(state.linkLines, state.orbitalMaxRadius);
+    if (s.type === 'sweeper') s.rebuildSweepTicks(state.linkLines, sweeperMaxR(s, state));
     state.shapes.push(s);
     if (s.id > maxId) maxId = s.id;
   }
@@ -703,7 +703,7 @@ export function setupEventHandlers(
         const step  = Math.PI / 180;
         const delta = up ? -step : step;
         state.activeShape.startAngle = ((state.activeShape.startAngle + delta) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
-        state.activeShape.rebuildSweepTicks(state.linkLines, state.orbitalMaxRadius);
+        state.activeShape.rebuildSweepTicks(state.linkLines, sweeperMaxR(state.activeShape, state));
         drawScene(dom.ctx, state);
         updateTelemetry(dom, state);
         if (state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value);

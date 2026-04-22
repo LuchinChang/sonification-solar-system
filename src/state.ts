@@ -221,3 +221,13 @@ export function createInitialState(): AppState {
 export function sunPos(canvas: HTMLCanvasElement): { x: number; y: number } {
   return { x: canvas.width / 2, y: canvas.height / 2 };
 }
+
+/**
+ * Effective ray-search radius for a sweeper. The visible arm is drawn at
+ * `shape.size` by the renderer; matching ray-search to it prevents phantom
+ * clusters beyond the tip. `orbitalMaxRadius` stays as an upper bound so
+ * an oversized arm can't walk past the outer orbit.
+ */
+export function sweeperMaxR(shape: CanvasShape, state: AppState): number {
+  return Math.min(shape.size, state.orbitalMaxRadius);
+}

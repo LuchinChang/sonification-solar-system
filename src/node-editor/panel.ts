@@ -649,17 +649,19 @@ function tryWireDefaultEdge(
 
 function seedDefaultGraph(sweeperId: number): NodeGraph {
   const g = createGraph(sweeperId);
-  // Gracefully skip missing defs: tests that reset the registry can still
-  // exercise openEditor/closeEditor without re-registering the full sound-basic
-  // suite. Production code imports './nodes/sound-basic' side-effect at module
-  // load, so the defs are always present there.
-  const lpf  = getNodeDef('sound.lpf')
-    ? addNode(g, { type: 'sound.lpf',  side: 'sound', x: 0, y: 0 })
+  // Default behaviour users see on first open:
+  //   data.distance-to-sun  → sound.frequency (exp 100..1000 Hz)
+  //   data.cluster-count    → sound.gain      (quadratic 0..1)
+  // Since the NodeGraph is the single source of truth for both the editor
+  // view AND the Strudel code, this default is reflected consistently in
+  // the panel and the running pattern.
+  const freq = getNodeDef('sound.frequency')
+    ? addNode(g, { type: 'sound.frequency', side: 'sound', x: 0, y: 0 })
     : null;
   const gain = getNodeDef('sound.gain')
-    ? addNode(g, { type: 'sound.gain', side: 'sound', x: 0, y: 0 })
+    ? addNode(g, { type: 'sound.gain',      side: 'sound', x: 0, y: 0 })
     : null;
-  if (lpf)  tryWireDefaultEdge(g, 'data.distance-to-sun', 'distance', lpf.id,  'frequency');
+  if (freq) tryWireDefaultEdge(g, 'data.distance-to-sun', 'distance', freq.id, 'frequency');
   if (gain) tryWireDefaultEdge(g, 'data.cluster-count',   'count',    gain.id, 'amp');
   return g;
 }

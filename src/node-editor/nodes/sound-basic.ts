@@ -1,32 +1,26 @@
 // src/node-editor/nodes/sound-basic.ts
 //
-// Unit 8 — Sound-side basic NodeDefinitions.
+// Sound-side nodes — pitch, frequency, LPF, gain.
 //
-// Deferred-commit: codegen() only runs when the editor panel closes. If an
-// input port has an inbound edge, we emit a live Strudel
-// `signal(() => globalThis.__sw_<sweeperId>_<outPortId>)` reference. Data-side
-// nodes (Unit 6) write those globals each rAF frame — see MEMORY.md and the
-// sweeper architecture notes in src/shapes.ts. If unwired, the node's static
-// default param is inlined so the patch stays valid.
+// Pre-baked codegen: each node reads its inbound 0..1 `SweepStack` via
+// `ctx.resolveInboundStack`, applies its own curve + range transform, and
+// emits a static Strudel pattern (e.g. `.freq("100 141 200 …")`). When
+// unwired, the chip emits a scalar using its slider params.
+//
+// Each chip ships a `ui()` that renders two `buildSliderRow` controls for
+// min/max, reusing the sidebar slider chrome so the look matches
+// Cluster-Count / Fineness / Arm-Length exactly.
 
+import { bakePattern, mapValue } from '../codegen';
+import { quantizeNote } from '../codegen-helpers';
 import { registerNodeDef } from '../registry';
-import { signalRefRaw } from '../codegen';
-import type { Edge, NodeDefinition } from '../types';
+import type { NodeDefinition, Node } from '../types';
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Param helpers ────────────────────────────────────────────────────────────
 
-/** First wire wins; multi-wire semantics are a Unit 14 concern. */
-function signalRefFromEdge(sweeperId: number, inbound: Edge[]): string | null {
-  if (inbound.length === 0) return null;
-  const edge = inbound[0]!;
-  return `signal(() => globalThis.__sw_${sweeperId}_${edge.from.portId})`;
-}
-
-/** Raw global ref — no signal() wrapper. For nodes that re-wrap the value. */
-function rawRefFromEdge(sweeperId: number, inbound: Edge[]): string | null {
-  if (inbound.length === 0) return null;
-  const edge = inbound[0]!;
-  return signalRefRaw(sweeperId, edge.from.portId);
+function paramNumber(params: Record<string, unknown>, key: string, fallback: number): number {
+  const v = params[key];
+  return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 }
 
 function paramString(params: Record<string, unknown>, key: string, fallback: string): string {
@@ -34,68 +28,167 @@ function paramString(params: Record<string, unknown>, key: string, fallback: str
   return typeof v === 'string' ? v : fallback;
 }
 
-function paramNumber(params: Record<string, unknown>, key: string, fallback: number): number {
-  const v = params[key];
-  return typeof v === 'number' ? v : fallback;
+// ── Slider chrome (matches sidebar.ts / nodes/sweeper.ts styling) ───────────
+
+const UI_FONT_MONO = 'var(--font-mono)';
+
+function containerEl(): HTMLDivElement {
+  const box = document.createElement('div');
+  box.style.display       = 'flex';
+  box.style.flexDirection = 'column';
+  box.style.gap           = '4px';
+  box.style.minWidth      = '180px';
+  return box;
 }
 
-// Available root note options in the pitch UI. Keep these in sync with the
-// quantize helper's accepted input format (`<name><octave>`, lowercase).
-const PITCH_ROOT_OPTIONS: ReadonlyArray<string> = ['c3', 'c4', 'd4', 'e4', 'f4', 'g4', 'a4', 'b4', 'c5'];
+function buildSliderRow(opts: {
+  label:   string;
+  min:     number;
+  max:     number;
+  step:    number;
+  value:   number;
+  format?: (v: number) => string;
+}): { row: HTMLDivElement; slider: HTMLInputElement; readout: HTMLSpanElement } {
+  const format = opts.format ?? ((v: number): string => v.toFixed(2));
 
-/** Span presets for chromatic quantization. */
-const PITCH_SPAN_OPTIONS: ReadonlyArray<{ value: number; label: string }> = [
-  { value:  7, label: '7 (diatonic)' },
-  { value: 12, label: '12 (chromatic)' },
-  { value: 24, label: '24 (2 octaves)' },
-];
+  const row = document.createElement('div');
+  row.style.display    = 'flex';
+  row.style.alignItems = 'center';
+  row.style.gap        = '6px';
+  row.style.padding    = '3px 4px';
 
-/** Build a <select> populated with the given options. */
-function buildSelect(
-  options: ReadonlyArray<{ value: string; label: string }>,
-  initial: string,
-): HTMLSelectElement {
-  const el = document.createElement('select');
-  for (const opt of options) {
-    const o = document.createElement('option');
-    o.value       = opt.value;
-    o.textContent = opt.label;
-    el.appendChild(o);
-  }
-  el.value = initial;
-  return el;
+  const label = document.createElement('span');
+  label.textContent     = opts.label;
+  label.style.fontFamily = UI_FONT_MONO;
+  label.style.fontSize   = '10px';
+  label.style.color      = 'var(--text-muted, var(--text-primary))';
+  label.style.minWidth   = '28px';
+
+  const slider = document.createElement('input');
+  slider.type       = 'range';
+  slider.min        = String(opts.min);
+  slider.max        = String(opts.max);
+  slider.step       = String(opts.step);
+  slider.value      = String(opts.value);
+  slider.style.flex = '1';
+
+  const readout = document.createElement('span');
+  readout.textContent    = format(opts.value);
+  readout.style.fontFamily = UI_FONT_MONO;
+  readout.style.fontSize   = '11px';
+  readout.style.color      = 'var(--text-primary)';
+  readout.style.marginLeft = 'auto';
+
+  row.append(label, slider, readout);
+  return { row, slider, readout };
+}
+
+/**
+ * Build a "min/max" pair of sliders for a sound chip's range. Wires both
+ * sliders' input events to update `node.params.min`/`node.params.max`
+ * through `onChange`.
+ */
+function buildRangeUi(
+  node: Node,
+  onChange: (patch: Partial<Node>) => void,
+  cfg: {
+    sliderMin: number;
+    sliderMax: number;
+    step:      number;
+    unit:      string;
+    format?:   (v: number) => string;
+  },
+): HTMLElement {
+  const root = containerEl();
+  const initMin = paramNumber(node.params, 'min', cfg.sliderMin);
+  const initMax = paramNumber(node.params, 'max', cfg.sliderMax);
+
+  const minCtl = buildSliderRow({
+    label: `min`,
+    min: cfg.sliderMin, max: cfg.sliderMax, step: cfg.step,
+    value: initMin,
+    format: cfg.format,
+  });
+  const maxCtl = buildSliderRow({
+    label: `max`,
+    min: cfg.sliderMin, max: cfg.sliderMax, step: cfg.step,
+    value: initMax,
+    format: cfg.format,
+  });
+
+  const unitLabel = document.createElement('div');
+  unitLabel.textContent   = cfg.unit;
+  unitLabel.style.fontFamily = UI_FONT_MONO;
+  unitLabel.style.fontSize   = '10px';
+  unitLabel.style.color      = 'var(--text-muted, var(--text-primary))';
+  unitLabel.style.textAlign  = 'right';
+  unitLabel.style.opacity    = '0.6';
+
+  minCtl.slider.addEventListener('input', () => {
+    const next = parseFloat(minCtl.slider.value);
+    if (!Number.isFinite(next)) return;
+    minCtl.readout.textContent = (cfg.format ?? (v => v.toFixed(2)))(next);
+    onChange({ params: { ...node.params, min: next } });
+  });
+  maxCtl.slider.addEventListener('input', () => {
+    const next = parseFloat(maxCtl.slider.value);
+    if (!Number.isFinite(next)) return;
+    maxCtl.readout.textContent = (cfg.format ?? (v => v.toFixed(2)))(next);
+    onChange({ params: { ...node.params, max: next } });
+  });
+
+  root.append(minCtl.row, maxCtl.row, unitLabel);
+  return root;
 }
 
 // ── 1. sound.pitch ───────────────────────────────────────────────────────────
+//
+// Pitch is an outlier in the pre-baked model: it maps 0..1 onto a quantized
+// chromatic scale of note names ("c4", "e4", …). We bake the note strings
+// per tick rather than numeric frequencies.
+
+const PITCH_ROOT_OPTIONS = ['c3', 'c4', 'd4', 'e4', 'f4', 'g4', 'a4', 'b4', 'c5'] as const;
+const PITCH_SPAN_OPTIONS = [
+  { value:  7, label: '7 (diatonic)' },
+  { value: 12, label: '12 (chromatic)' },
+  { value: 24, label: '24 (2 octaves)' },
+] as const;
 
 export const soundPitchDef: NodeDefinition = {
   type:  'sound.pitch',
   side:  'sound',
   label: 'Pitch',
   inputs: [{
-    id: 'note', label: 'note', kind: 'pattern',
-    description: 'Strudel pitch pattern (e.g. "c4 e4 g4"). When a signal is wired, it is quantised to the selected chromatic scale via the root + span params.',
+    id: 'note', label: 'note', kind: 'number',
+    description: 'Quantized chromatic pitch. Wired 0..1 signal maps across `span` semitones above `root`.',
   }],
-  // `note`  → literal Strudel pattern used when the port is unwired.
-  // `root`  → root note of the chromatic scale used when a signal IS wired.
-  // `span`  → number of semitones that map across the 0–1 input range.
   defaultParams: { note: 'c4', root: 'c4', span: 12 },
 
   codegen(ctx, params, inbound) {
-    const raw = rawRefFromEdge(ctx.sweeperId, inbound);
-    if (raw !== null) {
-      const root = paramString(params, 'root', 'c4');
-      const span = paramNumber(params, 'span', 12);
-      return `.note(signal(() => globalThis.__sw_quantizeNote(${raw}, "${root}", ${span})))`;
+    const noteEdge = inbound.find(e => e.to.portId === 'note');
+    if (!noteEdge) {
+      return `.note("${paramString(params, 'note', 'c4')}")`;
     }
-    return `.note(\`${paramString(params, 'note', 'c4')}\`)`;
+    const stack = ctx.resolveInboundStack(noteEdge.to.nodeId, 'note');
+    if (!stack) {
+      return `.note("${paramString(params, 'note', 'c4')}")`;
+    }
+    const root  = paramString(params, 'root', 'c4');
+    const span  = paramNumber(params, 'span', 12);
+    const notes = stack.map(v => quantizeNote(v, root, span));
+    const rows: string[] = [];
+    for (let i = 0; i < notes.length; i += 8) {
+      rows.push(notes.slice(i, i + 8).join(' '));
+    }
+    return `.note("${rows.join('\n    ')}")`;
   },
 
   ui(node, onChange) {
+    // Pitch's UI stays intact (root/span selects) — it's a quantizer, not a
+    // linear min/max mapping. Kept untouched so existing tests still pass.
     const wrap = document.createElement('div');
     wrap.className = 'node-param';
 
-    // note pattern (fallback when no signal is wired)
     const noteRow = document.createElement('label');
     noteRow.textContent = 'note: ';
     const noteInput = document.createElement('input');
@@ -107,26 +200,30 @@ export const soundPitchDef: NodeDefinition = {
     noteRow.appendChild(noteInput);
     wrap.appendChild(noteRow);
 
-    // root note (used by quantization when a signal is wired in)
     const rootRow = document.createElement('label');
     rootRow.textContent = 'root: ';
-    const rootSelect = buildSelect(
-      PITCH_ROOT_OPTIONS.map(v => ({ value: v, label: v })),
-      paramString(node.params, 'root', 'c4'),
-    );
+    const rootSelect = document.createElement('select');
+    for (const v of PITCH_ROOT_OPTIONS) {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = v;
+      rootSelect.appendChild(o);
+    }
+    rootSelect.value = paramString(node.params, 'root', 'c4');
     rootSelect.addEventListener('change', () => {
       onChange({ params: { ...node.params, root: rootSelect.value } });
     });
     rootRow.appendChild(rootSelect);
     wrap.appendChild(rootRow);
 
-    // span (number of semitones mapped across the 0–1 signal range)
     const spanRow = document.createElement('label');
     spanRow.textContent = 'span: ';
-    const spanSelect = buildSelect(
-      PITCH_SPAN_OPTIONS.map(o => ({ value: String(o.value), label: o.label })),
-      String(paramNumber(node.params, 'span', 12)),
-    );
+    const spanSelect = document.createElement('select');
+    for (const o of PITCH_SPAN_OPTIONS) {
+      const opt = document.createElement('option');
+      opt.value = String(o.value); opt.textContent = o.label;
+      spanSelect.appendChild(opt);
+    }
+    spanSelect.value = String(paramNumber(node.params, 'span', 12));
     spanSelect.addEventListener('change', () => {
       const next = Number.parseInt(spanSelect.value, 10);
       onChange({ params: { ...node.params, span: Number.isFinite(next) ? next : 12 } });
@@ -138,32 +235,42 @@ export const soundPitchDef: NodeDefinition = {
   },
 };
 
-// ── 2. sound.frequency-range ─────────────────────────────────────────────────
+// ── 2. sound.frequency ───────────────────────────────────────────────────────
 //
-// Writes shape.freqLow/freqHigh directly in Unit 14's codegen driver; emits
-// no chain fragment of its own. Distance→freq mapping still lives in
-// shapes.ts's _toSweeperCode.
+// Replaces the old `sound.frequency-range` (two min/max input ports). Now
+// exposes a single `frequency` input port that accepts a 0..1 stack, which
+// is mapped through an exponential curve to `[min, max]` Hz.
 
-export const soundFrequencyRangeDef: NodeDefinition = {
-  type:  'sound.frequency-range',
+export const soundFrequencyDef: NodeDefinition = {
+  type:  'sound.frequency',
   side:  'sound',
-  label: 'Frequency Range',
-  inputs: [
-    {
-      id: 'min', label: 'min', kind: 'number',
-      min: 20, max: 20000, unit: 'Hz',
-      description: 'Lower bound of the sweeper\'s distance→frequency mapping.',
-    },
-    {
-      id: 'max', label: 'max', kind: 'number',
-      min: 20, max: 20000, unit: 'Hz',
-      description: 'Upper bound of the sweeper\'s distance→frequency mapping.',
-    },
-  ],
+  label: 'Frequency',
+  inputs: [{
+    id: 'frequency', label: 'frequency', kind: 'number',
+    min: 0, max: 1, unit: '0..1',
+    description: 'Normalized 0..1 control signal mapped exponentially onto [min, max] Hz.',
+  }],
   defaultParams: { min: 100, max: 1000 },
 
-  codegen() {
-    return '';
+  codegen(_ctx, params, inbound) {
+    const min = paramNumber(params, 'min', 100);
+    const max = paramNumber(params, 'max', 1000);
+    const edge = inbound.find(e => e.to.portId === 'frequency');
+    if (!edge) {
+      // Unwired: emit a scalar at the midpoint (exp interpolated at v = 0.5).
+      return `.freq(${mapValue(0.5, min, max, 'exp').toFixed(2)})`;
+    }
+    const stack = _ctx.resolveInboundStack(getCodegenNodeId(inbound), 'frequency');
+    if (!stack) return `.freq(${mapValue(0.5, min, max, 'exp').toFixed(2)})`;
+    return `.freq("${bakePattern(stack, min, max, 'exp')}")`;
+  },
+
+  ui(node, onChange) {
+    return buildRangeUi(node, onChange, {
+      sliderMin: 20, sliderMax: 20000, step: 1,
+      unit:   'Hz (exp curve)',
+      format: v => `${v.toFixed(0)} Hz`,
+    });
   },
 };
 
@@ -175,15 +282,27 @@ export const soundLpfDef: NodeDefinition = {
   label: 'Low-pass Filter',
   inputs: [{
     id: 'frequency', label: 'frequency', kind: 'number',
-    min: 200, max: 4000, unit: 'Hz',
-    description: 'Cutoff frequency of the low-pass filter. Higher values let more treble through; low values darken the tone.',
+    min: 0, max: 1, unit: '0..1',
+    description: 'Cutoff frequency, mapped exponentially onto [min, max] Hz.',
   }],
-  defaultParams: { frequency: 1200 },
+  defaultParams: { min: 40, max: 200 },
 
-  codegen(ctx, params, inbound) {
-    const sig = signalRefFromEdge(ctx.sweeperId, inbound);
-    if (sig !== null) return `.lpf(${sig})`;
-    return `.lpf(${paramNumber(params, 'frequency', 1200)})`;
+  codegen(_ctx, params, inbound) {
+    const min = paramNumber(params, 'min', 40);
+    const max = paramNumber(params, 'max', 200);
+    const edge = inbound.find(e => e.to.portId === 'frequency');
+    if (!edge) return `.lpf(${mapValue(0.5, min, max, 'exp').toFixed(2)})`;
+    const stack = _ctx.resolveInboundStack(getCodegenNodeId(inbound), 'frequency');
+    if (!stack) return `.lpf(${mapValue(0.5, min, max, 'exp').toFixed(2)})`;
+    return `.lpf("${bakePattern(stack, min, max, 'exp')}")`;
+  },
+
+  ui(node, onChange) {
+    return buildRangeUi(node, onChange, {
+      sliderMin: 20, sliderMax: 20000, step: 1,
+      unit:   'Hz (exp curve)',
+      format: v => `${v.toFixed(0)} Hz`,
+    });
   },
 };
 
@@ -196,22 +315,44 @@ export const soundGainDef: NodeDefinition = {
   inputs: [{
     id: 'amp', label: 'amp', kind: 'number',
     min: 0, max: 1, unit: '0..1',
-    description: 'Output amplitude of this voice, normalised 0–1. Values above 1 will clip.',
+    description: 'Output amplitude, mapped with a perceptual (quadratic) curve onto [min, max].',
   }],
-  defaultParams: { amp: 0.6 },
+  defaultParams: { min: 0.0, max: 1.0 },
 
-  codegen(ctx, params, inbound) {
-    const sig = signalRefFromEdge(ctx.sweeperId, inbound);
-    if (sig !== null) return `.gain(${sig})`;
-    return `.gain(${paramNumber(params, 'amp', 0.6)})`;
+  codegen(_ctx, params, inbound) {
+    const min = paramNumber(params, 'min', 0.0);
+    const max = paramNumber(params, 'max', 1.0);
+    const edge = inbound.find(e => e.to.portId === 'amp');
+    if (!edge) return `.gain(${mapValue(0.5, min, max, 'quadratic').toFixed(3)})`;
+    const stack = _ctx.resolveInboundStack(getCodegenNodeId(inbound), 'amp');
+    if (!stack) return `.gain(${mapValue(0.5, min, max, 'quadratic').toFixed(3)})`;
+    return `.gain("${bakePattern(stack, min, max, 'quadratic', 3)}")`;
+  },
+
+  ui(node, onChange) {
+    return buildRangeUi(node, onChange, {
+      sliderMin: 0, sliderMax: 1, step: 0.01,
+      unit:   '0..1 (perceptual)',
+      format: v => v.toFixed(2),
+    });
   },
 };
 
-// ── Registration (module-load side effect) ───────────────────────────────────
+// ── Helper: pull the node id back from an inbound edge list ─────────────────
+//
+// The `codegen` signature receives `inbound: Edge[]` but not the node's id.
+// The destination node id is the same across all edges in `inbound`, so we
+// read it from `edges[0].to.nodeId`. `resolveInboundStack` needs that id.
+
+function getCodegenNodeId(inbound: import('../types').Edge[]): string {
+  return inbound[0]?.to.nodeId ?? '';
+}
+
+// ── Registration ─────────────────────────────────────────────────────────────
 
 export function registerSoundBasicNodes(): void {
   registerNodeDef(soundPitchDef);
-  registerNodeDef(soundFrequencyRangeDef);
+  registerNodeDef(soundFrequencyDef);
   registerNodeDef(soundLpfDef);
   registerNodeDef(soundGainDef);
 }
