@@ -92,6 +92,23 @@ describe('toolbox pure helpers', () => {
     expect(isDropAccepted(zones, 'sound', 150, 50)).toBe(true);
     expect(isDropAccepted(zones, 'data',  999, 50)).toBe(false); // no zone
   });
+
+  // Unit 6 regression: the live panel collapses all three columns into a single
+  // canvas element, so snapshotZones() produces three ZoneRects with identical
+  // geometry but distinct `column` labels in (left, center, right) order. The
+  // old implementation called resolveDropZone(), which returns the first-hit
+  // column — always 'left' — so 'sound' chips were silently rejected. This
+  // test pins the fix: any zone whose column matches the side counts.
+  it('isDropAccepted accepts sound drops when all zones share a collapsed canvas rect', () => {
+    const canvas = { left: 0, top: 0, right: 800, bottom: 500 };
+    const zones: ZoneRect[] = [
+      { column: 'left',   ...canvas },
+      { column: 'center', ...canvas },
+      { column: 'right',  ...canvas },
+    ];
+    expect(isDropAccepted(zones, 'data',  400, 250)).toBe(true);
+    expect(isDropAccepted(zones, 'sound', 400, 250)).toBe(true);
+  });
 });
 
 // ── DOM-backed tests: stand up a minimal document via a shim ────────────────

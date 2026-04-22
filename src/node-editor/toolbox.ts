@@ -74,15 +74,27 @@ export function resolveDropZone(zones: readonly ZoneRect[], x: number, y: number
   return null;
 }
 
-/** Would the chip drop at (x,y) accept a node of `side`? */
+/** Would the chip drop at (x,y) accept a node of `side`?
+ *
+ * Looks for ANY zone whose column matches the chip's side and whose rect
+ * contains (x,y). We deliberately do NOT delegate to `resolveDropZone` —
+ * that helper returns the first-hit column, which would reject a 'sound'
+ * drop when the panel collapses left/center/right into a single canvas
+ * element (Unit 3 freeform layout): the 'left' zone is pushed first and
+ * wins, so a sound chip always looked like it landed in the data column.
+ */
 export function isDropAccepted(
   zones: readonly ZoneRect[],
   side: NodeSide,
   x: number,
   y: number,
 ): boolean {
-  const zone = resolveDropZone(zones, x, y);
-  return zone !== null && zone === columnForSide(side);
+  const target = columnForSide(side);
+  for (const z of zones) {
+    if (z.column !== target) continue;
+    if (x >= z.left && x <= z.right && y >= z.top && y <= z.bottom) return true;
+  }
+  return false;
 }
 
 /** Respect prefers-reduced-motion for the ripple "poof". */
