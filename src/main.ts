@@ -20,9 +20,9 @@ import {
 import {
   initNodeEditor, openEditor, registerDataNodes,
 } from './node-editor';
-import { registerSoundBasicNodes } from './node-editor/nodes/sound-basic';
-import { registerPlaybackModeNode } from './node-editor/nodes/playback';
+import './node-editor/nodes/sound-basic';     // side-effect register: pitch, freq-range, lpf, gain
 import './node-editor/nodes/sweeper';          // side-effect register: 4 sweeper-self nodes
+import { registerPlaybackModeNode } from './node-editor/nodes/playback';
 import { setSweeperResolver } from './node-editor/nodes/sweeper';
 
 // ── Initialise ───────────────────────────────────────────────────────────────
@@ -42,7 +42,6 @@ setupEventHandlers(state, dom, tour);
 // sweeper selected. Escape closes (handled inside panel.ts). Codegen is
 // DEFERRED — Unit 14 will hook into closeEditor().
 registerDataNodes();
-registerSoundBasicNodes();
 registerPlaybackModeNode();
 setSweeperResolver(id => state.shapes.find(s => s.id === id && s.type === 'sweeper') ?? null);
 initNodeEditor({
