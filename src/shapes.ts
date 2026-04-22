@@ -23,12 +23,12 @@ export type PlaybackMode = 'constant-time' | 'constant-speed';
 /**
  * Per-sweeper arm-motion kinematics (Unit 10).
  * - 'normal'    : constant angular velocity, wrapping at 2π.
- * - 'ping-pong' : reverses direction after each full cycle of travel.
- * - 'spring'    : target moves at normal ω, arm follows via critically-damped
- *                 spring — subjectively eases near cycle boundaries.
+ * - 'ping-pong' : reverses direction after each full cycle of travel; audio
+ *                 uses Strudel's `.palindrome()` so the 60-step pattern plays
+ *                 forward/backward in lockstep with the visual arm.
  * Writing this field is the only side effect of the playback.mode node.
  */
-export type SweeperPlaybackMode = 'normal' | 'ping-pong' | 'spring';
+export type SweeperPlaybackMode = 'normal' | 'ping-pong';
 
 /** Pre-computed orbital intersection — angle (polar, 0…2π) + canvas coords. */
 export interface CachedIntersection {
@@ -215,10 +215,6 @@ export class CanvasShape {
   sweepDirection: 1 | -1;
   /** Ping-pong cumulative angular distance since the last direction flip. */
   sweepPingPongAccum: number;
-  /** Spring mode — moving target angle, advanced at the normal ω. */
-  springTargetAngle: number;
-  /** Spring mode — current angular velocity of the arm (rad/s). */
-  springVelocity: number;
 
   constructor(x: number, y: number, type: ShapeType, size = 60) {
     this.id                  = ++_nextId;
@@ -250,8 +246,6 @@ export class CanvasShape {
     this.playbackMode        = 'normal';
     this.sweepDirection      = 1;
     this.sweepPingPongAccum  = 0;
-    this.springTargetAngle   = this.playheadAngle;
-    this.springVelocity      = 0;
   }
 
   // ── Serialization ──────────────────────────────────────────────────────────
@@ -588,29 +582,24 @@ export class CanvasShape {
    * global Const T / Const V toggle).
    *
    * For sweepers, the per-shape `playbackMode` (Unit 10, node-editor driven)
-   * further re-shapes the kinematics — 'normal' keeps the legacy behaviour,
-   * 'ping-pong' reverses direction each cycle, 'spring' eases near boundaries
-   * via a critically-damped spring. Non-sweepers always use the normal path.
+   * further re-shapes the kinematics — 'normal' keeps the linear behaviour and
+   * 'ping-pong' reverses direction each cycle. Non-sweepers always use normal.
    */
   stepPlayhead(deltaMs: number, CPM: number): void {
     if (deltaMs <= 0) return;
     const duration = (60 / CPM) * 1000;
 
 
-    if (this.type === 'sweeper') {
-      switch (this.playbackMode) {
-        case 'ping-pong': this._stepPingPong(deltaMs, duration); return;
-        case 'spring':    this._stepSpring(deltaMs, duration);    return;
-        case 'normal':
-        default:          break;  // fall through to normal path (with fineness quantization)
-      }
+    if (this.type === 'sweeper' && this.playbackMode === 'ping-pong') {
+      this._stepPingPong(deltaMs, duration);
+      return;
     }
 
     const nextPhase = (this.playheadAngle + (deltaMs / duration) * Math.PI * 2)
                       % (Math.PI * 2);
     // Sweeper-only: quantize the phase to `fineness` discrete positions around
-    // 2π, producing stair-step motion when fineness is small. Ping-pong and
-    // spring modes use continuous motion — fineness is a normal-mode knob.
+    // 2π, producing stair-step motion when fineness is small. Ping-pong uses
+    // continuous motion — fineness is a normal-mode knob.
     if (this.type === 'sweeper' && this.fineness > 0) {
       const step = (Math.PI * 2) / this.fineness;
       this.playheadAngle = (Math.round(nextPhase / step) * step) % (Math.PI * 2);
@@ -633,29 +622,6 @@ export class CanvasShape {
       this.sweepDirection     = (this.sweepDirection === 1 ? -1 : 1);
       this.sweepPingPongAccum -= TAU;
     }
-  }
-
-  /**
-   * Spring step: target advances at the normal ω; the arm follows via a
-   * critically-damped spring (c = 2*sqrt(k), k ≈ 8 rad/s²). Angular error
-   * uses the shortest-path convention so the spring doesn't unwind the wrong
-   * way across the 2π wrap. Velocity naturally drops as error → 0, giving a
-   * subjectively gentle ease near cycle boundaries.
-   */
-  private _stepSpring(deltaMs: number, durationMs: number): void {
-    const TAU      = Math.PI * 2;
-    const dt       = deltaMs / 1000;
-    const targetW  = TAU / (durationMs / 1000);     // rad/s — normal ω
-    this.springTargetAngle = (this.springTargetAngle + targetW * dt) % TAU;
-
-    let err = this.springTargetAngle - this.playheadAngle;
-    if (err >  Math.PI) err -= TAU;
-    if (err < -Math.PI) err += TAU;
-
-    const k = 8;
-    const c = 2 * Math.sqrt(k);                       // critical damping
-    this.springVelocity += (k * err - c * this.springVelocity) * dt;
-    this.playheadAngle   = ((this.playheadAngle + this.springVelocity * dt) % TAU + TAU) % TAU;
   }
 
   /**

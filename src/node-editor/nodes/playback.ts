@@ -3,20 +3,19 @@
 // Unit 10 — playback.mode node.
 //
 // Selects the sweeper arm's kinematic model:
-//   - 'normal'    constant ω, wrap at 2π (legacy behaviour)
-//   - 'ping-pong' reverses direction after each full cycle
-//   - 'spring'    critically-damped spring towards a moving target
+//   - 'normal'    constant ω, wrap at 2π
+//   - 'ping-pong' reverses direction after each full cycle; audio uses
+//                 Strudel's `.palindrome()` (emitted by codegen.ts)
 //
-// The node has NO Strudel codegen fragment — its only side-effect is writing
-// `shape.playbackMode`. Unit 14's codegen walker will call `applyPlaybackNode`
-// after compiling the rest of the graph; for now, the helper is exported so
-// panels (Unit 11/12) and tests can apply it directly when the node changes.
+// Side-effects: `applyPlaybackNode` writes `shape.playbackMode` so the rAF
+// loop can pick the right phase formula; codegen.ts reads the same field and
+// appends `.palindrome()` to the compiled Strudel block when ping-pong.
 
 import type { CanvasShape, SweeperPlaybackMode } from '../../shapes';
 import type { Node, NodeDefinition } from '../types';
 import { registerNodeDef } from '../registry';
 
-export const PLAYBACK_MODES: readonly SweeperPlaybackMode[] = ['normal', 'ping-pong', 'spring'] as const;
+export const PLAYBACK_MODES: readonly SweeperPlaybackMode[] = ['normal', 'ping-pong'] as const;
 
 /** Narrow an unknown param to a valid SweeperPlaybackMode, falling back to 'normal'. */
 export function coercePlaybackMode(v: unknown): SweeperPlaybackMode {
@@ -37,8 +36,6 @@ export function applyPlaybackNode(node: Node, shape: CanvasShape): void {
   shape.playbackMode       = next;
   shape.sweepDirection     = 1;
   shape.sweepPingPongAccum = 0;
-  shape.springVelocity     = 0;
-  shape.springTargetAngle  = shape.playheadAngle;
 }
 
 /** Inline UI — a native <select> so keyboard / screen-reader support is free. */
@@ -55,7 +52,7 @@ function buildUi(node: Node, onChange: (patch: Partial<Node>) => void): HTMLElem
   for (const m of PLAYBACK_MODES) {
     const opt = document.createElement('option');
     opt.value = m;
-    // Pretty labels: Normal, Ping-Pong, Spring.
+    // Pretty labels: Normal, Ping-Pong.
     opt.textContent = m === 'ping-pong' ? 'Ping-Pong' : m.charAt(0).toUpperCase() + m.slice(1);
     if (coercePlaybackMode(node.params['mode']) === m) opt.selected = true;
     select.appendChild(opt);

@@ -25,6 +25,7 @@ import { CABLE_REFLOW_EVENT, initCables } from './cables';
 import { compileGraphToStrudel } from './codegen';
 import { addEdge, addNode, createGraph, graphFromSnapshot } from './graph';
 import { getNodeDef } from './registry';
+import { applyPlaybackNode } from './nodes/playback';
 import { openSidebar, closeSidebar } from './sidebar';
 import { mountToolbox, refreshToolbox } from './toolbox';
 import type { Node, NodeDefinition, NodeGraph, PortSpec } from './types';
@@ -330,6 +331,9 @@ export function closeEditor(): void {
     : null;
   if (shape !== null && activeGraph !== null) {
     shape.graph = graphToSnapshot(activeGraph);
+    for (const node of activeGraph.nodes) {
+      if (node.type === 'playback.mode') applyPlaybackNode(node, shape);
+    }
     const compiled = compileGraphToStrudel(shape.id, activeGraph, shape);
     if (commitGraph !== null) commitGraph(shape, compiled);
   }

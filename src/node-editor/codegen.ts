@@ -45,6 +45,10 @@ export function compileGraphToStrudel(
   if (graph === null || graph.nodes.length === 0) return baseBlock;
 
   const fragments = buildFragments(sweeperId, graph);
+  // Ping-pong: append Strudel's native `.palindrome()` so the 60-step pattern
+  // plays forward/backward on alternating cycles. Lands after all sound-side
+  // fragments, immediately before `.p((id).toString())`.
+  if (shape.playbackMode === 'ping-pong') fragments.push('palindrome()');
   if (fragments.length === 0) return baseBlock;
 
   return spliceFragmentsIntoBlock(baseBlock, sweeperId, fragments);

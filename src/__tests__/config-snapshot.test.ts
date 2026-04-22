@@ -132,8 +132,6 @@ describe('ShapeConfig property coverage', () => {
     'playbackMode',
     'sweepDirection',
     'sweepPingPongAccum',
-    'springTargetAngle',
-    'springVelocity',
   ]);
 
   it('every CanvasShape property is in ShapeConfig or DERIVED_PROPS', () => {

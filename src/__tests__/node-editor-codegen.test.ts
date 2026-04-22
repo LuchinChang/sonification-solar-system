@@ -233,3 +233,54 @@ describe('compileGraphToStrudel — fragment ordering', () => {
     expect(out).toBe(s.toStrudelCode());
   });
 });
+
+// ── Playback mode → Strudel suffix ───────────────────────────────────────────
+
+describe('compileGraphToStrudel — playback mode', () => {
+  it('emits .palindrome() when shape.playbackMode === "ping-pong"', () => {
+    const s = makeSweeper();
+    s.playbackMode = 'ping-pong';
+    // Non-empty graph so we don't short-circuit on graph.nodes.length === 0.
+    // A bare playback.mode snapshot entry works — its def isn't registered,
+    // so buildFragments skips it; the palindrome push still fires.
+    const g = createGraph(s.id);
+    g.nodes.push({ id: 'pb', type: 'playback.mode', side: 'playback', x: 0, y: 0, params: { mode: 'ping-pong' } });
+
+    const out = compileGraphToStrudel(s.id, g, s);
+    const palIdx = out.indexOf('.palindrome()');
+    const pIdx   = out.indexOf(`.p((${s.id}).toString())`);
+    expect(palIdx).toBeGreaterThan(-1);
+    expect(pIdx).toBeGreaterThan(palIdx);
+  });
+
+  it('palindrome lands AFTER sound fragments (so time reversal wraps the full chain)', () => {
+    registerNodeDef(makeDef({
+      type: 'sound.lpf',
+      side: 'sound',
+      inputs:  [{ id: 'cutoff', label: 'cutoff', kind: 'signal' }],
+      outputs: [],
+      defaultParams: { cutoff: 800 },
+      codegen: (_ctx, params) => `.lpf(${params['cutoff'] as number})`,
+    }));
+    const s = makeSweeper();
+    s.playbackMode = 'ping-pong';
+    const g = createGraph(s.id);
+    addNode(g, { type: 'sound.lpf', side: 'sound', x: 0, y: 0 });
+
+    const out = compileGraphToStrudel(s.id, g, s);
+    const lpfIdx = out.indexOf('.lpf(800)');
+    const palIdx = out.indexOf('.palindrome()');
+    expect(lpfIdx).toBeGreaterThan(-1);
+    expect(palIdx).toBeGreaterThan(lpfIdx);
+  });
+
+  it('does NOT emit .palindrome() when mode is "normal"', () => {
+    const s = makeSweeper();
+    s.playbackMode = 'normal';
+    const g = createGraph(s.id);
+    g.nodes.push({ id: 'pb', type: 'playback.mode', side: 'playback', x: 0, y: 0, params: { mode: 'normal' } });
+
+    const out = compileGraphToStrudel(s.id, g, s);
+    expect(out).not.toContain('.palindrome()');
+  });
+});

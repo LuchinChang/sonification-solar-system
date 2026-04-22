@@ -5,9 +5,8 @@
 // Covers:
 //   1. Node registration / default params.
 //   2. applyPlaybackNode side-effects onto a CanvasShape.
-//   3. stepPlayhead('normal')    — linear advance, wraps at 2π (existing path).
+//   3. stepPlayhead('normal')    — linear advance, wraps at 2π.
 //   4. stepPlayhead('ping-pong') — direction flips after a full cycle of travel.
-//   5. stepPlayhead('spring')    — arm velocity decays as it nears the target.
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CanvasShape } from '../shapes';
@@ -38,7 +37,7 @@ describe('playback.mode node', () => {
     expect(def?.defaultParams).toEqual({ mode: 'normal' });
   });
 
-  it('codegen returns an empty string (behaviour lives in stepPlayhead)', () => {
+  it('codegen returns an empty string (behaviour lives in stepPlayhead + compileGraphToStrudel)', () => {
     registerPlaybackModeNode();
     const emit = playbackModeNode.codegen(
       {
@@ -47,23 +46,23 @@ describe('playback.mode node', () => {
         incoming:  () => [],
         paramsOf:  <T,>() => ({} as T),
       },
-      { mode: 'spring' },
+      { mode: 'ping-pong' },
       [],
     );
     expect(emit).toBe('');
   });
 
-  it('coercePlaybackMode rejects unknown values', () => {
+  it('coercePlaybackMode rejects unknown values (including removed Spring)', () => {
     expect(coercePlaybackMode('normal')).toBe('normal');
     expect(coercePlaybackMode('ping-pong')).toBe('ping-pong');
-    expect(coercePlaybackMode('spring')).toBe('spring');
+    expect(coercePlaybackMode('spring')).toBe('normal');     // Spring removed → coerces to default
     expect(coercePlaybackMode('turbo')).toBe('normal');
     expect(coercePlaybackMode(null)).toBe('normal');
     expect(coercePlaybackMode(undefined)).toBe('normal');
   });
 
-  it('PLAYBACK_MODES enumerates all three kinematics', () => {
-    expect([...PLAYBACK_MODES].sort()).toEqual(['normal', 'ping-pong', 'spring']);
+  it('PLAYBACK_MODES enumerates only normal + ping-pong', () => {
+    expect([...PLAYBACK_MODES].sort()).toEqual(['normal', 'ping-pong']);
   });
 });
 
@@ -73,10 +72,10 @@ describe('applyPlaybackNode', () => {
   it('writes a valid mode onto the shape', () => {
     registerPlaybackModeNode();
     const g = createGraph(1);
-    const n = addNode(g, { type: 'playback.mode', side: 'playback', x: 0, y: 0, params: { mode: 'spring' } });
+    const n = addNode(g, { type: 'playback.mode', side: 'playback', x: 0, y: 0, params: { mode: 'ping-pong' } });
     const s = new CanvasShape(0, 0, 'sweeper');
     applyPlaybackNode(n, s);
-    expect(s.playbackMode).toBe('spring');
+    expect(s.playbackMode).toBe('ping-pong');
   });
 
   it('resets per-mode state when switching modes', () => {
@@ -88,17 +87,13 @@ describe('applyPlaybackNode', () => {
     s.playbackMode       = 'ping-pong';
     s.sweepDirection     = -1;
     s.sweepPingPongAccum = 4.2;
-    s.springVelocity     = 7;
-    s.playheadAngle      = 1.23;
 
-    const n = addNode(g, { type: 'playback.mode', side: 'playback', x: 0, y: 0, params: { mode: 'spring' } });
+    const n = addNode(g, { type: 'playback.mode', side: 'playback', x: 0, y: 0, params: { mode: 'normal' } });
     applyPlaybackNode(n, s);
 
-    expect(s.playbackMode).toBe('spring');
+    expect(s.playbackMode).toBe('normal');
     expect(s.sweepDirection).toBe(1);
     expect(s.sweepPingPongAccum).toBe(0);
-    expect(s.springVelocity).toBe(0);
-    expect(s.springTargetAngle).toBeCloseTo(s.playheadAngle);
   });
 
   it('is idempotent when the mode is unchanged', () => {
@@ -179,56 +174,6 @@ describe("stepPlayhead('ping-pong')", () => {
   });
 });
 
-// ── stepPlayhead: 'spring' mode ──────────────────────────────────────────────
-
-describe("stepPlayhead('spring')", () => {
-  it('moves the arm toward the spring target', () => {
-    const s = new CanvasShape(0, 0, 'sweeper');
-    s.playbackMode     = 'spring';
-    s.playheadAngle    = 0;
-    s.springTargetAngle = 0;
-    s.springVelocity   = 0;
-    // A single 16ms @ CPM=60 nudges the target slightly forward, so the arm
-    // begins to follow.
-    for (let i = 0; i < 10; i++) s.stepPlayhead(16, 60);
-    expect(s.playheadAngle).toBeGreaterThan(0);
-  });
-
-  it('velocity decays as the arm catches up (critically damped, no overshoot)', () => {
-    const s = new CanvasShape(0, 0, 'sweeper');
-    s.playbackMode     = 'spring';
-    s.playheadAngle    = 0;
-    s.springTargetAngle = Math.PI / 2;   // static target ahead of arm
-    s.springVelocity   = 0;
-
-    // Near-zero CPM freezes the target (period ~ 6e10 s) so we isolate the
-    // spring response from target drift.
-    const frozenCPM = 1e-9;
-    for (let i = 0; i < 300; i++) s.stepPlayhead(16, frozenCPM);
-
-    expect(Math.abs(s.playheadAngle - Math.PI / 2)).toBeLessThan(0.05);
-    expect(Math.abs(s.springVelocity)).toBeLessThan(0.5);
-  });
-
-  it('is critically damped (no large overshoot past target)', () => {
-    const s = new CanvasShape(0, 0, 'sweeper');
-    s.playbackMode     = 'spring';
-    s.playheadAngle    = 0;
-    s.springTargetAngle = 1.0;
-    s.springVelocity   = 0;
-    // Near-zero CPM → near-zero target drift (period ~ 6e10 s).
-    const frozenCPM = 1e-9;
-
-    let maxAngle = 0;
-    for (let i = 0; i < 500; i++) {
-      s.stepPlayhead(16, frozenCPM);
-      if (s.playheadAngle > maxAngle) maxAngle = s.playheadAngle;
-    }
-    // Critical damping → minimal overshoot; allow a tiny integrator error margin.
-    expect(maxAngle).toBeLessThan(1.05);
-  });
-});
-
 // ── Non-sweeper safety ──────────────────────────────────────────────────────
 
 describe('applyPlaybackNode on non-sweeper', () => {
@@ -238,7 +183,7 @@ describe('applyPlaybackNode on non-sweeper', () => {
   it('no-ops when shape.type !== sweeper', () => {
     registerPlaybackModeNode();
     const g = createGraph(1);
-    const n = addNode(g, { type: 'playback.mode', side: 'playback', x: 0, y: 0, params: { mode: 'spring' } });
+    const n = addNode(g, { type: 'playback.mode', side: 'playback', x: 0, y: 0, params: { mode: 'ping-pong' } });
     const s = new CanvasShape(0, 0, 'sweeper');
     (s as unknown as { type: string }).type = 'circle';
     applyPlaybackNode(n, s);

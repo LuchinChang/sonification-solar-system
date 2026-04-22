@@ -125,9 +125,18 @@ function animate(now: number): void {
       // multiple sweepers can run independently).
       try {
         if (state.audioInitialized && shape.sweepAudioRefTime > 0) {
-          const cycleS = 60 / state.cpm;
-          const phase  = (shape.sweepPhaseAtRef +
-            (getAudioContext().currentTime - shape.sweepAudioRefTime) / cycleS) % 1;
+          const cycleS  = 60 / state.cpm;
+          const elapsed = getAudioContext().currentTime - shape.sweepAudioRefTime;
+          let phase: number;
+          if (shape.playbackMode === 'ping-pong') {
+            // Triangle wave over a 2-cycle period: phase goes 0→1→0 so the arm
+            // sweeps forward in cycle 1 and reverse in cycle 2 — locked to the
+            // same audio clock Strudel's `.palindrome()` rides on.
+            const tp = (elapsed / (cycleS * 2)) % 1;
+            phase    = tp < 0.5 ? tp * 2 : 2 - tp * 2;
+          } else {
+            phase = (shape.sweepPhaseAtRef + elapsed / cycleS) % 1;
+          }
           shape.prevPlayheadAngle = shape.playheadAngle;
           shape.playheadAngle     = (shape.startAngle + phase * Math.PI * 2) % (Math.PI * 2);
         } else {
