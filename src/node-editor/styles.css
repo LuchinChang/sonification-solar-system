@@ -9,7 +9,7 @@
   inset: 40px;
   z-index: 120;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto 1fr auto;
   grid-template-columns: 1fr;
   gap: 14px;
   padding: 20px 24px 24px;
@@ -189,4 +189,175 @@
 .ne-port-dot.active {
   border-color: var(--accent-amber);
   box-shadow: 0 0 8px var(--accent-amber);
+}
+
+/* ── Toolbox drawer (Unit 13) ─────────────────────────────── */
+
+.ne-toolbox {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: thin;
+
+  background: rgba(255, 255, 255, 0.018);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  min-height: 48px;
+}
+
+.ne-toolbox-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 12px;
+  border-right: 1px solid var(--glass-border);
+}
+.ne-toolbox-group:last-child {
+  border-right: none;
+  padding-right: 0;
+}
+
+.ne-toolbox-group-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding-right: 2px;
+}
+
+.ne-toolbox-chip {
+  appearance: none;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+
+  background: rgba(20, 13, 11, 0.55);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  padding: 5px 10px;
+
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+
+  transition:
+    border-color var(--dur-fast) var(--ease-out-quart),
+    color        var(--dur-fast) var(--ease-out-quart),
+    transform    var(--dur-fast) var(--ease-out-quart),
+    box-shadow   var(--dur-fast) var(--ease-out-quart);
+}
+.ne-toolbox-chip:hover {
+  border-color: var(--accent-copper);
+  color: var(--accent-amber);
+  transform: translateY(-1px);
+}
+.ne-toolbox-chip:active { cursor: grabbing; }
+
+.ne-toolbox-chip[data-side="data"]     { --chip-accent: var(--accent-copper); }
+.ne-toolbox-chip[data-side="sweeper"]  { --chip-accent: var(--accent-amber); }
+.ne-toolbox-chip[data-side="sound"]    { --chip-accent: var(--accent-coral); }
+.ne-toolbox-chip[data-side="playback"] { --chip-accent: var(--accent-amber); }
+
+.ne-toolbox-chip::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--chip-accent, var(--accent-copper));
+  box-shadow: 0 0 6px var(--chip-accent, var(--accent-copper));
+  vertical-align: middle;
+  transform: translateY(-1px);
+}
+
+.ne-toolbox-empty {
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* ── Drag ghost (follows the cursor, never intercepts events) ── */
+
+.ne-toolbox-ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: 160;
+  transform: translate(-50%, -50%);
+
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+
+  background: rgba(20, 13, 11, 0.92);
+  border: 1px solid var(--accent-copper);
+  border-radius: 999px;
+  padding: 5px 10px;
+
+  opacity: 0.85;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
+  transition: border-color var(--dur-fast) var(--ease-out-quart),
+              box-shadow   var(--dur-fast) var(--ease-out-quart),
+              transform    var(--dur-fast) var(--ease-out-quart);
+}
+.ne-toolbox-ghost.is-valid {
+  border-color: var(--accent-amber);
+  box-shadow: 0 4px 22px rgba(232, 160, 80, 0.45);
+  transform: translate(-50%, -50%) scale(1.04);
+}
+
+/* ── Drop-target highlight on the receiving column ─────────── */
+
+.node-editor-col.ne-drop-target,
+.node-editor-center.ne-drop-target {
+  outline: 1px dashed var(--accent-amber);
+  outline-offset: -4px;
+  background: rgba(232, 160, 80, 0.04);
+}
+
+/* ── Poof ripple on successful drop ───────────────────────── */
+
+.ne-poof {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent-amber);
+  pointer-events: none;
+  z-index: 150;
+  transform: translate(-50%, -50%);
+  animation: ne-poof-expand 300ms var(--ease-out-quart) forwards;
+}
+
+@keyframes ne-poof-expand {
+  0%   { width: 4px;  height: 4px;  opacity: 0.85; background: var(--accent-amber); }
+  100% { width: 48px; height: 48px; opacity: 0;    background: transparent;         box-shadow: 0 0 0 2px rgba(232, 160, 80, 0); }
+}
+
+/* ── Chip bounce-back (also used by Unit 12 snap-pop) ──────── */
+
+@keyframes ne-chip-bounce {
+  0%   { transform: translateY(-6px); }
+  60%  { transform: translateY(2px);  }
+  100% { transform: translateY(0);    }
+}
+.ne-toolbox-chip.ne-bounce {
+  animation: ne-chip-bounce 320ms var(--ease-out-quart);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ne-poof,
+  .ne-toolbox-chip.ne-bounce { animation: none; }
 }

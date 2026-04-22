@@ -18,6 +18,7 @@
 
 import type { CanvasShape } from '../shapes';
 import { createGraph } from './graph';
+import { mountToolbox, refreshToolbox } from './toolbox';
 import type { NodeGraph } from './types';
 
 // ── Module state ─────────────────────────────────────────────────────────────
@@ -31,6 +32,7 @@ interface EditorRefs {
   sweeperIcon:   HTMLDivElement;
   closeBtn:      HTMLButtonElement;
   leftCol:       HTMLDivElement;
+  center:        HTMLDivElement;
   rightCol:      HTMLDivElement;
   cableLayer:    SVGSVGElement;
 }
@@ -77,6 +79,9 @@ export function openEditor(sweeperId: number): void {
   refs.swatch.style.backgroundColor = color;
   refs.sweeperIcon.style.color     = color;
   refs.sweeperNumEl.textContent    = `Sweeper #${sweeper.id}`;
+
+  // Re-render chip list in case new NodeDefinitions registered since last open.
+  refreshToolbox(toolboxHost(refs), toolboxCallbacks());
 
   refs.root.classList.remove('hidden');
   refs.root.removeAttribute('aria-hidden');
@@ -186,9 +191,37 @@ function ensureMounted(): void {
     sweeperIcon,
     closeBtn,
     leftCol,
+    center,
     rightCol,
     cableLayer,
   };
+
+  // Unit 13: drop-in toolbox drawer along the bottom of the panel.
+  mountToolbox(toolboxHost(refs), toolboxCallbacks());
+}
+
+function toolboxHost(r: EditorRefs): { root: HTMLElement; leftCol: HTMLElement; center: HTMLElement; rightCol: HTMLElement } {
+  return { root: r.root, leftCol: r.leftCol, center: r.center, rightCol: r.rightCol };
+}
+
+function toolboxCallbacks(): { getGraph: () => NodeGraph | null; onGraphChanged: () => void } {
+  return { getGraph: () => activeGraph, onGraphChanged: emitGraphChanged };
+}
+
+// ── Graph-change notification ────────────────────────────────────────────────
+//
+// Units 11/12/14 subscribe to this to rebuild cables and recompute codegen.
+// The event bubbles on the panel root so listeners can be scoped without a
+// global pub/sub.
+
+const GRAPH_CHANGED_EVENT = 'graphChanged';
+
+function emitGraphChanged(): void {
+  if (refs === null) return;
+  refs.root.dispatchEvent(new CustomEvent(GRAPH_CHANGED_EVENT, {
+    bubbles: true,
+    detail: { sweeperId: activeSweeperId, graph: activeGraph },
+  }));
 }
 
 function buildColumn(title: string, placeholder: string): HTMLDivElement {
