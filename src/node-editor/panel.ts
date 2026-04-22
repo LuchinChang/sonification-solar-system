@@ -391,9 +391,27 @@ function ensureMounted(): void {
   // sweeper number, with a soft label underneath. The swatch glows in the
   // sweeper's color so the open panel is visually locked to its target on
   // the canvas.
-  const titleLabel = document.createElement('span');
-  titleLabel.className = 'node-editor-title';
-  titleLabel.textContent = 'Node Editor';
+  //
+  // The original "Node Editor" text label is replaced with a panel-toggle
+  // icon button — clicking it collapses/expands the shape-options sidebar.
+  const titleLabel = document.createElement('button');
+  titleLabel.type = 'button';
+  titleLabel.className = 'node-editor-title node-editor-sidebar-toggle';
+  titleLabel.title = 'Toggle shape options';
+  titleLabel.setAttribute('aria-label', 'Toggle shape options');
+  titleLabel.setAttribute('aria-expanded', 'true');
+  titleLabel.innerHTML = `
+    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+      <rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+      <line x1="6.5" y1="3" x2="6.5" y2="13" stroke="currentColor" stroke-width="1.3"/>
+    </svg>
+  `;
+  titleLabel.addEventListener('click', () => {
+    const sidebar = document.querySelector('.node-editor-sidebar');
+    if (sidebar === null) return;
+    const collapsed = sidebar.classList.toggle('collapsed');
+    titleLabel.setAttribute('aria-expanded', String(!collapsed));
+  });
 
   const swatch = document.createElement('span');
   swatch.className = 'node-editor-swatch';
