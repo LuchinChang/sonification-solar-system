@@ -116,11 +116,11 @@ function animate(now: number): void {
           shape.prevPlayheadAngle = shape.playheadAngle;
           shape.playheadAngle     = (shape.startAngle + phase * Math.PI * 2) % (Math.PI * 2);
         } else {
-          shape.stepPlayhead(dt, state.cpm, state.playbackMode);
+          shape.stepPlayhead(dt, state.cpm);
         }
       } catch (e) {
         console.debug('[audio] AC clock fallback:', e);
-        shape.stepPlayhead(dt, state.cpm, state.playbackMode);
+        shape.stepPlayhead(dt, state.cpm);
       }
       shape.computeSweepClusters(state.linkLines, state.orbitalMaxRadius);
       // LEGACY: disabled 2026-04-21 — non-sweeper rAF branch (stepPlayhead +
@@ -129,7 +129,7 @@ function animate(now: number): void {
       // To re-enable: un-comment this block and restore non-sweeper ShapeTypes.
       /*
       else {
-        shape.stepPlayhead(dt, state.cpm, state.playbackMode);
+        shape.stepPlayhead(dt, state.cpm);
         const triggered = shape.checkAndFireCollisions();
         if (triggered.length > 0) {
           for (const int of triggered) shape.triggerAt(int.x, int.y);

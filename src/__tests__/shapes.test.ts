@@ -377,7 +377,7 @@ describe('stepPlayhead', () => {
   it('advances angle proportional to deltaMs and CPM', () => {
     const s = new CanvasShape(0, 0, 'sweeper', 60);
     const initial = s.playheadAngle;
-    s.stepPlayhead(100, 10, 'constant-time');
+    s.stepPlayhead(100, 10);
     expect(s.playheadAngle).not.toBeCloseTo(initial);
     expect(s.playheadAngle).toBeGreaterThanOrEqual(0);
   });
@@ -385,37 +385,27 @@ describe('stepPlayhead', () => {
   it('does not change angle when deltaMs <= 0', () => {
     const s = new CanvasShape(0, 0, 'sweeper', 60);
     const initial = s.playheadAngle;
-    s.stepPlayhead(0, 10, 'constant-time');
+    s.stepPlayhead(0, 10);
     expect(s.playheadAngle).toBeCloseTo(initial);
-    s.stepPlayhead(-5, 10, 'constant-time');
+    s.stepPlayhead(-5, 10);
     expect(s.playheadAngle).toBeCloseTo(initial);
   });
 
-  it('constant-time: same increment regardless of size', () => {
+  it('constant-time is the only global mode: same increment regardless of size', () => {
     const s1 = new CanvasShape(0, 0, 'sweeper', 30);
     const s2 = new CanvasShape(0, 0, 'sweeper', 200);
     s1.playheadAngle = 0;
     s2.playheadAngle = 0;
-    s1.stepPlayhead(100, 10, 'constant-time');
-    s2.stepPlayhead(100, 10, 'constant-time');
+    s1.stepPlayhead(100, 10);
+    s2.stepPlayhead(100, 10);
     expect(s1.playheadAngle).toBeCloseTo(s2.playheadAngle);
-  });
-
-  it('constant-speed: larger size means smaller angular increment', () => {
-    const s1 = new CanvasShape(0, 0, 'sweeper', 30);
-    const s2 = new CanvasShape(0, 0, 'sweeper', 200);
-    s1.playheadAngle = 0;
-    s2.playheadAngle = 0;
-    s1.stepPlayhead(100, 10, 'constant-speed');
-    s2.stepPlayhead(100, 10, 'constant-speed');
-    expect(s1.playheadAngle).toBeGreaterThan(s2.playheadAngle);
   });
 
   it('wraps angle at 2π', () => {
     const s = new CanvasShape(0, 0, 'sweeper', 60);
     s.playheadAngle = 0;
     // Step enough to go past 2π: at CPM=60, one cycle = 1s, so 1500ms > one cycle
-    s.stepPlayhead(1500, 60, 'constant-time');
+    s.stepPlayhead(1500, 60);
     expect(s.playheadAngle).toBeGreaterThanOrEqual(0);
     expect(s.playheadAngle).toBeLessThan(Math.PI * 2);
   });

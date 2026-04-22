@@ -49,6 +49,32 @@
     <canvas id="simCanvas"></canvas>
 
     <!-- ╔════════════════════════════════════════════════════════╗ -->
+    <!-- ║      TOP-LEFT CHROME  (Unit 1)                         ║ -->
+    <!-- ║  Save / Load / Theme — moved out of the bottom dock    ║ -->
+    <!-- ╚════════════════════════════════════════════════════════╝ -->
+    <aside id="top-chrome" aria-label="File and view controls">
+      <button
+        id="save-config-btn"
+        class="config-btn"
+        aria-label="Save configuration"
+        title="Save config  [ ⌘S ]"
+      >⬇</button>
+      <button
+        id="load-config-btn"
+        class="config-btn"
+        aria-label="Load configuration"
+        title="Load config"
+      >⬆</button>
+      <input id="load-config-input" type="file" accept=".json" style="display:none" />
+      <button
+        id="theme-toggle"
+        class="theme-toggle-btn"
+        aria-label="Switch to Daylight"
+        title="View: Daylight theme"
+      >☀</button>
+    </aside>
+
+    <!-- ╔════════════════════════════════════════════════════════╗ -->
     <!-- ║            BOTTOM DOCK  (D key toggles)               ║ -->
     <!-- ║  Left section: shape spawner  |  Right: knob control  ║ -->
     <!-- ╚════════════════════════════════════════════════════════╝ -->
@@ -119,21 +145,8 @@
 
         </div><!-- /knobs-row -->
 
-        <!-- Mode toggle (hidden — CONST is the only default surfaced)
-             kept in DOM so config-snapshot restore still targets the
-             .mode-option elements. Other units may re-surface this. -->
-        <div
-          class="mode-toggle is-collapsed"
-          id="mode-toggle"
-          role="group"
-          aria-label="Playback mode"
-          hidden
-        >
-          <span class="mode-option active" data-mode="constant-time"  title="All shapes complete one loop in the same time">Const T</span>
-          <span class="mode-option"        data-mode="constant-speed" title="Larger shapes take longer (fixed linear speed)">Const V</span>
-        </div>
-
-        <!-- Transport + Files + View row -->
+        <!-- Transport row: sweeper spawn + play/pause
+             (Files and View moved to #top-chrome in Unit 1.) -->
         <div class="sequencer-controls">
 
           <!-- Sweeper spawn affordance ( + Sweeper | N hotkey ) -->
@@ -155,32 +168,6 @@
             aria-label="Pause playback"
             title="Play / Pause  [ Space ]"
           >⏸</button>
-
-          <!-- Files cluster: save + load compact grouping -->
-          <div class="files-cluster" role="group" aria-label="Files">
-            <span class="files-cluster-label" aria-hidden="true">Files</span>
-            <button
-              id="save-config-btn"
-              class="config-btn"
-              aria-label="Save configuration"
-              title="Save config  [ ⌘S ]"
-            >⬇</button>
-            <button
-              id="load-config-btn"
-              class="config-btn"
-              aria-label="Load configuration"
-              title="Load config"
-            >⬆</button>
-            <input id="load-config-input" type="file" accept=".json" style="display:none" />
-          </div>
-
-          <!-- View toggle (Martian Dusk ↔ Daylight) -->
-          <button
-            id="theme-toggle"
-            class="theme-toggle-btn"
-            aria-label="Switch to Daylight"
-            title="View: Daylight theme"
-          >☀</button>
 
         </div><!-- /sequencer-controls -->
 

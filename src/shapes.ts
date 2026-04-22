@@ -582,20 +582,19 @@ export class CanvasShape {
 
   /**
    * Advance the playhead by one frame.
-   * Constant Time  : all shapes share the same cycle duration regardless of size.
-   * Constant Speed : cycle duration scales with size (fixed linear perimeter speed).
    *
-   * For sweepers, the per-shape `playbackMode` (Unit 10) further re-shapes the
-   * kinematics — 'normal' keeps the legacy behaviour, 'ping-pong' reverses
-   * direction each cycle, 'spring' eases near boundaries via a
-   * critically-damped spring. Non-sweepers always use the normal path.
+   * Global playback mode is always constant-time — every shape completes one
+   * cycle in `60/CPM` seconds regardless of its size (Unit 1 removed the
+   * global Const T / Const V toggle).
+   *
+   * For sweepers, the per-shape `playbackMode` (Unit 10, node-editor driven)
+   * further re-shapes the kinematics — 'normal' keeps the legacy behaviour,
+   * 'ping-pong' reverses direction each cycle, 'spring' eases near boundaries
+   * via a critically-damped spring. Non-sweepers always use the normal path.
    */
-  stepPlayhead(deltaMs: number, CPM: number, mode: PlaybackMode): void {
+  stepPlayhead(deltaMs: number, CPM: number): void {
     if (deltaMs <= 0) return;
-    const baseDuration = (60 / CPM) * 1000;
-    const duration     = mode === 'constant-time'
-      ? baseDuration
-      : baseDuration * (this.size / 100);
+    const duration = (60 / CPM) * 1000;
 
 
     if (this.type === 'sweeper') {

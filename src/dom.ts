@@ -27,10 +27,6 @@ export interface DomElements {
   cpmNeedleGroup: SVGGElement;
   cpmValueEl: HTMLElement;
 
-  // Playback mode toggle
-  modeToggle: HTMLElement;
-  modeOptions: NodeListOf<HTMLElement>;
-
   // Play/Pause
   playPauseBtn: HTMLButtonElement;
 
@@ -69,8 +65,6 @@ export function resolveDomElements(): DomElements {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context unavailable');
 
-  const modeToggle = getEl('mode-toggle');
-
   return {
     canvas,
     ctx,
@@ -91,9 +85,6 @@ export function resolveDomElements(): DomElements {
     cpmKnobEl: getEl('cpm-knob'),
     cpmNeedleGroup: document.querySelector<SVGGElement>('#cpm-needle-group')!,
     cpmValueEl: getEl('cpm-value'),
-
-    modeToggle,
-    modeOptions: modeToggle.querySelectorAll<HTMLElement>('.mode-option'),
 
     playPauseBtn: getEl('play-pause-btn') as HTMLButtonElement,
 
