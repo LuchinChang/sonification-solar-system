@@ -17,7 +17,7 @@ import {
   setupEventHandlers, calculateLines,
   finishDrawAnimation, updateCaption,
 } from './controls';
-import { initNodeEditor, openEditor, closeEditor, isEditorOpen } from './node-editor';
+import { initNodeEditor, openEditor } from './node-editor';
 
 // ── Initialise ───────────────────────────────────────────────────────────────
 
@@ -42,27 +42,15 @@ initNodeEditor({
 // Canvas click → open editor for sweeper. This runs AFTER controls.ts's
 // existing click handler (which selects the shape); both fire on the same
 // click because we attach with addEventListener — order matches registration.
+// The 'E' hotkey is owned by controls.ts (toggle semantics).
 dom.canvas.addEventListener('click', e => {
   for (let i = state.shapes.length - 1; i >= 0; i--) {
     const s = state.shapes[i];
     if (s.type === 'sweeper' && s.containsPoint(e.clientX, e.clientY)) {
       openEditor(s.id);
+      tour.notify('editor-opened');
       return;
     }
-  }
-});
-
-// 'E' opens the editor for the active sweeper. Guarded against inputs so it
-// doesn't collide with typing in the Strudel textarea.
-document.addEventListener('keydown', e => {
-  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
-  if (e.key.toLowerCase() !== 'e') return;
-  if (isEditorOpen()) { closeEditor(); return; }
-  const s = state.activeShape;
-  if (s !== null && s.type === 'sweeper') {
-    e.preventDefault();
-    openEditor(s.id);
   }
 });
 

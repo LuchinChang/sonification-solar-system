@@ -1,18 +1,21 @@
 // src/tour.ts
 //
-// First-time guided walkthrough — 11-step intro tour.
+// First-time guided walkthrough — sweeper-only onboarding.
 // Self-contained state machine with injected DOM elements.
+//
+// Unit 15: rewritten for the Max-MSP-style sweeper-editor overhaul.
+// The five steps walk a new user through: spawn sweeper → open editor →
+// connect a cable → hear it → done.
 
 import type { DomElements } from './dom';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export type TourAction =
-  | 'dock-shown'
-  | 'shape-spawned'
-  | 'play-pressed'
-  | 'eval-pressed'
-  | 'telemetry-toggled';
+  | 'sweeper-spawned'
+  | 'editor-opened'
+  | 'cable-connected'
+  | 'play-pressed';
 
 interface TourStep {
   target: () => HTMLElement | null;
@@ -26,46 +29,29 @@ interface TourStep {
 const TOUR_DONE_KEY = 'intro-tour-done';
 
 const tourSteps: TourStep[] = [
-  { // 0 — Show the dock
-    target: () => document.body,
-    text: 'Press <kbd>D</kbd> to reveal the control dock.',
-    trigger: 'action',
-  },
-  { // 1 — Spawn a shape
+  { // 0 — Spawn a sweeper
     target: () => document.getElementById('foundry-shapes'),
-    text: 'Click a shape in the dock to place it on the canvas.',
+    text: 'Press <kbd>N</kbd> (or click <kbd>+ Sweeper</kbd>) to place a sweeper.',
     trigger: 'action',
   },
-  { // 2 — Press Play
+  { // 1 — Open the editor
+    target: () => document.body,
+    text: 'Press <kbd>E</kbd> to open the sweeper\u2019s editor panel.',
+    trigger: 'action',
+  },
+  { // 2 — Connect a cable
+    target: () => document.getElementById('node-editor-panel'),
+    text: 'Drag a cable from a data rule to a sound rule.',
+    trigger: 'action',
+  },
+  { // 3 — Hear it
     target: () => document.getElementById('play-pause-btn'),
-    text: 'Press <kbd>Space</kbd> or click Play to hear your creation.',
+    text: 'Press <kbd>Space</kbd> (or Play) to hear the sound.',
     trigger: 'action',
   },
-  { // 3 — Celebrate
+  { // 4 — Done
     target: () => document.body,
-    text: 'You made music from planetary orbits!',
-    trigger: 'auto',
-    autoMs: 2000,
-  },
-  { // 4 — Sync changes
-    target: () => document.body,
-    text: 'Press <kbd>⌘/Ctrl+Enter</kbd> to sync your changes. Look for the green flash — it confirms the sound has been updated!',
-    trigger: 'action',
-  },
-  { // 5 — Listen to the change
-    target: () => document.body,
-    text: 'Listen to the difference!',
-    trigger: 'auto',
-    autoMs: 3000,
-  },
-  { // 6 — Live code panel
-    target: () => document.getElementById('telemetry-panel'),
-    text: 'Press <kbd>I</kbd> to open the live code panel. Watch how code changes as you add shapes — you can edit it directly!',
-    trigger: 'action',
-  },
-  { // 7 — Done
-    target: () => document.body,
-    text: 'You\'re all set! Explore freely.',
+    text: 'Done \u2014 explore more.',
     trigger: 'gotit',
   },
 ];
@@ -128,7 +114,7 @@ export function createTourController(dom: DomElements): TourController {
       dom.tourSpot.style.height = `${rect.height + pad * 2}px`;
       dom.tourSpot.style.display = 'block';
 
-      const liftTarget = target.closest('#foundry-panel, #telemetry-panel') as HTMLElement ?? target;
+      const liftTarget = target.closest('#foundry-panel, #telemetry-panel, #node-editor-panel') as HTMLElement ?? target;
       if (step.trigger === 'action' || step.trigger === 'gotit') {
         liftTarget.style.zIndex = '96';
         liftedEl = liftTarget;
@@ -176,11 +162,10 @@ export function createTourController(dom: DomElements): TourController {
   function notify(action: TourAction): void {
     if (!active) return;
     const idx = stepIdx;
-    if (action === 'dock-shown' && idx === 0) advance();
-    else if (action === 'shape-spawned' && idx === 1) advance();
-    else if (action === 'play-pressed' && idx === 2) advance();
-    else if (action === 'eval-pressed' && idx === 4) advance();
-    else if (action === 'telemetry-toggled' && idx === 6) advance();
+    if (action === 'sweeper-spawned'  && idx === 0) advance();
+    else if (action === 'editor-opened'   && idx === 1) advance();
+    else if (action === 'cable-connected' && idx === 2) advance();
+    else if (action === 'play-pressed'    && idx === 3) advance();
   }
 
   // Wire up tour UI buttons

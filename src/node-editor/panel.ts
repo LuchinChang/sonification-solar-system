@@ -58,7 +58,16 @@ export function initNodeEditor(opts: { resolveSweeper: (id: number) => CanvasSha
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
-/** Open the editor for a given sweeper. No-op (warns) if id doesn't resolve. */
+/**
+ * Open the editor for a given sweeper.
+ *
+ * Toggle semantics:
+ *  - If the panel is already open for the SAME sweeper id → close it.
+ *  - If the panel is open for a DIFFERENT sweeper → repoint to the new one.
+ *  - Otherwise just open.
+ *
+ * No-op (warns) if the id doesn't resolve to a sweeper.
+ */
 export function openEditor(sweeperId: number): void {
   ensureMounted();
   if (refs === null || resolveSweeper === null) return;
@@ -68,15 +77,21 @@ export function openEditor(sweeperId: number): void {
     return;
   }
 
+  // Toggle: same sweeper, already open → close and bail.
+  if (isEditorOpen() && activeSweeperId === sweeperId) {
+    closeEditor();
+    return;
+  }
+
   activeSweeperId = sweeperId;
   // Phase 2+ will persist graphs per-sweeper; for Unit 4 we spin a fresh one.
   activeGraph = createGraph(sweeperId);
 
   const color = sweeper.sweepColor;
-  refs.swatch.style.color          = color;
+  refs.swatch.style.color           = color;
   refs.swatch.style.backgroundColor = color;
-  refs.sweeperIcon.style.color     = color;
-  refs.sweeperNumEl.textContent    = `Sweeper #${sweeper.id}`;
+  refs.sweeperIcon.style.color      = color;
+  refs.sweeperNumEl.textContent     = `Sweeper #${sweeper.id}`;
 
   refs.root.classList.remove('hidden');
   refs.root.removeAttribute('aria-hidden');
@@ -131,12 +146,17 @@ function ensureMounted(): void {
   const header = document.createElement('div');
   header.className = 'node-editor-header';
 
-  const swatch = document.createElement('span');
-  swatch.className = 'node-editor-swatch';
-
+  // Pre-attentive "identity chip": color swatch immediately left of the
+  // sweeper number, with a soft label underneath. The swatch glows in the
+  // sweeper's color so the open panel is visually locked to its target on
+  // the canvas.
   const titleLabel = document.createElement('span');
   titleLabel.className = 'node-editor-title';
-  titleLabel.textContent = 'Node Editor —';
+  titleLabel.textContent = 'Node Editor';
+
+  const swatch = document.createElement('span');
+  swatch.className = 'node-editor-swatch';
+  swatch.setAttribute('aria-hidden', 'true');
 
   const sweeperNumEl = document.createElement('span');
   sweeperNumEl.className = 'node-editor-sweeper-num';
@@ -144,7 +164,7 @@ function ensureMounted(): void {
 
   const hint = document.createElement('span');
   hint.className = 'node-editor-hint';
-  hint.textContent = 'Esc to close · Ctrl+Enter to commit';
+  hint.textContent = 'Esc / E to close · Ctrl+Enter to commit';
 
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
@@ -153,7 +173,7 @@ function ensureMounted(): void {
   closeBtn.setAttribute('aria-label', 'Close node editor');
   closeBtn.addEventListener('click', closeEditor);
 
-  header.append(swatch, titleLabel, sweeperNumEl, hint, closeBtn);
+  header.append(titleLabel, swatch, sweeperNumEl, hint, closeBtn);
 
   // Body ──────────────────────────────────────────────────────────────────
   const body = document.createElement('div');

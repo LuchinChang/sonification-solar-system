@@ -27,6 +27,7 @@ import {
   setEvalStatus, toggleTelemetry,
 } from './telemetry';
 import { playLiveCode, syncStrudelCps, resumeAudioContext, suspendAudioContext, getAudioTime } from './audio';
+import { openEditor, closeEditor, isEditorOpen, currentSweeperId } from './node-editor';
 import { setTheme } from './theme';
 import { drawScene } from './renderer';
 import {
@@ -91,7 +92,7 @@ export function spawnShape(
   setActiveShape(state, s);
   updateTelemetry(dom, state);
   if (state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value, false);
-  tour.notify('shape-spawned');
+  if (type === 'sweeper') tour.notify('sweeper-spawned');
 }
 
 export function setActiveShape(state: AppState, s: CanvasShape | null): void {
@@ -298,7 +299,7 @@ function updateCpmKnobVisual(state: AppState, dom: DomElements): void {
 
 // ── Evaluate + global flash ──────────────────────────────────────────────────
 
-function evaluateAndFlash(state: AppState, dom: DomElements, tour: TourController): void {
+function evaluateAndFlash(state: AppState, dom: DomElements): void {
   if (!state.audioInitialized) return;
   playLiveCode(state.strudelRepl, dom.telemetryTextarea.value)
     .then(status => setEvalStatus(dom.evalStatusEl, status));
@@ -311,7 +312,6 @@ function evaluateAndFlash(state: AppState, dom: DomElements, tour: TourControlle
     document.body.classList.add('global-flash');
     setTimeout(() => document.body.classList.remove('global-flash'), 450);
   }
-  tour.notify('eval-pressed');
 }
 
 // ── Resize handler ───────────────────────────────────────────────────────────
@@ -689,12 +689,11 @@ export function setupEventHandlers(
   });
 
   // Sync audio button
-  dom.syncAudioBtn.addEventListener('click', () => evaluateAndFlash(state, dom, tour));
+  dom.syncAudioBtn.addEventListener('click', () => evaluateAndFlash(state, dom));
 
   // Telemetry tab toggle
   dom.telemetryTab.addEventListener('click', () => {
-    const opened = toggleTelemetry(dom);
-    if (opened) tour.notify('telemetry-toggled');
+    toggleTelemetry(dom);
   });
 
   // Theme toggle
@@ -708,7 +707,7 @@ export function setupEventHandlers(
     // Ctrl/Cmd+Enter: global
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
-      evaluateAndFlash(state, dom, tour);
+      evaluateAndFlash(state, dom);
       return;
     }
 
@@ -724,13 +723,9 @@ export function setupEventHandlers(
     switch (e.key.toLowerCase()) {
       case 'd':
         document.body.classList.toggle('ui-hidden');
-        if (!document.body.classList.contains('ui-hidden')) tour.notify('dock-shown');
         break;
       case 'i':
-        {
-          const opened = toggleTelemetry(dom);
-          if (opened) tour.notify('telemetry-toggled');
-        }
+        toggleTelemetry(dom);
         break;
       case ' ':
         e.preventDefault();
@@ -749,6 +744,21 @@ export function setupEventHandlers(
         // N: spawn a sweeper at the Sun (Unit 3 minimal affordance)
         spawnShape(state, dom, 'sweeper' as ShapeType, tour);
         break;
+      case 'e': {
+        // E toggle: close if open-for-same / no-active-sweeper, else (re)open
+        // for the active sweeper. openEditor itself no-ops back to closed when
+        // called with the id it's already showing.
+        const active = state.activeShape;
+        const sweeperId = active !== null && active.type === 'sweeper' ? active.id : null;
+        if (sweeperId === null || sweeperId === currentSweeperId()) {
+          if (isEditorOpen()) closeEditor();
+        } else {
+          e.preventDefault();
+          openEditor(sweeperId);
+          tour.notify('editor-opened');
+        }
+        break;
+      }
     }
   });
 
