@@ -40,3 +40,8 @@ export {
   currentSweeperId,
   currentGraph,
 } from './panel';
+
+// Side-effect imports: registering NodeDefinitions at module load.
+// Units 5–10 each import their nodes file here so a single import of
+// `./node-editor` populates the registry.
+import './nodes/sound-effects';
