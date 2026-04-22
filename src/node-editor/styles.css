@@ -491,6 +491,12 @@
   font-style: italic;
 }
 
+/* Light theme: the chip keeps its dark translucent background, so
+   the text must be light (dark --text-secondary would be unreadable). */
+[data-theme="light"] .ne-toolbox-chip        { color: rgba(250, 246, 238, 0.92); }
+[data-theme="light"] .ne-toolbox-chip:hover  { color: #FFE4C8; }
+[data-theme="light"] .ne-toolbox-group-label { color: rgba(92, 58, 33, 0.75); }
+
 /* ── Drag ghost (follows the cursor, never intercepts events) ── */
 
 .ne-toolbox-ghost {
