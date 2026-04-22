@@ -40,3 +40,8 @@ export {
   currentSweeperId,
   currentGraph,
 } from './panel';
+
+export {
+  compileGraphToStrudel,
+  inboundSignalExpr,
+} from './codegen';

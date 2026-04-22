@@ -17,6 +17,8 @@
 // marked hook below.
 
 import type { CanvasShape } from '../shapes';
+import type { NodeGraphSnapshot } from '../config-snapshot';
+import { compileGraphToStrudel } from './codegen';
 import { createGraph } from './graph';
 import type { NodeGraph } from './types';
 
@@ -42,6 +44,14 @@ let activeGraph:     NodeGraph | null = null;
 // Caller-supplied resolver: id → CanvasShape. Wired by main.ts via init().
 let resolveSweeper: ((id: number) => CanvasShape | null) | null = null;
 
+/**
+ * Optional commit hook supplied by main.ts. Called from closeEditor() AFTER
+ * the graph is saved to shape.graph. Main wires this to telemetry's
+ * patchShapeBlock so the live Strudel textarea is updated in one atomic
+ * swap — DEFERRED until close, never during drag/edit (Unit 14).
+ */
+let commitGraph: ((shape: CanvasShape, compiledBlock: string) => void) | null = null;
+
 // Document keydown handler — registered on first open, torn down on close.
 let keyHandler: ((e: KeyboardEvent) => void) | null = null;
 
@@ -51,8 +61,13 @@ let keyHandler: ((e: KeyboardEvent) => void) | null = null;
  * Hand the panel module a way to resolve sweeper ids to their CanvasShape
  * objects (for color + label). Keeps this module decoupled from AppState.
  */
-export function initNodeEditor(opts: { resolveSweeper: (id: number) => CanvasShape | null }): void {
+export function initNodeEditor(opts: {
+  resolveSweeper: (id: number) => CanvasShape | null;
+  /** Called on closeEditor() with the freshly-compiled sweeper block. */
+  commit?: (shape: CanvasShape, compiledBlock: string) => void;
+}): void {
   resolveSweeper = opts.resolveSweeper;
+  commitGraph    = opts.commit ?? null;
   ensureMounted();
 }
 
@@ -97,14 +112,46 @@ export function closeEditor(): void {
   refs.root.setAttribute('aria-hidden', 'true');
   refs.root.setAttribute('inert', '');
 
-  // TODO(Unit 14): compileGraphToStrudel(activeGraph) here.
-  //   - Walk nodes in topological order.
-  //   - Call each NodeDefinition.codegen() with a CodegenCtx.
-  //   - Splice the resulting fragment into the live Strudel source.
+  // Unit 14 — DEFERRED COMMIT. Compile the in-memory graph to a full sweeper
+  // block, persist the snapshot onto the shape, and hand the fresh block to
+  // main.ts's commit callback (which in turn calls telemetry.patchShapeBlock).
+  // Codegen runs exactly once here, never during drag/connect.
+  const shape = activeSweeperId !== null && resolveSweeper !== null
+    ? resolveSweeper(activeSweeperId)
+    : null;
+  if (shape !== null && activeGraph !== null) {
+    shape.graph = graphToSnapshot(activeGraph);
+    const compiled = compileGraphToStrudel(shape.id, activeGraph, shape);
+    if (commitGraph !== null) commitGraph(shape, compiled);
+  }
 
   activeSweeperId = null;
   activeGraph     = null;
   detachKeyHandler();
+}
+
+// ── Live NodeGraph → persistable NodeGraphSnapshot ───────────────────────────
+
+/**
+ * Flatten a live NodeGraph into the serialization-layer NodeGraphSnapshot
+ * stored on CanvasShape.graph / ShapeConfig.graph. Drops runtime-only fields
+ * (side — recoverable from the NodeDefinition by def type).
+ */
+function graphToSnapshot(g: NodeGraph): NodeGraphSnapshot {
+  return {
+    nodes: g.nodes.map(n => ({
+      id:      n.id,
+      defType: n.type,
+      x:       n.x,
+      y:       n.y,
+      params:  { ...n.params },
+    })),
+    edges: g.edges.map(e => ({
+      id:       e.id,
+      fromPort: `${e.from.nodeId}:${e.from.portId}`,
+      toPort:   `${e.to.nodeId}:${e.to.portId}`,
+    })),
+  };
 }
 
 /** Currently-open sweeper id, or null. Exposed for later units. */
