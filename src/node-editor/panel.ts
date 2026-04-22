@@ -23,7 +23,7 @@ import { compileGraphToStrudel } from './codegen';
 import { addEdge, addNode, createGraph } from './graph';
 import { getNodeDef } from './registry';
 import { mountToolbox, refreshToolbox } from './toolbox';
-import type { NodeGraph } from './types';
+import type { Node, NodeDefinition, NodeGraph } from './types';
 // Side-effect import: registers the four sound-basic NodeDefinitions so the
 // default-graph seeding below can find them via getNodeDef().
 import './nodes/sound-basic';
@@ -127,10 +127,100 @@ export function openEditor(sweeperId: number): void {
   // Re-render chip list in case new NodeDefinitions registered since last open.
   refreshToolbox(toolboxHost(refs), toolboxCallbacks());
 
+  // Paint the seeded graph's nodes into the correct columns.
+  renderAllNodes();
+
+  // Re-render nodes whenever the graph changes (toolbox drop, cable removal).
+  if (graphChangedHandler !== null) refs.root.removeEventListener('graphChanged', graphChangedHandler);
+  graphChangedHandler = () => renderAllNodes();
+  refs.root.addEventListener('graphChanged', graphChangedHandler);
+
   refs.root.classList.remove('hidden');
   refs.root.removeAttribute('aria-hidden');
   refs.root.removeAttribute('inert');
   attachKeyHandler();
+}
+
+// ── Node-body rendering (Phase-2 integration) ────────────────────────────────
+//
+// Each node becomes a glass card inside its side's column. Ports on the left
+// edge (inputs) and right edge (outputs) carry the `.port` data-attributes
+// Unit 11's cables.ts listens for, so dragging works end-to-end.
+
+let graphChangedHandler: (() => void) | null = null;
+
+function renderAllNodes(): void {
+  if (refs === null || activeGraph === null) return;
+  // Clear existing node bodies (keep column title + placeholder).
+  for (const col of [refs.leftCol, refs.rightCol, refs.center]) {
+    col.querySelectorAll(':scope > .ne-node').forEach(n => n.remove());
+  }
+  for (const node of activeGraph.nodes) {
+    const def = getNodeDef(node.type);
+    if (!def) continue;
+    const host = columnForSide(def.side);
+    if (host !== null) host.appendChild(renderNode(node, def));
+  }
+}
+
+function columnForSide(side: 'data' | 'sweeper' | 'sound' | 'playback'): HTMLElement | null {
+  if (refs === null) return null;
+  if (side === 'data')  return refs.leftCol;
+  if (side === 'sound') return refs.rightCol;
+  return refs.center;  // sweeper + playback share center
+}
+
+function renderNode(node: Node, def: NodeDefinition): HTMLDivElement {
+  const card = document.createElement('div');
+  card.className = 'ne-node';
+  card.dataset['nodeId'] = node.id;
+
+  const title = document.createElement('div');
+  title.className = 'ne-node-title';
+  title.textContent = def.label;
+  card.appendChild(title);
+
+  // Inputs (left edge)
+  if (def.inputs && def.inputs.length > 0) {
+    const inRow = document.createElement('div');
+    inRow.className = 'ne-node-ports ne-node-ports-in';
+    for (const p of def.inputs) inRow.appendChild(makePortEl(node, p, 'in'));
+    card.appendChild(inRow);
+  }
+
+  // Custom UI (slider / select / text — Unit 7/8/9/10)
+  if (def.ui) {
+    try {
+      const ui = def.ui(node, patch => {
+        Object.assign(node.params, patch.params ?? {});
+        refs?.root.dispatchEvent(new CustomEvent('graphChanged', { bubbles: true }));
+      });
+      card.appendChild(ui);
+    } catch (err) {
+      console.warn('[node-editor] ui() threw for', def.type, err);
+    }
+  }
+
+  // Outputs (right edge)
+  if (def.outputs && def.outputs.length > 0) {
+    const outRow = document.createElement('div');
+    outRow.className = 'ne-node-ports ne-node-ports-out';
+    for (const p of def.outputs) outRow.appendChild(makePortEl(node, p, 'out'));
+    card.appendChild(outRow);
+  }
+
+  return card;
+}
+
+function makePortEl(node: Node, port: { id: string; label?: string; kind: string }, direction: 'in' | 'out'): HTMLDivElement {
+  const el = document.createElement('div');
+  el.className = 'port';
+  el.dataset['nodeId']   = node.id;
+  el.dataset['portId']   = port.id;
+  el.dataset['direction'] = direction;
+  el.dataset['kind']     = port.kind;
+  el.title                = `${port.label ?? port.id} (${port.kind})`;
+  return el;
 }
 
 /**

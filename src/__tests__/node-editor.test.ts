@@ -48,6 +48,8 @@ if (typeof document === 'undefined') {
       setAttribute: () => {},
       removeAttribute: () => {},
       addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => true,
       append: () => {},
       appendChild: () => {},
       querySelector:   () => null,
