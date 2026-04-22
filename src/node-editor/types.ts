@@ -21,6 +21,7 @@ export type PortKind =
   | 'signal'     // continuous time-varying value (Hz, gain…)
   | 'trigger'   // discrete event stream (bang)
   | 'pattern'   // Strudel pattern
+  | 'string'    // enum / tag values (e.g. playback-mode selectors)
   | 'any';
 
 export interface PortSpec {

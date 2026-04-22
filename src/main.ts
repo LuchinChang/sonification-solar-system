@@ -12,12 +12,18 @@ import { drawScene } from './renderer';
 import { setTheme } from './theme';
 import { createTourController } from './tour';
 // LEGACY: flashTelemBlock was only used in the non-sweeper rAF branch.
-import { updateTelemetry } from './telemetry';
+import { updateTelemetry, patchShapeBlock, replaceShapeBlock } from './telemetry';
 import {
   setupEventHandlers, calculateLines,
   finishDrawAnimation, updateCaption,
 } from './controls';
-import { initNodeEditor, openEditor, closeEditor, isEditorOpen } from './node-editor';
+import {
+  initNodeEditor, openEditor, registerDataNodes,
+} from './node-editor';
+import './node-editor/nodes/sound-basic';     // side-effect register: pitch, freq-range, lpf, gain
+import './node-editor/nodes/sweeper';          // side-effect register: 4 sweeper-self nodes
+import { registerPlaybackModeNode } from './node-editor/nodes/playback';
+import { setSweeperResolver } from './node-editor/nodes/sweeper';
 
 // ── Initialise ───────────────────────────────────────────────────────────────
 
@@ -35,34 +41,37 @@ setupEventHandlers(state, dom, tour);
 // Opens when a sweeper is clicked on the canvas, or when 'E' is pressed with a
 // sweeper selected. Escape closes (handled inside panel.ts). Codegen is
 // DEFERRED — Unit 14 will hook into closeEditor().
+registerDataNodes();
+registerPlaybackModeNode();
+setSweeperResolver(id => state.shapes.find(s => s.id === id && s.type === 'sweeper') ?? null);
 initNodeEditor({
   resolveSweeper: id => state.shapes.find(s => s.id === id && s.type === 'sweeper') ?? null,
+  // Unit 14 — DEFERRED commit. The panel hands us the freshly-compiled sweeper
+  // block on closeEditor(); we splice it into the live textarea via the
+  // canonical surgical-patch helper. Re-eval happens on Ctrl+Enter / Play.
+  commit: (shape, compiledBlock) => {
+    if (!replaceShapeBlock(dom.telemetryTextarea, shape.id, compiledBlock)) {
+      // Markers missing — fall back to the full-regenerate path.
+      patchShapeBlock(
+        dom.telemetryTextarea, shape, state.shapes,
+        state.currentPattern.name, state.sampleRate, state.cpm,
+      );
+    }
+  },
 });
 
 // Canvas click → open editor for sweeper. This runs AFTER controls.ts's
 // existing click handler (which selects the shape); both fire on the same
 // click because we attach with addEventListener — order matches registration.
+// The 'E' hotkey is owned by controls.ts (toggle semantics).
 dom.canvas.addEventListener('click', e => {
   for (let i = state.shapes.length - 1; i >= 0; i--) {
     const s = state.shapes[i];
     if (s.type === 'sweeper' && s.containsPoint(e.clientX, e.clientY)) {
       openEditor(s.id);
+      tour.notify('editor-opened');
       return;
     }
-  }
-});
-
-// 'E' opens the editor for the active sweeper. Guarded against inputs so it
-// doesn't collide with typing in the Strudel textarea.
-document.addEventListener('keydown', e => {
-  if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
-  if (e.key.toLowerCase() !== 'e') return;
-  if (isEditorOpen()) { closeEditor(); return; }
-  const s = state.activeShape;
-  if (s !== null && s.type === 'sweeper') {
-    e.preventDefault();
-    openEditor(s.id);
   }
 });
 

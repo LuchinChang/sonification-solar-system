@@ -6,7 +6,7 @@
 // Audio (Strudel) is intentionally NOT wired here — code generation only.
 
 import type { Point } from './geometry';
-import { getRaySegmentDist, pointToSegmentDist } from './geometry';
+import { angleStdev, getRaySegmentDist, pointToSegmentDist } from './geometry';
 // LEGACY: disabled 2026-04-21 — non-sweeper shape support, kept for future revival.
 // To re-enable: un-comment this block and re-add 'circle' | 'triangle' | 'rectangle' to ShapeType.
 /*
@@ -19,6 +19,16 @@ import type { ShapeConfig, NodeGraphSnapshot } from './config-snapshot';
 export type ShapeType   = 'sweeper';
 // LEGACY: previous union was 'circle' | 'triangle' | 'rectangle' | 'sweeper'
 export type PlaybackMode = 'constant-time' | 'constant-speed';
+
+/**
+ * Per-sweeper arm-motion kinematics (Unit 10).
+ * - 'normal'    : constant angular velocity, wrapping at 2π.
+ * - 'ping-pong' : reverses direction after each full cycle of travel.
+ * - 'spring'    : target moves at normal ω, arm follows via critically-damped
+ *                 spring — subjectively eases near cycle boundaries.
+ * Writing this field is the only side effect of the playback.mode node.
+ */
+export type SweeperPlaybackMode = 'normal' | 'ping-pong' | 'spring';
 
 /** Pre-computed orbital intersection — angle (polar, 0…2π) + canvas coords. */
 export interface CachedIntersection {
@@ -38,6 +48,10 @@ export interface SweepCluster {
   y:        number;  // canvas y of cluster centroid
   freq:     number;  // mapped Hz  : 100 + (dist/maxR) * 900
   gain:     number;  // mapped amp : min(density/20, 1.0) * 0.7
+  /** Circular stdev (rad) of the angles of the link-lines making up this
+   *  cluster. 0 for single-line clusters; folded to the half-circle so that
+   *  parallel lines score as low-variance regardless of direction. */
+  angleVariance: number;
 }
 
 /** Resolution of the binary rhythm grid (angular bins mapped to Strudel struct). */
@@ -69,8 +83,10 @@ interface TriggerAnimation {
 }
 
 // ── Sweeper constants ─────────────────────────────────────────────────────────
-/** Max gap (px) between sorted distances before starting a new cluster. */
-const SWEEP_CLUSTER_THRESHOLD = 2;
+/** Max gap (px) between sorted distances before starting a new cluster.
+ *  Exported so the data-side `cluster-tolerance` node can read the live value
+ *  it publishes onto globalThis.__sw_<id>_tol each frame. */
+export const SWEEP_CLUSTER_THRESHOLD = 2;
 /** Accent colour palette for sweeper shapes — each sweeper gets a distinct hue. */
 const SWEEP_PALETTE = ['#2DD4BF', '#C084FC', '#F472B6', '#60A5FA', '#FACC15', '#FB923C', '#34D399', '#A78BFA'];
 
@@ -144,6 +160,13 @@ export class CanvasShape {
   startAngle: number;
   /** Number of discrete positions per full revolution (sweeper only). Default 60. */
   ticks: number;
+  /**
+   * Quantization resolution for the live playhead (sweeper only). Default 120.
+   * When > 0 the playhead angle snaps to `fineness` discrete positions around
+   * 2π — round(phase · fineness / 2π) · (2π / fineness) — producing visible
+   * stair-steps. Lower values = chunkier motion, higher values = smoother.
+   */
+  fineness: number;
   /** Lower frequency bound for sweeper distance mapping (Hz). */
   freqLow: number;
   /** Upper frequency bound for sweeper distance mapping (Hz). */
@@ -182,6 +205,20 @@ export class CanvasShape {
   sweepAudioRefTime: number;
   /** Fractional cycle phase (0..1) accumulated up to the last ref anchor (sweeper phase sync, runtime-only). */
   sweepPhaseAtRef: number;
+  /**
+   * Unit 10 — per-sweeper arm kinematics. Written by the playback.mode node
+   * when the editor commits; read every frame by stepPlayhead(). Sweeper-only
+   * (guarded by `type === 'sweeper'` at the call site).
+   */
+  playbackMode: SweeperPlaybackMode;
+  /** Ping-pong direction of travel: +1 forward (CCW-ish), -1 reversed. */
+  sweepDirection: 1 | -1;
+  /** Ping-pong cumulative angular distance since the last direction flip. */
+  sweepPingPongAccum: number;
+  /** Spring mode — moving target angle, advanced at the normal ω. */
+  springTargetAngle: number;
+  /** Spring mode — current angular velocity of the arm (rad/s). */
+  springVelocity: number;
 
   constructor(x: number, y: number, type: ShapeType, size = 60) {
     this.id                  = ++_nextId;
@@ -202,6 +239,7 @@ export class CanvasShape {
     this.sweepClusters       = [];
     this.startAngle          = 3 * Math.PI / 2;  // 90° math = UP = 12 o'clock
     this.ticks               = 60;
+    this.fineness            = 120;
     this.sweepTicks          = [];
     this.freqLow             = 100;
     this.freqHigh            = 1000;
@@ -209,6 +247,11 @@ export class CanvasShape {
     this.graph               = null;
     this.sweepAudioRefTime   = 0;
     this.sweepPhaseAtRef     = 0;
+    this.playbackMode        = 'normal';
+    this.sweepDirection      = 1;
+    this.sweepPingPongAccum  = 0;
+    this.springTargetAngle   = this.playheadAngle;
+    this.springVelocity      = 0;
   }
 
   // ── Serialization ──────────────────────────────────────────────────────────
@@ -224,6 +267,7 @@ export class CanvasShape {
       base.sweepCount = this.sweepCount;
       base.startAngle = this.startAngle;
       base.ticks      = this.ticks;
+      base.fineness   = this.fineness;
       base.freqLow    = this.freqLow;
       base.freqHigh   = this.freqHigh;
       base.colorIndex = this.colorIndex;
@@ -242,6 +286,7 @@ export class CanvasShape {
     if (cfg.sweepCount !== undefined) s.sweepCount = cfg.sweepCount;
     if (cfg.startAngle !== undefined) s.startAngle = cfg.startAngle;
     if (cfg.ticks      !== undefined) s.ticks      = cfg.ticks;
+    if (cfg.fineness   !== undefined) s.fineness   = cfg.fineness;
     if (cfg.freqLow    !== undefined) s.freqLow    = cfg.freqLow;
     if (cfg.freqHigh   !== undefined) s.freqHigh   = cfg.freqHigh;
     if (cfg.colorIndex !== undefined) s.colorIndex = cfg.colorIndex;
@@ -539,6 +584,11 @@ export class CanvasShape {
    * Advance the playhead by one frame.
    * Constant Time  : all shapes share the same cycle duration regardless of size.
    * Constant Speed : cycle duration scales with size (fixed linear perimeter speed).
+   *
+   * For sweepers, the per-shape `playbackMode` (Unit 10) further re-shapes the
+   * kinematics — 'normal' keeps the legacy behaviour, 'ping-pong' reverses
+   * direction each cycle, 'spring' eases near boundaries via a
+   * critically-damped spring. Non-sweepers always use the normal path.
    */
   stepPlayhead(deltaMs: number, CPM: number, mode: PlaybackMode): void {
     if (deltaMs <= 0) return;
@@ -546,9 +596,67 @@ export class CanvasShape {
     const duration     = mode === 'constant-time'
       ? baseDuration
       : baseDuration * (this.size / 100);
-    this.prevPlayheadAngle = this.playheadAngle;
-    this.playheadAngle     = (this.playheadAngle + (deltaMs / duration) * Math.PI * 2)
-                              % (Math.PI * 2);
+
+
+    if (this.type === 'sweeper') {
+      switch (this.playbackMode) {
+        case 'ping-pong': this._stepPingPong(deltaMs, duration); return;
+        case 'spring':    this._stepSpring(deltaMs, duration);    return;
+        case 'normal':
+        default:          break;  // fall through to normal path (with fineness quantization)
+      }
+    }
+
+    const nextPhase = (this.playheadAngle + (deltaMs / duration) * Math.PI * 2)
+                      % (Math.PI * 2);
+    // Sweeper-only: quantize the phase to `fineness` discrete positions around
+    // 2π, producing stair-step motion when fineness is small. Ping-pong and
+    // spring modes use continuous motion — fineness is a normal-mode knob.
+    if (this.type === 'sweeper' && this.fineness > 0) {
+      const step = (Math.PI * 2) / this.fineness;
+      this.playheadAngle = (Math.round(nextPhase / step) * step) % (Math.PI * 2);
+    } else {
+      this.playheadAngle = nextPhase;
+    }
+  }
+
+  /**
+   * Ping-pong step: advance by ω*dt in sweepDirection; when the cumulative
+   * angular distance reaches 2π, flip direction and reset the accumulator.
+   * Angle is kept in [0, 2π) by modulo with wrap-around for negative values.
+   */
+  private _stepPingPong(deltaMs: number, durationMs: number): void {
+    const TAU    = Math.PI * 2;
+    const deltaA = (deltaMs / durationMs) * TAU;
+    this.playheadAngle = ((this.playheadAngle + deltaA * this.sweepDirection) % TAU + TAU) % TAU;
+    this.sweepPingPongAccum += deltaA;
+    if (this.sweepPingPongAccum >= TAU) {
+      this.sweepDirection     = (this.sweepDirection === 1 ? -1 : 1);
+      this.sweepPingPongAccum -= TAU;
+    }
+  }
+
+  /**
+   * Spring step: target advances at the normal ω; the arm follows via a
+   * critically-damped spring (c = 2*sqrt(k), k ≈ 8 rad/s²). Angular error
+   * uses the shortest-path convention so the spring doesn't unwind the wrong
+   * way across the 2π wrap. Velocity naturally drops as error → 0, giving a
+   * subjectively gentle ease near cycle boundaries.
+   */
+  private _stepSpring(deltaMs: number, durationMs: number): void {
+    const TAU      = Math.PI * 2;
+    const dt       = deltaMs / 1000;
+    const targetW  = TAU / (durationMs / 1000);     // rad/s — normal ω
+    this.springTargetAngle = (this.springTargetAngle + targetW * dt) % TAU;
+
+    let err = this.springTargetAngle - this.playheadAngle;
+    if (err >  Math.PI) err -= TAU;
+    if (err < -Math.PI) err += TAU;
+
+    const k = 8;
+    const c = 2 * Math.sqrt(k);                       // critical damping
+    this.springVelocity += (k * err - c * this.springVelocity) * dt;
+    this.playheadAngle   = ((this.playheadAngle + this.springVelocity * dt) % TAU + TAU) % TAU;
   }
 
   /**
@@ -645,48 +753,56 @@ export class CanvasShape {
     linkLines: { p1: Point; p2: Point }[],
     maxR:      number,
   ): SweepCluster[] {
-    // 1. Collect distances of all ray-segment hits within maxR
-    const dists: number[] = [];
+    // 1. Collect (distance, line-angle) pairs of all ray-segment hits within maxR.
+    //    Line angle is preserved so the final cluster can expose angleVariance.
+    const hits: { dist: number; lineAngle: number }[] = [];
     const origin: Point = { x: this.x, y: this.y };
     for (const line of linkLines) {
       const t = getRaySegmentDist(origin, angle, line.p1, line.p2);
-      if (t !== null && t <= maxR) dists.push(t);
+      if (t !== null && t <= maxR) {
+        hits.push({
+          dist: t,
+          lineAngle: Math.atan2(line.p2.y - line.p1.y, line.p2.x - line.p1.x),
+        });
+      }
     }
-    if (dists.length === 0) return [];
+    if (hits.length === 0) return [];
 
-    // 2. Sort ascending
-    dists.sort((a, b) => a - b);
+    // 2. Sort ascending by distance
+    hits.sort((a, b) => a.dist - b.dist);
 
-    // 3. Greedy 1D clustering
-    const groups: number[][] = [];
-    for (const d of dists) {
+    // 3. Greedy 1D clustering on distance, carrying line-angle along.
+    const groups: { dist: number; lineAngle: number }[][] = [];
+    for (const h of hits) {
       const last = groups[groups.length - 1];
-      if (last !== undefined && d - last[last.length - 1] <= SWEEP_CLUSTER_THRESHOLD) {
-        last.push(d);
+      if (last !== undefined && h.dist - last[last.length - 1].dist <= SWEEP_CLUSTER_THRESHOLD) {
+        last.push(h);
       } else {
-        groups.push([d]);
+        groups.push([h]);
       }
     }
 
     // 4. Top-K by density, then re-sort by ascending distance for stable index→freq assignment
-    const avg = (arr: number[]) => arr.reduce((s, v) => s + v, 0) / arr.length;
+    const avgDist = (g: { dist: number }[]): number =>
+      g.reduce((s, v) => s + v.dist, 0) / g.length;
     const topK = groups
       .sort((a, b) => b.length - a.length)   // primary: highest density first
       .slice(0, this.k)
-      .sort((a, b) => avg(a) - avg(b));       // secondary: nearest cluster → f0
+      .sort((a, b) => avgDist(a) - avgDist(b)); // secondary: nearest cluster → f0
 
     // 5. Map to SweepCluster objects
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
     return topK.map(group => {
-      const avgDist = avg(group);
+      const d = avgDist(group);
       return {
-        distance: avgDist,
+        distance: d,
         density:  group.length,
-        x:        this.x + cos * avgDist,
-        y:        this.y + sin * avgDist,
-        freq:     this.freqLow + (avgDist / maxR) * (this.freqHigh - this.freqLow),
+        x:        this.x + cos * d,
+        y:        this.y + sin * d,
+        freq:     this.freqLow + (d / maxR) * (this.freqHigh - this.freqLow),
         gain:     0.6 + Math.min(group.length / 20, 1.0) * 0.3,  // 0.6–0.9
+        angleVariance: angleStdev(group.map(h => h.lineAngle)),
       };
     });
   }
@@ -706,6 +822,37 @@ export class CanvasShape {
     for (let arm = 0; arm < this.sweepCount; arm++) {
       const angle = (this.playheadAngle + arm * armSpacing) % (Math.PI * 2);
       this.sweepClusters.push(...this._clustersAtAngle(angle, linkLines, maxR));
+    }
+    // Publish per-frame data-side sensor globals so the node-editor's data
+    // nodes (see src/node-editor/nodes/data.ts) can feed them into Strudel
+    // via `signal(() => globalThis.__sw_<id>_<name>)` in generated code.
+    // Sweeper-only — guarded at the callsite via `shape.type === 'sweeper'`
+    // in the render loop, but we also guard here for safety.
+    if (this.type === 'sweeper') this._publishSensorGlobals();
+  }
+
+  /**
+   * Write the four data-side sensor values onto globalThis, keyed by
+   * sweeper id. Called every rAF frame from computeSweepClusters() — so
+   * we avoid allocations and only touch slots up to this.k. Slots that
+   * don't have a live cluster are zeroed so stale values can't leak into
+   * Strudel's signal() callbacks.
+   */
+  private _publishSensorGlobals(): void {
+    const g = globalThis as unknown as Record<string, number>;
+    const id = this.id;
+    g[`__sw_${id}_tol`]   = SWEEP_CLUSTER_THRESHOLD;
+    g[`__sw_${id}_count`] = this.sweepClusters.length;
+    const k = this.k;
+    for (let i = 0; i < k; i++) {
+      const c = this.sweepClusters[i];
+      if (c !== undefined) {
+        g[`__sw_${id}_dist_${i}`]   = c.distance;
+        g[`__sw_${id}_angvar_${i}`] = c.angleVariance;
+      } else {
+        g[`__sw_${id}_dist_${i}`]   = 0;
+        g[`__sw_${id}_angvar_${i}`] = 0;
+      }
     }
   }
 

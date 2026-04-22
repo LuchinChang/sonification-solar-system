@@ -30,7 +30,14 @@ export {
   addEdge,
   removeEdge,
   incomingEdges,
+  canAddEdge,
 } from './graph';
+
+export {
+  initCables,
+  pathForEndpoints,
+  GRAPH_CHANGED_EVENT,
+} from './cables';
 
 export {
   initNodeEditor,
@@ -40,3 +47,17 @@ export {
   currentSweeperId,
   currentGraph,
 } from './panel';
+
+export {
+  compileGraphToStrudel,
+  inboundSignalExpr,
+} from './codegen';
+
+// Explicit-register (call from main.ts): Unit 6 / 7 / 10 expose their own
+// register*Nodes() entry point so tests can reset + re-register cleanly.
+export { registerDataNodes } from './nodes/data';
+
+// Side-effect register-on-import (Unit 8 / 9): loading this barrel registers
+// the NodeDefinitions immediately. Fine for production; tests reset via
+// _resetRegistryForTests then re-register from their own beforeEach.
+import './nodes/sound-effects';

@@ -52,15 +52,31 @@ export function patchShapeBlock(
   sampleRate: number,
   cpm: number,
 ): void {
-  const start = `// @shape-start-${shape.id}`;
-  const end   = `// @shape-end-${shape.id}`;
-  const regex = new RegExp(`${start}[\\s\\S]*?${end}`);
-  const current = textarea.value;
-  if (regex.test(current)) {
-    textarea.value = current.replace(regex, shape.toStrudelCode());
-  } else {
+  if (!replaceShapeBlock(textarea, shape.id, shape.toStrudelCode())) {
     textarea.value = generateFullCode(shapes, patternName, sampleRate, cpm);
   }
+}
+
+/**
+ * Replace the `// @shape-start-N` … `// @shape-end-N` block in `textarea`
+ * with `newBlock`. Returns true if the markers were found and the swap
+ * happened, false otherwise — callers that need a fallback (full regen)
+ * should check the return value.
+ *
+ * Shared by patchShapeBlock (regenerates from shape.toStrudelCode()) and
+ * Unit 14's deferred-commit path (injects a pre-compiled block from
+ * compileGraphToStrudel).
+ */
+export function replaceShapeBlock(
+  textarea: HTMLTextAreaElement,
+  shapeId: number,
+  newBlock: string,
+): boolean {
+  const regex = new RegExp(`// @shape-start-${shapeId}[\\s\\S]*?// @shape-end-${shapeId}`);
+  const current = textarea.value;
+  if (!regex.test(current)) return false;
+  textarea.value = current.replace(regex, newBlock);
+  return true;
 }
 
 export function patchHeader(
