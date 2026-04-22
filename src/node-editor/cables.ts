@@ -3,7 +3,7 @@
 // Unit 11 — Cable drag + connect interactions.
 //
 // Max-MSP-style connecting: pointerdown on a `.port.out` starts a drag; a
-// preview quadratic Bézier follows the cursor; pointerover on a `.port.in`
+// straight preview line follows the cursor; pointerover on a `.port.in`
 // highlights valid drop-targets; pointerup commits via graph.addEdge.
 //
 // DEFERRED-COMMIT POLICY
@@ -57,32 +57,14 @@ export function hasSelectedEdge(): boolean { return _hasSelectedEdge; }
 
 // ── Geometry ─────────────────────────────────────────────────────────────────
 
-/**
- * Quadratic Bézier control point perpendicular to A→B, offset 40–80px by
- * segment length. Right-hand normal so cables curve consistently regardless
- * of drag direction.
- */
-function controlPoint(ax: number, ay: number, bx: number, by: number): { cx: number; cy: number } {
-  const dx = bx - ax;
-  const dy = by - ay;
-  const len = Math.hypot(dx, dy) || 1;
-  const offset = Math.min(80, Math.max(40, len * 0.25));
-  return {
-    cx: (ax + bx) / 2 + (-dy / len) * offset,
-    cy: (ay + by) / 2 + ( dx / len) * offset,
-  };
-}
-
-/** Compute a quadratic Bézier "M…Q…" path string connecting A → B. */
+/** Compute a straight "M…L…" path string connecting A → B. */
 export function pathForEndpoints(ax: number, ay: number, bx: number, by: number): string {
-  const { cx, cy } = controlPoint(ax, ay, bx, by);
-  return `M ${ax.toFixed(2)} ${ay.toFixed(2)} Q ${cx.toFixed(2)} ${cy.toFixed(2)} ${bx.toFixed(2)} ${by.toFixed(2)}`;
+  return `M ${ax.toFixed(2)} ${ay.toFixed(2)} L ${bx.toFixed(2)} ${by.toFixed(2)}`;
 }
 
-/** Midpoint of the quadratic Bézier used by pathForEndpoints (t=0.5). */
-function bezierMidpoint(ax: number, ay: number, bx: number, by: number): { x: number; y: number } {
-  const { cx, cy } = controlPoint(ax, ay, bx, by);
-  return { x: 0.25 * ax + 0.5 * cx + 0.25 * bx, y: 0.25 * ay + 0.5 * cy + 0.25 * by };
+/** Midpoint of the straight line used by pathForEndpoints. */
+function lineMidpoint(ax: number, ay: number, bx: number, by: number): { x: number; y: number } {
+  return { x: (ax + bx) / 2, y: (ay + by) / 2 };
 }
 
 // ── DOM helpers ──────────────────────────────────────────────────────────────
@@ -241,10 +223,10 @@ export function initCables(
     return { left: sr.left - pr.left, top: sr.top - pr.top };
   };
 
-  // Position the × button at the current Bézier midpoint of its edge. Called
+  // Position the × button at the current line midpoint of its edge. Called
   // after renderEdge and on every cableReflow.
   const positionDeleteBtn = (btn: HTMLButtonElement, ax: number, ay: number, bx: number, by: number): void => {
-    const mid = bezierMidpoint(ax, ay, bx, by);
+    const mid = lineMidpoint(ax, ay, bx, by);
     const o = overlayOrigin();
     btn.style.left = `${o.left + mid.x}px`;
     btn.style.top  = `${o.top  + mid.y}px`;
