@@ -48,7 +48,12 @@ export {
   currentGraph,
 } from './panel';
 
-// Explicit-register (call from main.ts): Unit 6 / 7 / 10 / 14 expose their own
+export {
+  compileGraphToStrudel,
+  inboundSignalExpr,
+} from './codegen';
+
+// Explicit-register (call from main.ts): Unit 6 / 7 / 10 expose their own
 // register*Nodes() entry point so tests can reset + re-register cleanly.
 export { registerDataNodes } from './nodes/data';
 

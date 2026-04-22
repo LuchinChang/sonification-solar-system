@@ -12,7 +12,7 @@ import { drawScene } from './renderer';
 import { setTheme } from './theme';
 import { createTourController } from './tour';
 // LEGACY: flashTelemBlock was only used in the non-sweeper rAF branch.
-import { updateTelemetry } from './telemetry';
+import { updateTelemetry, patchShapeBlock, replaceShapeBlock } from './telemetry';
 import {
   setupEventHandlers, calculateLines,
   finishDrawAnimation, updateCaption,
@@ -40,6 +40,18 @@ setupEventHandlers(state, dom, tour);
 registerDataNodes();
 initNodeEditor({
   resolveSweeper: id => state.shapes.find(s => s.id === id && s.type === 'sweeper') ?? null,
+  // Unit 14 — DEFERRED commit. The panel hands us the freshly-compiled sweeper
+  // block on closeEditor(); we splice it into the live textarea via the
+  // canonical surgical-patch helper. Re-eval happens on Ctrl+Enter / Play.
+  commit: (shape, compiledBlock) => {
+    if (!replaceShapeBlock(dom.telemetryTextarea, shape.id, compiledBlock)) {
+      // Markers missing — fall back to the full-regenerate path.
+      patchShapeBlock(
+        dom.telemetryTextarea, shape, state.shapes,
+        state.currentPattern.name, state.sampleRate, state.cpm,
+      );
+    }
+  },
 });
 
 // Canvas click → open editor for sweeper. This runs AFTER controls.ts's
