@@ -150,6 +150,13 @@ export class CanvasShape {
   startAngle: number;
   /** Number of discrete positions per full revolution (sweeper only). Default 60. */
   ticks: number;
+  /**
+   * Quantization resolution for the live playhead (sweeper only). Default 120.
+   * When > 0 the playhead angle snaps to `fineness` discrete positions around
+   * 2π — round(phase · fineness / 2π) · (2π / fineness) — producing visible
+   * stair-steps. Lower values = chunkier motion, higher values = smoother.
+   */
+  fineness: number;
   /** Lower frequency bound for sweeper distance mapping (Hz). */
   freqLow: number;
   /** Upper frequency bound for sweeper distance mapping (Hz). */
@@ -208,6 +215,7 @@ export class CanvasShape {
     this.sweepClusters       = [];
     this.startAngle          = 3 * Math.PI / 2;  // 90° math = UP = 12 o'clock
     this.ticks               = 60;
+    this.fineness            = 120;
     this.sweepTicks          = [];
     this.freqLow             = 100;
     this.freqHigh            = 1000;
@@ -230,6 +238,7 @@ export class CanvasShape {
       base.sweepCount = this.sweepCount;
       base.startAngle = this.startAngle;
       base.ticks      = this.ticks;
+      base.fineness   = this.fineness;
       base.freqLow    = this.freqLow;
       base.freqHigh   = this.freqHigh;
       base.colorIndex = this.colorIndex;
@@ -248,6 +257,7 @@ export class CanvasShape {
     if (cfg.sweepCount !== undefined) s.sweepCount = cfg.sweepCount;
     if (cfg.startAngle !== undefined) s.startAngle = cfg.startAngle;
     if (cfg.ticks      !== undefined) s.ticks      = cfg.ticks;
+    if (cfg.fineness   !== undefined) s.fineness   = cfg.fineness;
     if (cfg.freqLow    !== undefined) s.freqLow    = cfg.freqLow;
     if (cfg.freqHigh   !== undefined) s.freqHigh   = cfg.freqHigh;
     if (cfg.colorIndex !== undefined) s.colorIndex = cfg.colorIndex;
@@ -553,8 +563,16 @@ export class CanvasShape {
       ? baseDuration
       : baseDuration * (this.size / 100);
     this.prevPlayheadAngle = this.playheadAngle;
-    this.playheadAngle     = (this.playheadAngle + (deltaMs / duration) * Math.PI * 2)
-                              % (Math.PI * 2);
+    const nextPhase = (this.playheadAngle + (deltaMs / duration) * Math.PI * 2)
+                      % (Math.PI * 2);
+    // Sweeper-only: quantize the phase to `fineness` discrete positions
+    // around 2π, producing stair-step motion when fineness is small.
+    if (this.type === 'sweeper' && this.fineness > 0) {
+      const step = (Math.PI * 2) / this.fineness;
+      this.playheadAngle = (Math.round(nextPhase / step) * step) % (Math.PI * 2);
+    } else {
+      this.playheadAngle = nextPhase;
+    }
   }
 
   /**
