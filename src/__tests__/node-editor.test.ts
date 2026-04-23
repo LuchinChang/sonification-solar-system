@@ -42,7 +42,12 @@ if (typeof document === 'undefined') {
       className: '',
       textContent: '',
       innerHTML: '',
+      // `style` and `dataset` are both plain-object bag writes in the
+      // render path (e.g. `card.dataset['nodeId'] = ...`). Keep them as
+      // open records so panel.ts / toolbox.ts don't fail on missing
+      // accessors when seedDefaultGraph actually produces nodes.
       style: {} as Record<string, string>,
+      dataset: {} as Record<string, string>,
       classList: {
         add:    (c: string) => { classes.add(c); },
         remove: (c: string) => { classes.delete(c); },
@@ -89,6 +94,31 @@ beforeEach(() => {
   _resetRegistryForTests();
   _resetIdsForTests();
 });
+
+/**
+ * Round 2: seedDefaultGraph is strict — it throws "unknown node type" if
+ * any of the four chips it wires are absent from the registry. Tests that
+ * exercise openEditor / _seedDefaultGraphForTests call this helper first
+ * so the seed succeeds.
+ */
+function registerSeedDefs(): void {
+  registerNodeDef(makeDef({
+    type: 'data.distance-to-sun', side: 'data', label: 'Distance',
+    outputs: [{ id: 'distance', label: 'distance', kind: 'number' }],
+  }));
+  registerNodeDef(makeDef({
+    type: 'data.cluster-count', side: 'data', label: 'Count',
+    outputs: [{ id: 'count', label: 'count', kind: 'number' }],
+  }));
+  registerNodeDef(makeDef({
+    type: 'sound.frequency', side: 'sound', label: 'Frequency',
+    inputs: [{ id: 'frequency', label: 'frequency', kind: 'number' }],
+  }));
+  registerNodeDef(makeDef({
+    type: 'sound.gain', side: 'sound', label: 'Gain',
+    inputs: [{ id: 'amp', label: 'amp', kind: 'number' }],
+  }));
+}
 
 // ── Registry ─────────────────────────────────────────────────────────────────
 
@@ -215,6 +245,7 @@ describe('node-editor graph', () => {
   });
 
   it('openEditor is a toggle for the same sweeper id', () => {
+    registerSeedDefs();
     // Minimal sweeper stub — only .type, .id, .sweepColor are read by the panel.
     const fakeSweeper = { id: 7, type: 'sweeper', sweepColor: '#C084FC', graph: null, toStrudelCode: () => '// @shape-start-7\n// @shape-end-7' } as unknown as CanvasShape;
     initNodeEditor({ resolveSweeper: id => (id === 7 ? fakeSweeper : null) });
@@ -234,6 +265,7 @@ describe('node-editor graph', () => {
   });
 
   it('openEditor repoints when called for a different sweeper', () => {
+    registerSeedDefs();
     const sweepers: Record<number, CanvasShape> = {
       7: { id: 7, type: 'sweeper', sweepColor: '#C084FC', graph: null, toStrudelCode: () => '// @shape-start-7\n// @shape-end-7' } as unknown as CanvasShape,
       9: { id: 9, type: 'sweeper', sweepColor: '#E8A050', graph: null, toStrudelCode: () => '// @shape-start-9\n// @shape-end-9' } as unknown as CanvasShape,
@@ -269,9 +301,9 @@ describe('node-editor graph', () => {
       codegen: () => '',
     });
     registerNodeDef({
-      type: 'sound.lpf',
+      type: 'sound.frequency',
       side: 'sound',
-      label: 'LPF',
+      label: 'Frequency',
       inputs: [{ id: 'frequency', label: 'frequency', kind: 'number' }],
       codegen: () => '',
     });

@@ -61,9 +61,10 @@ export type { SidebarCallbacks } from './sidebar';
 
 export {
   compileGraphToStrudel,
-  inboundSignalExpr,
-  signalRefRaw,
+  bakePattern,
+  mapValue,
 } from './codegen';
+export type { SweepStack } from './types';
 
 // Explicit-register (call from main.ts): Unit 6 / 7 / 10 expose their own
 // register*Nodes() entry point so tests can reset + re-register cleanly.

@@ -45,6 +45,7 @@ describe('playback.mode node', () => {
         nodeVar:   () => 'x',
         incoming:  () => [],
         paramsOf:  <T,>() => ({} as T),
+        resolveInboundStack: () => null,
       },
       { mode: 'ping-pong' },
       [],

@@ -18,7 +18,7 @@ import {
 import { _resetRegistryForTests } from '../node-editor/registry';
 import { _resetIdsForTests } from '../node-editor/graph';
 import { registerDataNodes } from '../node-editor/nodes/data';
-import { soundLpfDef } from '../node-editor/nodes/sound-basic';
+import { soundFrequencyDef } from '../node-editor/nodes/sound-basic';
 import type { CanvasShape } from '../shapes';
 
 function makeSweeperStub(id: number): CanvasShape {
@@ -34,11 +34,11 @@ function makeSweeperStub(id: number): CanvasShape {
 beforeEach(() => {
   _resetRegistryForTests();
   _resetIdsForTests();
-  // Register only the defs the default-seeded graph uses (distance + lpf,
-  // cluster-count + gain). Sound-basic's module side-effect already ran at
-  // import time in the non-reset path; re-register after the reset.
+  // Register only the defs the default-seeded graph uses (distance +
+  // sound.frequency, cluster-count + sound.gain). Sound-basic's module
+  // side-effect already ran at import time; re-register after the reset.
   registerDataNodes();
-  registerNodeDef(soundLpfDef);
+  registerNodeDef(soundFrequencyDef);
   // Minimal `sound.gain` so the default-graph seeder can wire its second edge.
   registerNodeDef({
     type: 'sound.gain',
@@ -72,7 +72,7 @@ describe('node-editor port tooltips + indicators (Unit 7)', () => {
     }
   });
 
-  it('distance-to-sun output carries range, unit, and description in its tooltip', () => {
+  it('distance-to-sun output carries 0..1 unit + description in its tooltip', () => {
     initNodeEditor({ resolveSweeper: id => (id === 2 ? makeSweeperStub(2) : null) });
     openEditor(2);
 
@@ -84,10 +84,9 @@ describe('node-editor port tooltips + indicators (Unit 7)', () => {
     const dot = row.querySelector('.port') as HTMLElement;
     expect(dot.title).toContain('distance');
     expect(dot.title).toContain('number');
-    expect(dot.title).toContain('px');
-    expect(dot.title).toContain('0');
-    expect(dot.title).toContain('500');
-    // Full description should land in the tooltip too.
+    // Data chips now emit normalized 0..1 values; per-chip Hz/px ranges live
+    // on the consuming sound chip (via its min/max sliders).
+    expect(dot.title).toContain('0..1');
     expect(dot.title.toLowerCase()).toContain('sun');
 
     const indicator = row.querySelector('.port-kind-indicator') as HTMLElement;
@@ -99,20 +98,19 @@ describe('node-editor port tooltips + indicators (Unit 7)', () => {
     expect(help.textContent).toBe('?');
   });
 
-  it('lpf frequency input advertises its Hz range and description', () => {
+  it('frequency input on the default-seeded sound chip advertises 0..1 contract', () => {
     initNodeEditor({ resolveSweeper: id => (id === 3 ? makeSweeperStub(3) : null) });
     openEditor(3);
 
+    // Default graph now seeds `sound.frequency`, not `sound.lpf`. Its input
+    // port is named `frequency` and accepts a 0..1 control signal.
     const freqLabel = Array.from(document.querySelectorAll('.ne-port-row-in .port-label'))
       .find(el => el.textContent?.startsWith('frequency'));
     expect(freqLabel).toBeDefined();
     const row = freqLabel!.closest('.ne-port-row')!;
     const dot = row.querySelector('.port') as HTMLElement;
     expect(dot.title).toContain('frequency');
-    expect(dot.title).toContain('Hz');
-    expect(dot.title).toContain('200');
-    expect(dot.title).toContain('4000');
-    expect(dot.title.toLowerCase()).toContain('cutoff');
+    expect(dot.title).toContain('0..1');
   });
 
   it('PortSpec metadata is optional — a minimal port still renders without throwing', () => {
@@ -127,12 +125,28 @@ describe('node-editor port tooltips + indicators (Unit 7)', () => {
       outputs: [{ id: 'distance', label: 'distance', kind: 'number' }],
       codegen: () => '',
     });
-    // Re-register a bare lpf too so seedDefaultGraph can wire it.
+    // Round 2 seed wires all four chips unconditionally — register the
+    // matching pair (cluster-count + sound.gain) with minimal specs so the
+    // seed doesn't throw "unknown node type".
     registerNodeDef({
-      type: 'sound.lpf',
+      type: 'data.cluster-count',
+      side: 'data',
+      label: 'Cluster Count',
+      outputs: [{ id: 'count', label: 'count', kind: 'number' }],
+      codegen: () => '',
+    });
+    registerNodeDef({
+      type: 'sound.frequency',
       side: 'sound',
-      label: 'LPF',
+      label: 'Frequency',
       inputs: [{ id: 'frequency', label: 'frequency', kind: 'number' }],
+      codegen: () => '',
+    });
+    registerNodeDef({
+      type: 'sound.gain',
+      side: 'sound',
+      label: 'Gain',
+      inputs: [{ id: 'amp', label: 'amp', kind: 'number' }],
       codegen: () => '',
     });
 

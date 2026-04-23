@@ -201,6 +201,14 @@ export class CanvasShape {
    * Rebuilt on geometry change (sample rate / resize / startAngle / k / sweepCount / ticks).
    */
   sweepTicks: SweepCluster[][][];
+  /**
+   * Effective `maxR` used for the most recent `rebuildSweepTicks` call.
+   * Stored so the node-editor codegen can normalize per-tick distance
+   * values (0..1) without reaching into `AppState` for `orbitalMaxRadius`.
+   * Matches the `maxR` argument passed to `rebuildSweepTicks`/`computeSweepClusters`
+   * — i.e. `sweeperMaxR(shape, state) = min(shape.size, orbitalMaxRadius)`.
+   */
+  sweepMaxR: number;
   /** AudioContext.currentTime captured when playback starts (sweeper phase sync, runtime-only). */
   sweepAudioRefTime: number;
   /** Fractional cycle phase (0..1) accumulated up to the last ref anchor (sweeper phase sync, runtime-only). */
@@ -234,9 +242,14 @@ export class CanvasShape {
     this.sweepCount          = 1;
     this.sweepClusters       = [];
     this.startAngle          = 3 * Math.PI / 2;  // 90° math = UP = 12 o'clock
-    this.ticks               = 60;
+    // `ticks` (baked-pattern length) is tied to `fineness` — one slider drives
+    // both the visual playhead snap (see stepPlayhead) and the Strudel pattern
+    // length emitted by compileGraphToStrudel. Unified so the audible pattern
+    // density tracks the visual arm density.
     this.fineness            = 120;
+    this.ticks               = 120;
     this.sweepTicks          = [];
+    this.sweepMaxR           = 0;
     this.freqLow             = 100;
     this.freqHigh            = 1000;
     this.colorIndex          = 0;
@@ -782,42 +795,12 @@ export class CanvasShape {
     linkLines: { p1: Point; p2: Point }[],
     maxR:      number,
   ): void {
+    this.sweepMaxR = maxR;
     const armSpacing = (Math.PI * 2) / this.sweepCount;
     this.sweepClusters = [];
     for (let arm = 0; arm < this.sweepCount; arm++) {
       const angle = (this.playheadAngle + arm * armSpacing) % (Math.PI * 2);
       this.sweepClusters.push(...this._clustersAtAngle(angle, linkLines, maxR));
-    }
-    // Publish per-frame data-side sensor globals so the node-editor's data
-    // nodes (see src/node-editor/nodes/data.ts) can feed them into Strudel
-    // via `signal(() => globalThis.__sw_<id>_<name>)` in generated code.
-    // Sweeper-only — guarded at the callsite via `shape.type === 'sweeper'`
-    // in the render loop, but we also guard here for safety.
-    if (this.type === 'sweeper') this._publishSensorGlobals();
-  }
-
-  /**
-   * Write the four data-side sensor values onto globalThis, keyed by
-   * sweeper id. Called every rAF frame from computeSweepClusters() — so
-   * we avoid allocations and only touch slots up to this.k. Slots that
-   * don't have a live cluster are zeroed so stale values can't leak into
-   * Strudel's signal() callbacks.
-   */
-  private _publishSensorGlobals(): void {
-    const g = globalThis as unknown as Record<string, number>;
-    const id = this.id;
-    g[`__sw_${id}_tol`]   = SWEEP_CLUSTER_THRESHOLD;
-    g[`__sw_${id}_count`] = this.sweepClusters.length;
-    const k = this.k;
-    for (let i = 0; i < k; i++) {
-      const c = this.sweepClusters[i];
-      if (c !== undefined) {
-        g[`__sw_${id}_dist_${i}`]   = c.distance;
-        g[`__sw_${id}_angvar_${i}`] = c.angleVariance;
-      } else {
-        g[`__sw_${id}_dist_${i}`]   = 0;
-        g[`__sw_${id}_angvar_${i}`] = 0;
-      }
     }
   }
 
@@ -831,6 +814,7 @@ export class CanvasShape {
     linkLines: { p1: Point; p2: Point }[],
     maxR:      number,
   ): void {
+    this.sweepMaxR = maxR;
     const TICKS      = this.ticks;
     const step       = (Math.PI * 2) / TICKS;
     const armSpacing = (Math.PI * 2) / this.sweepCount;

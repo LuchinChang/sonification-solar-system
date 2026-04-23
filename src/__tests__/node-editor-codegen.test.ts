@@ -1,14 +1,13 @@
 // src/__tests__/node-editor-codegen.test.ts
 //
-// Unit 14 — Graph → Strudel codegen wiring (deferred).
+// compileGraphToStrudel() — pre-baked pipeline.
 //
-// These tests target compileGraphToStrudel() in src/node-editor/codegen.ts.
-// Sibling Units 6–10 that register real data/sound NodeDefinitions are not
-// yet landed, so we register tiny in-test defs to exercise every code path:
-//   • empty / null graph → baseline (byte-identical to shape._toSweeperCode)
-//   • a sound-side `lpf` node alone  → `.lpf(...)` appended
-//   • a data-side source feeding an lpf node → inbound signal() expression
-//   • ordering respects chainOrder, then topo index
+// The two-pass codegen:
+//   1. For each arm, cache a 0..1 `SweepStack` per data chip referenced by
+//      a wired sound chip (via NodeDefinition.perTickValue).
+//   2. For each arm, build one voice `s("<instrument>")<frags>...`, where
+//      each wired sound chip's codegen bakes a static Strudel pattern from
+//      its inbound stack. Voices across arms are stacked via `.stack()`.
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CanvasShape } from '../shapes';
@@ -17,7 +16,6 @@ import {
   addNode,
   compileGraphToStrudel,
   createGraph,
-  inboundSignalExpr,
   registerNodeDef,
 } from '../node-editor';
 import { _resetIdsForTests } from '../node-editor/graph';
@@ -29,7 +27,8 @@ import type { NodeDefinition } from '../node-editor';
 function makeSweeper(): CanvasShape {
   const s = new CanvasShape(0, 0, 'sweeper', 400);
   s.k = 4;
-  // No linkLines → sweepTicks stays empty → base code uses the silent fallback.
+  s.ticks = 8;           // short pattern for compact test assertions
+  s.sweepMaxR = 400;
   return s;
 }
 
@@ -52,7 +51,7 @@ beforeEach(() => {
 // ── Empty-graph baseline ─────────────────────────────────────────────────────
 
 describe('compileGraphToStrudel — baseline', () => {
-  it('null graph produces the exact pre-overhaul sweeper block', () => {
+  it('null graph produces the pre-overhaul sweeper block', () => {
     const s = makeSweeper();
     const out = compileGraphToStrudel(s.id, null, s);
     expect(out).toBe(s.toStrudelCode());
@@ -66,185 +65,202 @@ describe('compileGraphToStrudel — baseline', () => {
   });
 
   it('graph with only unregistered node types produces the baseline block', () => {
-    // No registerNodeDef call → addNode would fail. Build a raw graph instead.
     const s = makeSweeper();
     const g = createGraph(s.id);
-    // Simulate a snapshot whose def is no longer loaded (forward-compat).
     g.nodes.push({ id: 'nX', type: 'sound.unknown', side: 'sound', x: 0, y: 0, params: {} });
     const out = compileGraphToStrudel(s.id, g, s);
     expect(out).toBe(s.toStrudelCode());
   });
-});
 
-// ── Single sound-side node: `.lpf(800)` ──────────────────────────────────────
-
-describe('compileGraphToStrudel — single sound-side node', () => {
-  it('appends .lpf(...) fragment to the base chain', () => {
+  it('graph with only data-side nodes (no sound) produces the baseline block', () => {
     registerNodeDef(makeDef({
-      type: 'sound.lpf',
-      side: 'sound',
-      inputs:  [{ id: 'cutoff', label: 'cutoff', kind: 'signal' }],
-      outputs: [{ id: 'out',    label: 'out',    kind: 'signal' }],
-      defaultParams: { cutoff: 800 },
-      codegen: (_ctx, params) => `.lpf(${params['cutoff'] as number})`,
-    }));
-
-    const s = makeSweeper();
-    const g = createGraph(s.id);
-    addNode(g, { type: 'sound.lpf', side: 'sound', x: 0, y: 0 });
-
-    const out = compileGraphToStrudel(s.id, g, s);
-    expect(out).toContain('.lpf(800)');
-
-    // Markers must survive the splice.
-    expect(out).toContain(`// @shape-start-${s.id}`);
-    expect(out).toContain(`// @shape-end-${s.id}`);
-
-    // The terminating .p() call must still be present and last-ish.
-    expect(out).toContain(`.p((${s.id}).toString())`);
-
-    // Fragment must appear BEFORE the .p((id).toString()) tail.
-    const lpfIdx = out.indexOf('.lpf(800)');
-    const pIdx   = out.indexOf(`.p((${s.id}).toString())`);
-    expect(lpfIdx).toBeGreaterThan(-1);
-    expect(pIdx).toBeGreaterThan(lpfIdx);
-  });
-});
-
-// ── Inbound data edge → signal() expression ──────────────────────────────────
-
-describe('compileGraphToStrudel — inbound data edge', () => {
-  it('produces a signal(() => globalThis.__sw_<id>_<out>) fragment', () => {
-    // A data-side source publishes a continuous value at output 'value'.
-    registerNodeDef(makeDef({
-      type: 'data.source',
-      side: 'data',
-      outputs: [{ id: 'value', label: 'value', kind: 'signal', continuous: true }],
-      codegen: () => '',
-    }));
-
-    // Sound-side node consumes the inbound edge and emits
-    // `.lpf(signal(() => globalThis.__sw_<id>_value))`.
-    registerNodeDef(makeDef({
-      type: 'sound.lpf',
-      side: 'sound',
-      inputs:  [{ id: 'cutoff', label: 'cutoff', kind: 'signal' }],
-      outputs: [{ id: 'out',    label: 'out',    kind: 'signal' }],
-      defaultParams: { cutoff: 1000 },
-      codegen: (ctx, params, inbound) => {
-        const cutoffEdge = inbound.find(e => e.to.portId === 'cutoff');
-        const expr = cutoffEdge !== undefined
-          ? inboundSignalExpr(ctx.sweeperId, cutoffEdge.from.portId)
-          : String(params['cutoff']);
-        return `.lpf(${expr})`;
-      },
-    }));
-
-    const s = makeSweeper();
-    const g = createGraph(s.id);
-    const src = addNode(g, { type: 'data.source', side: 'data',  x: 0, y: 0 });
-    const lpf = addNode(g, { type: 'sound.lpf',   side: 'sound', x: 0, y: 0 });
-
-    addEdge(g, {
-      from: { nodeId: src.id, portId: 'value',  dir: 'out' },
-      to:   { nodeId: lpf.id, portId: 'cutoff', dir: 'in' },
-    });
-
-    const out = compileGraphToStrudel(s.id, g, s);
-    expect(out).toContain(`.lpf(signal(() => globalThis.__sw_${s.id}_value))`);
-  });
-});
-
-// ── Topological ordering ─────────────────────────────────────────────────────
-
-describe('compileGraphToStrudel — fragment ordering', () => {
-  it('chainOrder (lower first) wins over topo index', () => {
-    // distort has chainOrder=10 so it MUST appear after lpf (chainOrder=1).
-    registerNodeDef({
-      type: 'sound.distort',
-      side: 'sound',
-      label: 'distort',
-      inputs: [{ id: 'in', label: 'in', kind: 'signal' }],
-      outputs: [],
-      defaultParams: {},
-      codegen: () => '.distort(0.5)',
-      chainOrder: 10,
-    } as NodeDefinition & { chainOrder: number });
-    registerNodeDef({
-      type: 'sound.lpf',
-      side: 'sound',
-      label: 'lpf',
-      inputs: [{ id: 'cutoff', label: 'cutoff', kind: 'signal' }],
-      outputs: [],
-      defaultParams: {},
-      codegen: () => '.lpf(800)',
-      chainOrder: 1,
-    } as NodeDefinition & { chainOrder: number });
-
-    const s = makeSweeper();
-    const g = createGraph(s.id);
-    // Add distort FIRST (higher chainOrder) so topo order alone would break this.
-    addNode(g, { type: 'sound.distort', side: 'sound', x: 0, y: 0 });
-    addNode(g, { type: 'sound.lpf',     side: 'sound', x: 0, y: 0 });
-
-    const out = compileGraphToStrudel(s.id, g, s);
-    const lpfIdx     = out.indexOf('.lpf(800)');
-    const distortIdx = out.indexOf('.distort(0.5)');
-    expect(lpfIdx).toBeGreaterThan(-1);
-    expect(distortIdx).toBeGreaterThan(-1);
-    expect(lpfIdx).toBeLessThan(distortIdx);
-  });
-
-  it('falls back to topological order when chainOrder is absent', () => {
-    // Two independent sound nodes; `a` is added first, `b` second, no edges.
-    // Without chainOrder, insertion/topo order decides → `a` before `b`.
-    registerNodeDef(makeDef({
-      type: 'sound.a', side: 'sound',
-      codegen: () => '.lpf(100)',
-    }));
-    registerNodeDef(makeDef({
-      type: 'sound.b', side: 'sound',
-      codegen: () => '.hpf(200)',
-    }));
-    const s = makeSweeper();
-    const g = createGraph(s.id);
-    addNode(g, { type: 'sound.a', side: 'sound', x: 0, y: 0 });
-    addNode(g, { type: 'sound.b', side: 'sound', x: 0, y: 0 });
-    const out = compileGraphToStrudel(s.id, g, s);
-    const aIdx = out.indexOf('.lpf(100)');
-    const bIdx = out.indexOf('.hpf(200)');
-    expect(aIdx).toBeGreaterThan(-1);
-    expect(bIdx).toBeGreaterThan(aIdx);
-  });
-
-  it('data-side nodes are never emitted into the sound chain', () => {
-    registerNodeDef(makeDef({
-      type: 'data.only',
-      side: 'data',
-      outputs: [{ id: 'v', label: 'v', kind: 'signal' }],
-      codegen: () => '.should-never-appear()',
+      type: 'data.only', side: 'data',
+      outputs: [{ id: 'v', label: 'v', kind: 'number' }],
+      perTickValue: () => 0.5,
     }));
     const s = makeSweeper();
     const g = createGraph(s.id);
     addNode(g, { type: 'data.only', side: 'data', x: 0, y: 0 });
     const out = compileGraphToStrudel(s.id, g, s);
-    expect(out).not.toContain('should-never-appear');
-    // And the output should be byte-identical to the baseline.
     expect(out).toBe(s.toStrudelCode());
   });
 });
 
-// ── Playback mode → Strudel suffix ───────────────────────────────────────────
+// ── Wired sound chip: bakes a static pattern ─────────────────────────────────
+
+describe('compileGraphToStrudel — wired sound chip', () => {
+  it('bakes a whitespace-separated pattern from the inbound 0..1 stack', () => {
+    // data chip emits a constant 0.5 across all ticks.
+    registerNodeDef(makeDef({
+      type: 'data.const', side: 'data',
+      outputs: [{ id: 'v', label: 'v', kind: 'number' }],
+      perTickValue: () => 0.5,
+    }));
+
+    // Sound chip that maps linearly 0..1 -> [100, 200] and emits .freq("…").
+    registerNodeDef(makeDef({
+      type: 'sound.f', side: 'sound',
+      inputs: [{ id: 'in', label: 'in', kind: 'number' }],
+      defaultParams: { min: 100, max: 200 },
+      codegen(ctx, params, inbound) {
+        const edge = inbound.find(e => e.to.portId === 'in');
+        if (!edge) return `.freq(${params['min']})`;
+        const stack = ctx.resolveInboundStack(edge.to.nodeId, 'in');
+        if (!stack) return `.freq(${params['min']})`;
+        const min = params['min'] as number;
+        const max = params['max'] as number;
+        const vals = stack.map(v => (min + v * (max - min)).toFixed(0));
+        return `.freq("${vals.join(' ')}")`;
+      },
+    }));
+
+    const s = makeSweeper();
+    const g = createGraph(s.id);
+    const d = addNode(g, { type: 'data.const', side: 'data', x: 0, y: 0 });
+    const f = addNode(g, { type: 'sound.f',    side: 'sound', x: 0, y: 0 });
+    addEdge(g, {
+      from: { nodeId: d.id, portId: 'v',  dir: 'out' },
+      to:   { nodeId: f.id, portId: 'in', dir: 'in' },
+    });
+
+    const out = compileGraphToStrudel(s.id, g, s);
+
+    // 0.5 → 150 Hz. shape.ticks = 8 so the pattern is eight "150"s.
+    // Note: the first fragment has its leading `.` stripped so it acts as
+    // the pattern's structure root (Strudel inherits time-structure from
+    // the leftmost creator). The `.s("<instrument>")` goes at the tail.
+    expect(out).toContain('freq("150 150 150 150 150 150 150 150")');
+
+    // Voice ends with `.s("<instrument>")` and includes .p(id).
+    expect(out).toContain(`.s("${s.instrument}")`);
+    expect(out).toContain(`.p((${s.id}).toString())`);
+    expect(out).toContain(`// @shape-start-${s.id}`);
+    expect(out).toContain(`// @shape-end-${s.id}`);
+  });
+
+  it('orphan sound chip (declares inputs, none wired) is skipped — no .freq(…) in output', () => {
+    // Round 2 Bug 3 fix: a sound chip with declared input ports but no
+    // inbound edges is treated as an orphan (e.g. user disconnected the
+    // cable but didn't delete the chip). Its codegen is NOT called, so
+    // stale .freq(…)/.note(…) can't leak into the textarea.
+    registerNodeDef(makeDef({
+      type: 'sound.f', side: 'sound',
+      inputs: [{ id: 'in', label: 'in', kind: 'number' }],
+      defaultParams: { min: 100, max: 200 },
+      codegen(_ctx, params, inbound) {
+        const edge = inbound.find(e => e.to.portId === 'in');
+        if (!edge) return `.freq(${params['min']})`;
+        return '.freq("should-not-reach")';
+      },
+    }));
+
+    const s = makeSweeper();
+    const g = createGraph(s.id);
+    addNode(g, { type: 'sound.f', side: 'sound', x: 0, y: 0 });
+
+    const out = compileGraphToStrudel(s.id, g, s);
+    // Neither the baked pattern nor the unwired fallback may appear.
+    expect(out).not.toContain('freq(100)');
+    expect(out).not.toContain('should-not-reach');
+    // All voices should fall through to the silent-voice fallback.
+    expect(out).toContain(`s("${s.instrument}").gain(0)`);
+  });
+
+  it('never emits signal(() => globalThis.__sw_…) — all values are baked', () => {
+    // Regression guard: the pre-bake refactor fully removed the live-signal
+    // emission path. A wired data chip must result in a string pattern, not
+    // a runtime signal() callback.
+    registerNodeDef(makeDef({
+      type: 'data.const', side: 'data',
+      outputs: [{ id: 'v', label: 'v', kind: 'number' }],
+      perTickValue: () => 0.3,
+    }));
+    registerNodeDef(makeDef({
+      type: 'sound.f', side: 'sound',
+      inputs: [{ id: 'in', label: 'in', kind: 'number' }],
+      codegen(ctx, _params, inbound) {
+        const edge = inbound.find(e => e.to.portId === 'in');
+        if (!edge) return '.freq(440)';
+        const stack = ctx.resolveInboundStack(edge.to.nodeId, 'in');
+        if (!stack) return '.freq(440)';
+        return `.freq("${stack.map(v => (v * 1000).toFixed(0)).join(' ')}")`;
+      },
+    }));
+
+    const s = makeSweeper();
+    const g = createGraph(s.id);
+    const d = addNode(g, { type: 'data.const', side: 'data', x: 0, y: 0 });
+    const f = addNode(g, { type: 'sound.f',    side: 'sound', x: 0, y: 0 });
+    addEdge(g, {
+      from: { nodeId: d.id, portId: 'v',  dir: 'out' },
+      to:   { nodeId: f.id, portId: 'in', dir: 'in' },
+    });
+
+    const out = compileGraphToStrudel(s.id, g, s);
+    expect(out).not.toContain('signal(');
+    expect(out).not.toContain('globalThis.__sw_');
+  });
+});
+
+// ── Fan-out: one data chip → multiple sound chips ────────────────────────────
+
+describe('compileGraphToStrudel — fan-out', () => {
+  it('a single data chip feeds multiple sound chips, each with its own transform', () => {
+    registerNodeDef(makeDef({
+      type: 'data.src', side: 'data',
+      outputs: [{ id: 'v', label: 'v', kind: 'number' }],
+      perTickValue: () => 0.25,
+    }));
+    registerNodeDef(makeDef({
+      type: 'sound.hi', side: 'sound',
+      inputs: [{ id: 'in', label: 'in', kind: 'number' }],
+      codegen(ctx, _params, inbound) {
+        const edge = inbound.find(e => e.to.portId === 'in');
+        const stack = edge ? ctx.resolveInboundStack(edge.to.nodeId, 'in') : null;
+        if (!stack) return '.hi(0)';
+        return `.hi("${stack.map(v => (v * 1000).toFixed(0)).join(' ')}")`;
+      },
+    }));
+    registerNodeDef(makeDef({
+      type: 'sound.lo', side: 'sound',
+      inputs: [{ id: 'in', label: 'in', kind: 'number' }],
+      codegen(ctx, _params, inbound) {
+        const edge = inbound.find(e => e.to.portId === 'in');
+        const stack = edge ? ctx.resolveInboundStack(edge.to.nodeId, 'in') : null;
+        if (!stack) return '.lo(0)';
+        return `.lo("${stack.map(v => (v * 10).toFixed(1)).join(' ')}")`;
+      },
+    }));
+
+    const s = makeSweeper();
+    const g = createGraph(s.id);
+    const d  = addNode(g, { type: 'data.src', side: 'data',  x: 0, y: 0 });
+    const hi = addNode(g, { type: 'sound.hi', side: 'sound', x: 0, y: 0 });
+    const lo = addNode(g, { type: 'sound.lo', side: 'sound', x: 0, y: 0 });
+    addEdge(g, { from: { nodeId: d.id, portId: 'v', dir: 'out' }, to: { nodeId: hi.id, portId: 'in', dir: 'in' } });
+    addEdge(g, { from: { nodeId: d.id, portId: 'v', dir: 'out' }, to: { nodeId: lo.id, portId: 'in', dir: 'in' } });
+
+    const out = compileGraphToStrudel(s.id, g, s);
+    // 0.25 * 1000 = 250, 0.25 * 10 = 2.5 — both patterns of length 8.
+    // The first fragment loses its leading `.`; the second keeps it.
+    expect(out).toContain('hi("250 250 250 250 250 250 250 250")');
+    expect(out).toContain('.lo("2.5 2.5 2.5 2.5 2.5 2.5 2.5 2.5")');
+  });
+});
+
+// ── Playback mode: .palindrome() appended when ping-pong ────────────────────
 
 describe('compileGraphToStrudel — playback mode', () => {
-  it('emits .palindrome() when shape.playbackMode === "ping-pong"', () => {
+  it('emits .palindrome() at the tail when shape.playbackMode === "ping-pong"', () => {
+    registerNodeDef(makeDef({
+      type: 'sound.f', side: 'sound',
+      inputs: [],
+      codegen: () => '.gain(0.5)',
+    }));
     const s = makeSweeper();
     s.playbackMode = 'ping-pong';
-    // Non-empty graph so we don't short-circuit on graph.nodes.length === 0.
-    // A bare playback.mode snapshot entry works — its def isn't registered,
-    // so buildFragments skips it; the palindrome push still fires.
     const g = createGraph(s.id);
-    g.nodes.push({ id: 'pb', type: 'playback.mode', side: 'playback', x: 0, y: 0, params: { mode: 'ping-pong' } });
+    addNode(g, { type: 'sound.f', side: 'sound', x: 0, y: 0 });
 
     const out = compileGraphToStrudel(s.id, g, s);
     const palIdx = out.indexOf('.palindrome()');
@@ -253,34 +269,205 @@ describe('compileGraphToStrudel — playback mode', () => {
     expect(pIdx).toBeGreaterThan(palIdx);
   });
 
-  it('palindrome lands AFTER sound fragments (so time reversal wraps the full chain)', () => {
-    registerNodeDef(makeDef({
-      type: 'sound.lpf',
-      side: 'sound',
-      inputs:  [{ id: 'cutoff', label: 'cutoff', kind: 'signal' }],
-      outputs: [],
-      defaultParams: { cutoff: 800 },
-      codegen: (_ctx, params) => `.lpf(${params['cutoff'] as number})`,
-    }));
-    const s = makeSweeper();
-    s.playbackMode = 'ping-pong';
-    const g = createGraph(s.id);
-    addNode(g, { type: 'sound.lpf', side: 'sound', x: 0, y: 0 });
-
-    const out = compileGraphToStrudel(s.id, g, s);
-    const lpfIdx = out.indexOf('.lpf(800)');
-    const palIdx = out.indexOf('.palindrome()');
-    expect(lpfIdx).toBeGreaterThan(-1);
-    expect(palIdx).toBeGreaterThan(lpfIdx);
-  });
-
   it('does NOT emit .palindrome() when mode is "normal"', () => {
+    registerNodeDef(makeDef({
+      type: 'sound.f', side: 'sound',
+      codegen: () => '.gain(0.5)',
+    }));
     const s = makeSweeper();
     s.playbackMode = 'normal';
     const g = createGraph(s.id);
-    g.nodes.push({ id: 'pb', type: 'playback.mode', side: 'playback', x: 0, y: 0, params: { mode: 'normal' } });
+    addNode(g, { type: 'sound.f', side: 'sound', x: 0, y: 0 });
 
     const out = compileGraphToStrudel(s.id, g, s);
     expect(out).not.toContain('.palindrome()');
+  });
+});
+
+// ── Bug 1 regression: voice structure ───────────────────────────────────────
+//
+// Strudel inherits time-structure from the leftmost pattern creator. If the
+// voice begins with `s("sawtooth")` (1 event per cycle) and a baked
+// `.freq("v0 v1 … v119")` follows, all 120 freq values collapse into that
+// single event's (0,1) span and fire simultaneously as a chord — losing
+// the per-tick pattern AND making generator switches (sine↔sawtooth) barely
+// audible. The fix is to put `.s("<instrument>")` at the TAIL, same shape
+// as `toStrudelCode()`'s legacy path.
+
+describe('compileGraphToStrudel — voice structure (Bug 1 regression)', () => {
+  beforeEach(() => {
+    _resetRegistryForTests();
+    _resetIdsForTests();
+  });
+
+  it('does NOT start with s("<instrument>") — that would collapse pattern structure', () => {
+    registerNodeDef(makeDef({
+      type: 'data.c', side: 'data',
+      outputs: [{ id: 'v', label: 'v', kind: 'number' }],
+      perTickValue: () => 0.5,
+    }));
+    registerNodeDef(makeDef({
+      type: 'sound.f', side: 'sound',
+      inputs: [{ id: 'in', label: 'in', kind: 'number' }],
+      codegen(ctx, _params, inbound) {
+        const edge = inbound[0];
+        const stack = edge ? ctx.resolveInboundStack(edge.to.nodeId, edge.to.portId) : null;
+        return stack ? `.freq("${stack.map(() => '150').join(' ')}")` : '.freq(150)';
+      },
+    }));
+    const s = makeSweeper();
+    s.instrument = 'sawtooth';
+    const g = createGraph(s.id);
+    const d = addNode(g, { type: 'data.c',  side: 'data',  x: 0, y: 0 });
+    const f = addNode(g, { type: 'sound.f', side: 'sound', x: 0, y: 0 });
+    addEdge(g, {
+      from: { nodeId: d.id, portId: 'v',  dir: 'out' },
+      to:   { nodeId: f.id, portId: 'in', dir: 'in' },
+    });
+    const out = compileGraphToStrudel(s.id, g, s);
+    // The voice must NOT open with `s("sawtooth")` — that would sit to the
+    // left of freq() and swallow the pattern structure.
+    const voiceStart = out.indexOf(`s("sawtooth")`);
+    const freqStart  = out.indexOf('freq("');
+    expect(freqStart).toBeGreaterThan(-1);
+    expect(voiceStart).toBeGreaterThan(freqStart);
+  });
+
+  it('ends the voice with .s("<instrument>") after freq/gain modifiers', () => {
+    registerNodeDef(makeDef({
+      type: 'sound.g', side: 'sound',
+      codegen: () => '.gain(0.5)',
+    }));
+    const s = makeSweeper();
+    s.instrument = 'triangle';
+    const g = createGraph(s.id);
+    addNode(g, { type: 'sound.g', side: 'sound', x: 0, y: 0 });
+    const out = compileGraphToStrudel(s.id, g, s);
+    // With one fragment `.gain(0.5)`, the voice is `gain(0.5).s("triangle")`.
+    expect(out).toContain(`gain(0.5).s("triangle")`);
+  });
+
+  it('empty-fragments voice falls back to bare s("<instrument>")', () => {
+    // A sound chip whose codegen returns '' should skip its fragment. If the
+    // whole voice has nothing, emit `s("<instrument>")` (one-event drone)
+    // rather than a malformed leading `.s(...)`.
+    registerNodeDef(makeDef({
+      type: 'sound.noop', side: 'sound',
+      codegen: () => '',
+    }));
+    const s = makeSweeper();
+    s.instrument = 'square';
+    const g = createGraph(s.id);
+    addNode(g, { type: 'sound.noop', side: 'sound', x: 0, y: 0 });
+    const out = compileGraphToStrudel(s.id, g, s);
+    // Voice fragment: bare `s("square")`. Must not start with `.s`.
+    expect(out).toContain(`s("square")`);
+    expect(out).not.toMatch(/\n\s*\.s\("square"\)/);
+  });
+});
+
+// ── Round 2: voice fan-out over (arm × slot) ────────────────────────────────
+//
+// One sound chip wired to one data chip should produce `sweepCount × shape.k`
+// parallel voices — each voice reads the slot-specific stack, so defaults
+// (sweepCount=1, k=4) give 4 stacked `.freq(…)` occurrences in the block.
+
+describe('compileGraphToStrudel — voice fan-out (Round 2 Bug 2 regression)', () => {
+  it('emits shape.k voices per arm, each with its own .freq(…) pattern', () => {
+    // Data chip encodes slot into the output so we can visually confirm each
+    // voice reads its own slot.
+    registerNodeDef(makeDef({
+      type: 'data.slotsrc', side: 'data',
+      outputs: [{ id: 'v', label: 'v', kind: 'number' }],
+      perTickValue: (_shape, _arm, _tick, slot) => slot / 4,
+    }));
+    registerNodeDef(makeDef({
+      type: 'sound.f', side: 'sound',
+      inputs: [{ id: 'in', label: 'in', kind: 'number' }],
+      codegen(ctx, _params, inbound) {
+        const edge = inbound[0];
+        const stack = edge ? ctx.resolveInboundStack(edge.to.nodeId, edge.to.portId) : null;
+        return stack ? `.freq("${stack.map(v => v.toFixed(2)).join(' ')}")` : '.freq(0)';
+      },
+    }));
+
+    const s = makeSweeper();             // k = 4, sweepCount = 1, ticks = 8
+    const g = createGraph(s.id);
+    const d = addNode(g, { type: 'data.slotsrc', side: 'data',  x: 0, y: 0 });
+    const f = addNode(g, { type: 'sound.f',      side: 'sound', x: 0, y: 0 });
+    addEdge(g, {
+      from: { nodeId: d.id, portId: 'v',  dir: 'out' },
+      to:   { nodeId: f.id, portId: 'in', dir: 'in' },
+    });
+
+    const out = compileGraphToStrudel(s.id, g, s);
+
+    // Exactly 4 `.freq("…")`-or-`freq("…")` occurrences — one per slot.
+    const freqCount = (out.match(/freq\("/g) ?? []).length;
+    expect(freqCount).toBe(4);
+
+    // Each slot contributes its index/4 → 0.00, 0.25, 0.50, 0.75 — baked
+    // eight times per voice.
+    expect(out).toContain('0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00');
+    expect(out).toContain('0.25 0.25 0.25 0.25 0.25 0.25 0.25 0.25');
+    expect(out).toContain('0.50 0.50 0.50 0.50 0.50 0.50 0.50 0.50');
+    expect(out).toContain('0.75 0.75 0.75 0.75 0.75 0.75 0.75 0.75');
+
+    // Voices are chained via `.stack(…)` — with 4 voices there are 3 stacks.
+    const stackCount = (out.match(/\.stack\(/g) ?? []).length;
+    expect(stackCount).toBe(3);
+  });
+
+  it('fans out per (arm × slot) — sweepCount=2, k=3 → 6 voices', () => {
+    registerNodeDef(makeDef({
+      type: 'data.const', side: 'data',
+      outputs: [{ id: 'v', label: 'v', kind: 'number' }],
+      perTickValue: () => 0.5,
+    }));
+    registerNodeDef(makeDef({
+      type: 'sound.f', side: 'sound',
+      inputs: [{ id: 'in', label: 'in', kind: 'number' }],
+      codegen(ctx, _params, inbound) {
+        const edge = inbound[0];
+        const stack = edge ? ctx.resolveInboundStack(edge.to.nodeId, edge.to.portId) : null;
+        return stack ? `.freq("${stack.map(() => '150').join(' ')}")` : '.freq(0)';
+      },
+    }));
+
+    const s = makeSweeper();
+    s.k = 3;
+    s.sweepCount = 2;
+    const g = createGraph(s.id);
+    const d = addNode(g, { type: 'data.const', side: 'data',  x: 0, y: 0 });
+    const f = addNode(g, { type: 'sound.f',    side: 'sound', x: 0, y: 0 });
+    addEdge(g, {
+      from: { nodeId: d.id, portId: 'v',  dir: 'out' },
+      to:   { nodeId: f.id, portId: 'in', dir: 'in' },
+    });
+
+    const out = compileGraphToStrudel(s.id, g, s);
+    const freqCount = (out.match(/freq\("/g) ?? []).length;
+    // 2 arms × 3 slots = 6 voices, each with its own `.freq("150 …")`.
+    expect(freqCount).toBe(6);
+  });
+});
+
+// ── Data-side isolation: never emitted into sound chain ─────────────────────
+
+describe('compileGraphToStrudel — data-side isolation', () => {
+  it('data-side nodes do not emit codegen fragments into the voice', () => {
+    registerNodeDef(makeDef({
+      type: 'data.only', side: 'data',
+      outputs: [{ id: 'v', label: 'v', kind: 'number' }],
+      codegen: () => '.should-never-appear()',
+      perTickValue: () => 0.5,
+    }));
+    const s = makeSweeper();
+    const g = createGraph(s.id);
+    addNode(g, { type: 'data.only', side: 'data', x: 0, y: 0 });
+    const out = compileGraphToStrudel(s.id, g, s);
+    expect(out).not.toContain('should-never-appear');
+    // Without any sound chips wired, we short-circuit to baseline.
+    expect(out).toBe(s.toStrudelCode());
   });
 });

@@ -153,7 +153,14 @@ registerNodeDef({
       const next = clamp(parseInt(slider.value, 10) || 12, 12, 360);
       readout.textContent = String(next);
       const sweeper = activeSweeper();
-      if (sweeper) sweeper.fineness = next;
+      if (sweeper) {
+        sweeper.fineness = next;
+        // Tick count is tied to fineness so the baked Strudel pattern
+        // length tracks the visual playhead density. Re-bake ticks
+        // immediately so codegen on closeEditor sees the new grid.
+        sweeper.ticks = next;
+        refreshSweeperGeometry?.(sweeper);
+      }
       onChange({ params: { ...node.params, steps: next } });
     });
 

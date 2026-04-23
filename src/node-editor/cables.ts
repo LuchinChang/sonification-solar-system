@@ -281,16 +281,23 @@ export function initCables(
     return path;
   };
 
-  /** Recompute every existing edge's `d` + × position against current DOM
-   *  anchors. Called on node drag (`cableReflow`) and after graph mutations
-   *  that might have shifted endpoints. Cheap — no DOM churn.
+  /** Reconcile the SVG cable layer against the current graph.edges.
    *
-   *  Also prunes orphaned SVG paths + × buttons whose edge was removed from
-   *  the graph (e.g. via node deletion cascading through removeNode). Without
-   *  this, deleted cables would remain visually until the panel re-rendered. */
+   *  - Existing paths whose edge is still in the graph are re-anchored.
+   *  - Existing paths whose edge is gone are pruned (node delete cascade).
+   *  - Edges present in the graph but missing from the DOM are materialized
+   *    via `renderEdge` — this is how first-open seeded/hydrated default
+   *    wiring becomes visible (distance→frequency, cluster-count→gain).
+   *    Before this, `openEditor` only rendered node chips; those edges
+   *    existed in the graph model (so codegen worked) but had no paths.
+   *
+   *  Called on node drag (`cableReflow`) and after any graph mutation that
+   *  could shift endpoints or change membership. Cheap — no DOM churn for
+   *  edges that haven't moved. */
   const reflowAllEdges = (): void => {
-    const paths = edgesGroup.querySelectorAll<SVGPathElement>('.edge');
     const g = getGraph();
+    const paths = edgesGroup.querySelectorAll<SVGPathElement>('.edge');
+    const rendered = new Set<string>();
     paths.forEach((path) => {
       const edgeId = path.getAttribute('data-edge-id');
       if (edgeId === null) return;
@@ -303,6 +310,7 @@ export function initCables(
         path.remove();
         return;
       }
+      rendered.add(edgeId);
       const from = findPortEl(edge.from);
       const to   = findPortEl(edge.to);
       if (from === null || to === null) return;
@@ -312,6 +320,15 @@ export function initCables(
       const btn = findDeleteBtn(path);
       if (btn !== null) positionDeleteBtn(btn, a.x, a.y, b.x, b.y);
     });
+
+    // Materialize any edges present in the graph but missing from the DOM.
+    // Seeded / hydrated cables pass through this branch on first open.
+    if (g !== null) {
+      for (const edge of g.edges) {
+        if (rendered.has(edge.id)) continue;
+        renderEdge(edge);
+      }
+    }
   };
 
   // ── Pointer handlers ─────────────────────────────────────────────────────
@@ -477,7 +494,11 @@ export function initCables(
     });
   };
   const onCableReflow  = (): void => { scheduleReflow(); };
-  const onGraphChanged = (): void => { scheduleReflow(); };
+  // Structural graph changes (edges added/removed, first-open seeded wiring)
+  // reconcile synchronously — users expect cables to appear immediately, and
+  // the rAF-batching path only pays off for high-frequency pointermove drag
+  // reflows, not one-shot structural mutations.
+  const onGraphChanged = (): void => { reflowAllEdges(); };
 
   // ── Wire up listeners (event delegation on panelRoot) ────────────────────
   panelRoot.addEventListener('pointerdown', onPointerDown);

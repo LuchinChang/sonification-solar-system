@@ -144,6 +144,14 @@ export function openEditor(sweeperId: number): void {
   graphChangedHandler = () => renderAllNodes();
   refs.root.addEventListener('graphChanged', graphChangedHandler);
 
+  // Hydrated / seeded graphs arrive with edges already in the model but no
+  // SVG paths painted yet. Fire `graphChanged` so cables.ts's reconciler
+  // materializes the missing paths on the next animation frame — node DOM
+  // (with port dots) is already in place, so findPortEl() can resolve
+  // anchors. Without this, first-open default wiring (distance→frequency,
+  // cluster-count→gain) stayed invisible even though codegen worked.
+  emitGraphChanged();
+
   refs.root.classList.remove('hidden');
   refs.root.removeAttribute('aria-hidden');
   refs.root.removeAttribute('inert');
@@ -610,57 +618,45 @@ export function isEditorOpen(): boolean {
   return refs !== null && !refs.root.classList.contains('hidden');
 }
 
-// ── Default-graph seeding (Unit 8) ───────────────────────────────────────────
+// ── Default-graph seeding ────────────────────────────────────────────────────
 //
-// First-open default wiring that mirrors the pre-overhaul sweeper:
-//   data.distance-to-sun ──▶ sound.lpf
-//   data.cluster-count   ──▶ sound.gain
-//
-// Unit 6's data nodes may not be registered yet — we guard every lookup and
-// fall back to just the two sound nodes (with their defaultParams) so this
-// unit can land independently. Layout (x/y) is filled in by Units 11-13.
-//
-// TODO(Unit 6/14): spec says "cluster density" for gain; Unit 6 currently
-// exposes cluster-count as the closest density sensor. Revisit if Unit 6 ships
-// a dedicated density port.
-
-function tryWireDefaultEdge(
-  g: NodeGraph,
-  fromType: string,
-  fromPortId: string,
-  toNodeId: string,
-  toPortId: string,
-): void {
-  const fromDef = getNodeDef(fromType);
-  if (fromDef === undefined) return;
-  const fromNode = addNode(g, { type: fromType, side: 'data', x: 0, y: 0 });
-  const outPort = fromDef.outputs?.find(p => p.id === fromPortId) ?? fromDef.outputs?.[0];
-  if (outPort === undefined) return;
-  try {
-    addEdge(g, {
-      from: { nodeId: fromNode.id, portId: outPort.id, dir: 'out' },
-      to:   { nodeId: toNodeId,    portId: toPortId,   dir: 'in' },
-    });
-  } catch (err) {
-    // Port kinds incompatible — data node stays in the graph but unwired.
-    console.warn(`[node-editor] default ${fromType}→${toPortId} wiring skipped:`, err);
-  }
-}
+// First-open default wiring:
+//   data.distance-to-sun ──▶ sound.frequency (exp 20..4400 Hz)
+//   data.cluster-count   ──▶ sound.gain      (per-slot presence → voice phasing)
 
 function seedDefaultGraph(sweeperId: number): NodeGraph {
   const g = createGraph(sweeperId);
-  // Gracefully skip missing defs: tests that reset the registry can still
-  // exercise openEditor/closeEditor without re-registering the full sound-basic
-  // suite. Production code imports './nodes/sound-basic' side-effect at module
-  // load, so the defs are always present there.
-  const lpf  = getNodeDef('sound.lpf')
-    ? addNode(g, { type: 'sound.lpf',  side: 'sound', x: 0, y: 0 })
-    : null;
-  const gain = getNodeDef('sound.gain')
-    ? addNode(g, { type: 'sound.gain', side: 'sound', x: 0, y: 0 })
-    : null;
-  if (lpf)  tryWireDefaultEdge(g, 'data.distance-to-sun', 'distance', lpf.id,  'frequency');
-  if (gain) tryWireDefaultEdge(g, 'data.cluster-count',   'count',    gain.id, 'amp');
+  // Default behaviour users see on first open:
+  //   data.distance-to-sun  → sound.frequency (exp 20..4400 Hz)
+  //   data.cluster-count    → sound.gain      (quadratic 0..1)
+  //
+  // Layout is an explicit 2×2 grid — data chips on the left column, their
+  // paired sound chips directly to the right. Coordinates are multiples of
+  // GRID_SNAP_PX (24) and fit the DEFAULT_NODE_{WIDTH,HEIGHT} rhythm so
+  // the cables stay horizontal and obvious.
+  //
+  // COL_LEFT = 264 leaves enough space for the ~240px sweeper-controls
+  // sidebar that floats over the canvas's leftmost band. Without this
+  // offset the data chips would be occluded on first open.
+  const COL_LEFT   = 264;
+  const COL_RIGHT  = 480;   // 264 + 180 (node width) + 36 (gap)
+  const ROW_TOP    = 48;
+  const ROW_BOTTOM = 186;   // 48 + 90 (node height) + 48 (gap)
+
+  const dist = addNode(g, { type: 'data.distance-to-sun', side: 'data',  x: COL_LEFT,  y: ROW_TOP });
+  const freq = addNode(g, { type: 'sound.frequency',      side: 'sound', x: COL_RIGHT, y: ROW_TOP });
+  const cnt  = addNode(g, { type: 'data.cluster-count',   side: 'data',  x: COL_LEFT,  y: ROW_BOTTOM });
+  const gain = addNode(g, { type: 'sound.gain',           side: 'sound', x: COL_RIGHT, y: ROW_BOTTOM });
+
+  addEdge(g, {
+    from: { nodeId: dist.id, portId: 'distance', dir: 'out' },
+    to:   { nodeId: freq.id, portId: 'frequency', dir: 'in' },
+  });
+  addEdge(g, {
+    from: { nodeId: cnt.id,  portId: 'count',    dir: 'out' },
+    to:   { nodeId: gain.id, portId: 'amp',      dir: 'in' },
+  });
+
   return g;
 }
 
