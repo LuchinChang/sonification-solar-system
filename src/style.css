@@ -50,6 +50,18 @@
   --hub-fill:          rgba(18, 10, 6, 0.95);
   --hub-stroke:        rgba(194, 118, 46, 0.38);
   --overlay-bg:        rgba(18, 15, 14, 0.92);
+
+  /* ──────────────────────────────────────────────────────────
+     TUNABLE SIZES — adjust these to tweak dock / port geometry.
+     All dock tokens (sweeper btn, knobs, play btn) use --dock-token-size.
+     The sweeper icon and play glyph scale independently inside the button.
+     ────────────────────────────────────────────────────────── */
+  --dock-token-size:    64px;   /* outer diameter of Sweeper / Knob / Play */
+  --dock-token-gap:     24px;   /* horizontal gap between dock tokens      */
+  --dock-cluster-gap:   24px;   /* gap between the two knobs in the cluster */
+  --sweeper-icon-size:  44px;   /* radial-arm SVG inside the sweeper circle */
+  --play-icon-size:     30px;   /* pause/play glyph inside the play circle  */
+  --port-edge-offset:   8px;    /* how far outside the chip each port sits  */
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -239,12 +251,36 @@ body.ui-hidden #foundry-panel {
   background: linear-gradient(to right, transparent, var(--glass-border), transparent);
 }
 
-.dock-hint {
-  font-size: 9px;
-  letter-spacing: 0.07em;
+/* Keybindings "?" badge in the dock header (top-right of header) */
+.dock-header { position: relative; }
+.keybindings-btn {
+  position: absolute;
+  top: -1px;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: transparent;
   color: var(--text-dim);
-  text-align: center;
-  white-space: nowrap;
+  font-size: 10px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: help;
+  opacity: 0.6;
+  font-family: var(--font-mono);
+  transition:
+    opacity     var(--dur-base) var(--ease-out-quart),
+    color       var(--dur-base) var(--ease-out-quart),
+    border-color var(--dur-base) var(--ease-out-quart);
+}
+.keybindings-btn:hover,
+.keybindings-btn:focus-visible {
+  opacity: 1;
+  color: var(--accent-amber);
+  border-color: var(--accent-amber);
+  outline: none;
 }
 
 /* ── Shape Tiles (now <button> elements, click-to-spawn) ──────── */
@@ -315,12 +351,13 @@ body.ui-hidden #foundry-panel {
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  width: var(--dock-token-size);           /* align with other dock tokens */
 }
 
 /* SVG element */
 #sample-knob {
-  width: 64px;
-  height: 64px;
+  width: var(--dock-token-size);
+  height: var(--dock-token-size);
   cursor: ns-resize;
   display: block;
   overflow: visible;
@@ -562,8 +599,8 @@ body.ui-hidden #foundry-panel {
    CPM KNOB  — mirrors sample-knob; same SVG shape, own needle id
    ══════════════════════════════════════════════════════════════ */
 #cpm-knob {
-  width: 64px;
-  height: 64px;
+  width: var(--dock-token-size);
+  height: var(--dock-token-size);
   cursor: ns-resize;
   display: block;
   overflow: visible;
@@ -592,94 +629,82 @@ body.ui-hidden #foundry-panel {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   DOCK LAYOUT: two-knob row + sequencer controls row
+   DOCK INSTRUMENT ROW
+   Four equal tokens: [Sweeper] · [Sample knob] [CPM knob] · [Play]
+   Center column stretches (1fr) so Sweeper hugs the left and Play the
+   right. All four tokens use --dock-token-size (see :root).
    ══════════════════════════════════════════════════════════════ */
-.knobs-row {
-  display: flex;
-  gap: 20px;
-  align-items: flex-start;
+.dock-instrument {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: var(--dock-token-gap);
+  padding: 4px 2px 2px;
 }
 
-.sequencer-controls {
+.knob-cluster {
   display: flex;
-  gap: 10px;
-  align-items: center;
-  width: 100%;
-  justify-content: space-between;
+  justify-content: center;
+  gap: var(--dock-cluster-gap);
+  position: relative;
+}
+.knob-cluster::after {
+  content: "";
+  position: absolute;
+  top: 18%;
+  bottom: 18%;
+  left: 50%;
+  width: 1px;
+  background: linear-gradient(to bottom, transparent, var(--glass-border), transparent);
+  transform: translateX(-0.5px);
+  pointer-events: none;
 }
 
 /* ══════════════════════════════════════════════════════════════
-   SWEEPER SPAWN BUTTON  (Unit 1)
-   Matches .config-btn aesthetic — copper border, amber hover,
-   JetBrains Mono label, kbd badge sized to the other dock buttons.
+   SWEEPER SPAWN BUTTON — 64px circle with radial-arm icon.
+   Icon is a mini of the on-canvas sweeper (dashed orbit + arm +
+   cluster blip + sun dot). Adjust --sweeper-icon-size in :root to
+   rescale the icon without changing the circle diameter.
    ══════════════════════════════════════════════════════════════ */
 .sweeper-spawn-btn {
   flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 12px;
-  border-radius: 17px;
-  border: 1px solid var(--glass-border);
-  background: var(--tile-bg);
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  width: var(--dock-token-size);
+  height: var(--dock-token-size);
+  border-radius: 50%;
+  border: 1px solid var(--accent-copper);
+  background: rgba(200, 122, 46, 0.08);
+  color: var(--accent-copper);
   cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
   transition:
-    border-color var(--dur-fast) var(--ease-out-quart),
-    color        var(--dur-fast) var(--ease-out-quart),
-    box-shadow   var(--dur-fast) var(--ease-out-quart);
+    border-color var(--dur-base) var(--ease-out-quart),
+    color        var(--dur-base) var(--ease-out-quart),
+    background   var(--dur-base) var(--ease-out-quart),
+    box-shadow   var(--dur-base) var(--ease-out-quart);
 }
-
 .sweeper-spawn-btn:hover {
   border-color: var(--accent-amber);
   color: var(--accent-amber);
-  box-shadow: 0 0 10px rgba(232, 160, 80, 0.22);
+  background: rgba(232, 160, 80, 0.14);
+  box-shadow: 0 0 0 3px rgba(232, 160, 80, 0.10);
 }
-
 .sweeper-spawn-btn:focus-visible {
   outline: 2px solid var(--accent-copper);
   outline-offset: 3px;
 }
-
-.sweeper-spawn-plus {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 400;
-  color: var(--accent-copper);
-  line-height: 1;
-}
-
-.sweeper-spawn-label {
-  line-height: 1;
-}
-
-.sweeper-spawn-kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 3px;
-  border: 1px solid var(--glass-border);
-  background: var(--tile-bg);
-  color: var(--text-dim);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 400;
-  letter-spacing: 0;
-  text-transform: none;
+.sweeper-icon-svg {
+  width:  var(--sweeper-icon-size);
+  height: var(--sweeper-icon-size);
+  display: block;
 }
 
 /* ══════════════════════════════════════════════════════════════
    TOP-LEFT CHROME  (Unit 1)
    Holds Save / Load / Theme — moved out of the bottom dock.
+   Reveal is staggered (Save → Load → Theme, 60ms apart) to feel
+   mechanically tied to the dock's rise. Hide is uniform.
    ══════════════════════════════════════════════════════════════ */
 #top-chrome {
   position: fixed;
@@ -691,32 +716,52 @@ body.ui-hidden #foundry-panel {
   z-index: 50;
 }
 
+#top-chrome > * {
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    opacity   var(--dur-base) var(--ease-out-quart),
+    transform var(--dur-base) var(--ease-out-quart);
+}
+/* Stagger on reveal — earlier children enter first */
+#top-chrome > *:nth-child(1) { transition-delay: 0ms; }
+#top-chrome > *:nth-child(2) { transition-delay: 60ms; }
+#top-chrome > *:nth-child(3) { transition-delay: 120ms; }
+#top-chrome > *:nth-child(4) { transition-delay: 180ms; }
+
 body.ui-hidden #top-chrome {
-  opacity: 0;
   pointer-events: none;
+}
+body.ui-hidden #top-chrome > * {
+  opacity: 0;
+  transform: translateX(-8px);
+  /* Hide uniformly — no stagger on leave */
+  transition-delay: 0ms;
 }
 
 /* ══════════════════════════════════════════════════════════════
-   PLAY / PAUSE BUTTON
+   PLAY / PAUSE BUTTON — 64px circle matching other dock tokens.
+   Adjust --play-icon-size in :root to rescale the ⏸/⏵ glyph.
    ══════════════════════════════════════════════════════════════ */
 .play-btn {
   flex-shrink: 0;
-  width: 34px;
-  height: 34px;
+  width: var(--dock-token-size);
+  height: var(--dock-token-size);
   border-radius: 50%;
   border: 1px solid var(--glass-border);
   background: var(--tile-bg);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--play-icon-size);
   font-family: var(--font-mono);
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
+  padding: 0;
   transition:
-    border-color var(--dur-fast) var(--ease-out-quart),
-    color        var(--dur-fast) var(--ease-out-quart),
-    box-shadow   var(--dur-fast) var(--ease-out-quart);
+    border-color var(--dur-base) var(--ease-out-quart),
+    color        var(--dur-base) var(--ease-out-quart),
+    background   var(--dur-base) var(--ease-out-quart),
+    box-shadow   var(--dur-base) var(--ease-out-quart);
 }
 
 .play-btn:hover {
@@ -735,6 +780,100 @@ body.ui-hidden #top-chrome {
 .play-btn:focus-visible {
   outline: 2px solid var(--accent-copper);
   outline-offset: 3px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   KEYBINDINGS POPOVER  — opens from the ? button in the dock header.
+   Fixed-position glass card. Stays in sync with src/controls.ts
+   hotkey switch at the top of the file — update both together.
+   ══════════════════════════════════════════════════════════════ */
+.keybindings-popover {
+  /* JS sets right + bottom at open time (see anchorPopover in controls.ts)
+     so the arrow points at the ? button in the dock header. Defaults below
+     are fallback values if JS hasn't anchored yet. */
+  position: fixed;
+  bottom: 100px;
+  right: 24px;
+  min-width: 260px;
+  max-width: 320px;
+  background: var(--overlay-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.55), 0 1px 0 rgba(255, 200, 140, 0.05) inset;
+  padding: 14px 16px 12px;
+  z-index: 60;
+  animation: kb-pop-in var(--dur-base) var(--ease-out-quart) both;
+}
+.keybindings-popover[hidden] { display: none; }
+@keyframes kb-pop-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.keybindings-popover::before {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  right: 16px;                          /* aligned near the ? button */
+  width: 10px;
+  height: 10px;
+  background: var(--overlay-bg);
+  border-right: 1px solid var(--glass-border);
+  border-bottom: 1px solid var(--glass-border);
+  transform: rotate(45deg);
+}
+.keybindings-popover .kb-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--glass-border);
+}
+.keybindings-popover .kb-title {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent-amber);
+}
+.keybindings-popover .kb-sub {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+}
+.keybindings-popover .kb-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  margin: 0;
+}
+.keybindings-popover dt {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  align-items: center;
+}
+.keybindings-popover kbd {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  padding: 2px 6px;
+  min-width: 18px;
+  text-align: center;
+  border: 1px solid var(--glass-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: rgba(194, 118, 46, 0.08);
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+[data-theme="light"] .keybindings-popover kbd { background: rgba(92, 58, 33, 0.06); }
+.keybindings-popover dd {
+  color: var(--text-secondary);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  margin: 0;
 }
 
 /* ══════════════════════════════════════════════════════════════

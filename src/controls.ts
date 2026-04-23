@@ -769,6 +769,44 @@ export function setupEventHandlers(
     setTheme(state.currentTheme, dom.themeToggleBtn);
   });
 
+  // Keybindings popover — ? button in the dock header opens/closes the panel.
+  // IMPORTANT: keep index.html #keybindings-popover in sync with the hotkey
+  // switch at the bottom of this function.
+  const kbBtn = document.getElementById('keybindings-btn');
+  const kbPop = document.getElementById('keybindings-popover');
+  if (kbBtn !== null && kbPop !== null) {
+    // Position the popover so its arrow points at the ? button. We read the
+    // ? rect at open time so the popover follows window resizes and theme
+    // toggles without us having to recalculate on every frame.
+    const anchorPopover = (): void => {
+      const r = kbBtn.getBoundingClientRect();
+      // Anchor right edge of popover ~24px right of the ? button, so the
+      // arrow (positioned by CSS at the right side) lands near the button.
+      kbPop.style.right = `${Math.max(8, window.innerWidth - r.right - 12)}px`;
+      kbPop.style.bottom = `${Math.max(12, window.innerHeight - r.top + 14)}px`;
+      kbPop.style.left = 'auto';
+    };
+    const toggleKb = (): void => {
+      if (kbPop.hasAttribute('hidden')) {
+        anchorPopover();
+        kbPop.removeAttribute('hidden');
+      } else {
+        kbPop.setAttribute('hidden', '');
+      }
+    };
+    kbBtn.addEventListener('click', toggleKb);
+    window.addEventListener('resize', () => {
+      if (!kbPop.hasAttribute('hidden')) anchorPopover();
+    });
+    // Click outside to close (capture phase so it beats other handlers).
+    document.addEventListener('click', e => {
+      if (kbPop.hasAttribute('hidden')) return;
+      const t = e.target;
+      if (t instanceof Node && (kbPop.contains(t) || kbBtn.contains(t))) return;
+      kbPop.setAttribute('hidden', '');
+    }, true);
+  }
+
   // Keyboard shortcuts
   document.addEventListener('keydown', e => {
     // Ctrl/Cmd+Enter: global
@@ -793,6 +831,16 @@ export function setupEventHandlers(
       e.preventDefault();
       hidePatternSelector(dom);
       return;
+    }
+
+    // Escape also closes the keybindings popover if open.
+    if (e.key === 'Escape') {
+      const pop = document.getElementById('keybindings-popover');
+      if (pop !== null && !pop.hasAttribute('hidden')) {
+        e.preventDefault();
+        pop.setAttribute('hidden', '');
+        return;
+      }
     }
 
     switch (e.key.toLowerCase()) {

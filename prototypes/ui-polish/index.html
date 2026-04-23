@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>UI Polish Prototypes</title>
+  <link rel="stylesheet" href="./_tokens.css" />
+  <style>
+    body { padding: 40px 60px; }
+    h1 { font-size: 22px; font-weight: 500; margin-bottom: 8px; color: var(--text-primary); letter-spacing: 0.02em; }
+    .subtitle { color: var(--text-dim); font-size: 11px; margin-bottom: 32px; }
+    ol { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+    li {
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      padding: 20px;
+      background: var(--glass-bg);
+      backdrop-filter: var(--glass-blur);
+      transition: border-color var(--dur-base) var(--ease-smooth), transform var(--dur-base) var(--ease-smooth);
+    }
+    li:hover { border-color: var(--glass-border-hover); transform: translateY(-2px); }
+    .num { color: var(--accent-amber); font-size: 10px; letter-spacing: 0.15em; }
+    .title { font-size: 14px; color: var(--text-primary); margin: 4px 0 8px; }
+    .desc { color: var(--text-secondary); font-size: 11px; line-height: 1.55; margin-bottom: 12px; }
+    a { color: var(--accent-coral); text-decoration: none; font-size: 11px; border-bottom: 1px dotted var(--accent-coral); }
+    a:hover { color: var(--accent-amber); border-color: var(--accent-amber); }
+  </style>
+</head>
+<body>
+  <h1>UI Polish — Prototypes</h1>
+  <p class="subtitle">Five isolated mockups for visual review. Each opens in isolation with its own backdrop.</p>
+  <ol>
+    <li>
+      <div class="num">PROTO 01</div>
+      <div class="title">Orbital Engine Dock — horizontal</div>
+      <div class="desc">Knobs centered, Sweeper on left, Play on right, <code>?</code> badge tucked in the header.</div>
+      <a href="./01-dock.html">Open →</a>
+    </li>
+    <li>
+      <div class="num">PROTO 02</div>
+      <div class="title">Keybindings Popover</div>
+      <div class="desc">The <code>?</code> panel open state — compact glass card listing all hotkeys.</div>
+      <a href="./02-keybindings-popover.html">Open →</a>
+    </li>
+    <li>
+      <div class="num">PROTO 03</div>
+      <div class="title">Top-chrome Stagger Entry</div>
+      <div class="desc">Save / Load / Theme reveal: staggered fade + 8px left-slide. Click toggle to replay.</div>
+      <a href="./03-top-chrome.html">Open →</a>
+    </li>
+    <li>
+      <div class="num">PROTO 04</div>
+      <div class="title">Chip Palette — cool/warm split</div>
+      <div class="desc">Light-mode data=lapis, sound=vermilion, sweeper=gold. Dark mode shown for parity.</div>
+      <a href="./04-chip-palette.html">Open →</a>
+    </li>
+    <li>
+      <div class="num">PROTO 05</div>
+      <div class="title">Edge-mounted Ports + Cable</div>
+      <div class="desc">Ports protrude from chip edges, cable terminates outside the chip body.</div>
+      <a href="./05-chip-ports.html">Open →</a>
+    </li>
+  </ol>
+</body>
+</html>

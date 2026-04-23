@@ -196,7 +196,9 @@
   min-width: 140px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--glass-border);
-  border-left: 3px solid var(--ne-side-accent, var(--accent-copper));
+  /* Stripe side is set per data-side below so flow direction reads
+     visually: data chips stripe LEFT (away from their output ports),
+     sound chips stripe RIGHT (away from their input ports). */
   border-radius: 10px;
   font-family: var(--font-mono);
   color: var(--text-primary);
@@ -214,12 +216,17 @@
   z-index: 3;
 }
 
-/* Side-driven accent: the left border + title color change by category, so
-   data / sound / sweeper-playback chips are discoverable at a glance. */
-.ne-node[data-side="data"]     { --ne-side-accent: var(--accent-copper); }
-.ne-node[data-side="sound"]    { --ne-side-accent: var(--accent-coral);  }
-.ne-node[data-side="sweeper"]  { --ne-side-accent: var(--accent-amber);  }
-.ne-node[data-side="playback"] { --ne-side-accent: var(--accent-amber);  }
+/* Side-driven accent: the stripe side + title color change by category.
+   Stripe side encodes flow: data emits → right (stripe left),
+   sound receives ← left (stripe right), sweeper emits (stripe left). */
+.ne-node[data-side="data"]     { --ne-side-accent: var(--accent-copper);
+                                  border-left:  3px solid var(--ne-side-accent); }
+.ne-node[data-side="sound"]    { --ne-side-accent: var(--accent-coral);
+                                  border-right: 3px solid var(--ne-side-accent); }
+.ne-node[data-side="sweeper"]  { --ne-side-accent: var(--accent-amber);
+                                  border-left:  3px solid var(--ne-side-accent); }
+.ne-node[data-side="playback"] { --ne-side-accent: var(--accent-amber);
+                                  border-left:  3px solid var(--ne-side-accent); }
 
 .ne-node[data-side="data"]     { background: linear-gradient(180deg, rgba(200, 122, 46, 0.12) 0%, rgba(200, 122, 46, 0.04) 100%); }
 .ne-node[data-side="sound"]    { background: linear-gradient(180deg, rgba(232,  71, 44, 0.12) 0%, rgba(232,  71, 44, 0.04) 100%); }
@@ -380,6 +387,7 @@
 
 .port {
   flex-shrink: 0;
+  position: relative;           /* hosts the expanded hit-area pseudo */
   width: 11px;
   height: 11px;
   border-radius: 50%;
@@ -388,6 +396,18 @@
   cursor: crosshair;
   transition: border-color var(--dur-fast) var(--ease-out-quart),
               box-shadow  var(--dur-fast) var(--ease-out-quart);
+}
+/* Edge-mount: dots protrude --port-edge-offset beyond the chip border, so
+   cables terminate outside the chip body. getBoundingClientRect picks up the
+   shifted position automatically — no cable math changes. */
+.ne-port-row-in  .port { transform: translateX(calc(-50% - var(--port-edge-offset))); }
+.ne-port-row-out .port { transform: translateX(calc( 50% + var(--port-edge-offset))); }
+/* Expand clickable area without enlarging the visual dot */
+.port::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
 }
 .port:hover,
 .port.active {
@@ -401,10 +421,15 @@
   color: var(--text-primary);
   box-shadow: 0 2px 10px rgba(100, 60, 20, 0.14);
 }
-[data-theme="light"] .ne-node[data-side="data"]     { background: linear-gradient(180deg, rgba(184, 68, 28, 0.10) 0%, rgba(252, 250, 246, 0.92) 100%); }
-[data-theme="light"] .ne-node[data-side="sound"]    { background: linear-gradient(180deg, rgba(224, 60, 49, 0.10) 0%, rgba(252, 250, 246, 0.92) 100%); }
+/* Light-mode chips — unified with dark palette (copper / coral / amber)
+   at ~22-26% opacity so the three hues stay distinct against cream. */
+[data-theme="light"] .ne-node[data-side="data"]     { --ne-side-accent: #C87A2E;
+                                                       background: linear-gradient(180deg, rgba(200, 122, 46, 0.24) 0%, rgba(252, 250, 246, 0.95) 100%); }
+[data-theme="light"] .ne-node[data-side="sound"]    { --ne-side-accent: #E8472C;
+                                                       background: linear-gradient(180deg, rgba(232,  71, 44, 0.22) 0%, rgba(252, 250, 246, 0.95) 100%); }
 [data-theme="light"] .ne-node[data-side="sweeper"],
-[data-theme="light"] .ne-node[data-side="playback"] { background: linear-gradient(180deg, rgba(212, 98, 26, 0.10) 0%, rgba(252, 250, 246, 0.92) 100%); }
+[data-theme="light"] .ne-node[data-side="playback"] { --ne-side-accent: #E8A050;
+                                                       background: linear-gradient(180deg, rgba(232, 160, 80, 0.26) 0%, rgba(252, 250, 246, 0.95) 100%); }
 [data-theme="light"] .port-label  { color: var(--text-primary); }
 [data-theme="light"] .ne-node-title { color: var(--ne-side-accent, var(--accent-amber)); }
 [data-theme="light"] .port { background: rgba(252, 250, 246, 0.95); }

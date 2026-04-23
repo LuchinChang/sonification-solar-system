@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Proto 02 — Keybindings Popover</title>
+  <link rel="stylesheet" href="./_tokens.css" />
+  <style>
+    /* Minimal dock stub so the popover anchoring reads right */
+    .dock-stub {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 14px 260px 14px 40px;
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      background: var(--glass-bg);
+      backdrop-filter: var(--glass-blur);
+      color: var(--text-dim);
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+    .dock-stub .q-anchor {
+      position: absolute;
+      top: -8px;
+      right: 20px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--overlay-bg);
+      border: 1px solid var(--accent-amber);
+      color: var(--accent-amber);
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+    }
+
+    .keybindings-popover {
+      position: fixed;
+      bottom: 90px;
+      left: 50%;
+      transform: translate(calc(-50% + 140px), 0);
+      min-width: 280px;
+      max-width: 320px;
+      background: var(--overlay-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      backdrop-filter: var(--glass-blur);
+      box-shadow: 0 10px 32px rgba(0,0,0,0.55), 0 1px 0 rgba(255,200,140,0.05) inset;
+      padding: 14px 16px 12px;
+      animation: pop-in var(--dur-base) var(--ease-smooth) both;
+    }
+    @keyframes pop-in {
+      from { opacity: 0; transform: translate(calc(-50% + 140px), 6px); }
+      to   { opacity: 1; transform: translate(calc(-50% + 140px), 0); }
+    }
+    .keybindings-popover::before {
+      content: "";
+      position: absolute;
+      bottom: -6px;
+      right: 24px;
+      width: 10px;
+      height: 10px;
+      background: var(--overlay-bg);
+      border-right: 1px solid var(--glass-border);
+      border-bottom: 1px solid var(--glass-border);
+      transform: rotate(45deg);
+    }
+    .kb-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .kb-title {
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--accent-amber);
+    }
+    .kb-sub {
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+    }
+    dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 14px;
+      margin: 0;
+    }
+    dt {
+      display: flex;
+      gap: 4px;
+      justify-content: flex-end;
+      align-items: center;
+    }
+    kbd {
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      padding: 2px 6px;
+      min-width: 18px;
+      text-align: center;
+      border: 1px solid var(--glass-border);
+      border-bottom-width: 2px;
+      border-radius: 4px;
+      background: rgba(194, 118, 46, 0.08);
+      color: var(--text-primary);
+      line-height: 1.2;
+    }
+    [data-theme="light"] kbd { background: rgba(92, 58, 33, 0.06); }
+    dd {
+      color: var(--text-secondary);
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+    }
+
+    .kb-footer {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid var(--glass-border);
+      color: var(--text-dim);
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="backdrop-space"></div>
+
+  <div class="proto-header">
+    <span>Proto 02 · Popover</span>
+    <button id="theme-btn">Toggle theme</button>
+  </div>
+
+  <div class="dock-stub">
+    <span class="q-anchor">?</span>
+    <span>Orbital Engine</span>
+  </div>
+
+  <div class="keybindings-popover" role="dialog" aria-label="Keyboard shortcuts">
+    <div class="kb-header">
+      <span class="kb-title">Keybindings</span>
+      <span class="kb-sub">press ? or esc to close</span>
+    </div>
+    <dl>
+      <dt><kbd>Space</kbd></dt>            <dd>Play / Pause</dd>
+      <dt><kbd>D</kbd></dt>                <dd>Toggle dock</dd>
+      <dt><kbd>N</kbd></dt>                <dd>Spawn sweeper</dd>
+      <dt><kbd>P</kbd></dt>                <dd>Pattern selector</dd>
+      <dt><kbd>E</kbd></dt>                <dd>Node editor</dd>
+      <dt><kbd>I</kbd></dt>                <dd>Telemetry panel</dd>
+      <dt><kbd>Esc</kbd></dt>              <dd>Close panel</dd>
+      <dt><kbd>⌫</kbd></dt>                <dd>Delete shape</dd>
+      <dt><kbd>⌘</kbd><kbd>S</kbd></dt>    <dd>Save config</dd>
+      <dt><kbd>⌘</kbd><kbd>↵</kbd></dt>    <dd>Evaluate code</dd>
+      <dt><kbd>⌘</kbd><kbd>scroll</kbd></dt><dd>Samples / orbit</dd>
+    </dl>
+    <div class="kb-footer">Sonification Playground · v0.1</div>
+  </div>
+
+  <script>
+    document.getElementById('theme-btn').addEventListener('click', () => {
+      const cur = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+      document.documentElement.dataset.theme = cur === 'light' ? 'dark' : 'light';
+    });
+  </script>
+</body>
+</html>

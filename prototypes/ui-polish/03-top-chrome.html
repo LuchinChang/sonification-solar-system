@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Proto 03 — Top-chrome Stagger</title>
+  <link rel="stylesheet" href="./_tokens.css" />
+  <style>
+    /* Top chrome with new transition rules */
+    #top-chrome {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      z-index: 50;
+      transition: opacity var(--dur-base) ease;
+    }
+    #top-chrome > * {
+      opacity: 1;
+      transform: translateX(0);
+      transition:
+        opacity var(--dur-base) ease,
+        transform var(--dur-base) var(--ease-smooth);
+    }
+    body.ui-hidden #top-chrome { pointer-events: none; }
+    body.ui-hidden #top-chrome > * {
+      opacity: 0;
+      transform: translateX(-8px);
+      transition-delay: 0ms !important;
+    }
+    /* Reveal: stagger */
+    #top-chrome > *:nth-child(1) { transition-delay: 0ms; }
+    #top-chrome > *:nth-child(2) { transition-delay: 60ms; }
+    #top-chrome > *:nth-child(3) { transition-delay: 120ms; }
+
+    /* Button styling (matches src/style.css) */
+    .config-btn, .theme-toggle-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 1px solid var(--glass-border);
+      background: var(--glass-bg);
+      backdrop-filter: var(--glass-blur);
+      color: var(--text-secondary);
+      font-size: 14px;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition:
+        border-color var(--dur-base) var(--ease-smooth),
+        color var(--dur-base) var(--ease-smooth),
+        box-shadow var(--dur-base) var(--ease-smooth);
+    }
+    .config-btn:hover, .theme-toggle-btn:hover {
+      border-color: var(--glass-border-hover);
+      color: var(--accent-amber);
+      box-shadow: 0 0 0 3px rgba(232, 160, 80, 0.10);
+    }
+
+    /* Dock simulated — same timing */
+    .dock-fake {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(0);
+      padding: 14px 40px;
+      border-radius: 14px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: var(--glass-blur);
+      color: var(--text-secondary);
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      transition: opacity var(--dur-base) var(--ease-smooth),
+                  transform var(--dur-base) var(--ease-smooth);
+      opacity: 1;
+    }
+    body.ui-hidden .dock-fake {
+      opacity: 0;
+      transform: translateX(-50%) translateY(20px);
+      pointer-events: none;
+    }
+
+    /* Controls */
+    .replay-strip {
+      position: fixed;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      z-index: 100;
+      color: var(--text-dim);
+      font-size: 11px;
+      text-align: center;
+      max-width: 420px;
+    }
+    .replay-btn {
+      padding: 8px 18px;
+      border: 1px solid var(--accent-amber);
+      border-radius: 20px;
+      background: transparent;
+      color: var(--accent-amber);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all var(--dur-base) var(--ease-smooth);
+    }
+    .replay-btn:hover {
+      background: rgba(232, 160, 80, 0.10);
+      box-shadow: 0 0 0 4px rgba(232, 160, 80, 0.08);
+    }
+    .hint { line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="backdrop-space"></div>
+
+  <div class="proto-header">
+    <span>Proto 03 · Top-chrome</span>
+    <button id="theme-btn">Toggle theme</button>
+  </div>
+
+  <aside id="top-chrome" aria-label="File and view controls">
+    <button class="config-btn" title="Save configuration">⬇</button>
+    <button class="config-btn" title="Load configuration">⬆</button>
+    <button class="theme-toggle-btn" title="Toggle theme">☀</button>
+  </aside>
+
+  <div class="dock-fake">Orbital Engine · controls</div>
+
+  <div class="replay-strip">
+    <button class="replay-btn" id="toggle-btn">Toggle UI (simulate D)</button>
+    <p class="hint">Reveal: staggered fade + 8px left-slide, 60ms apart.<br />Hide: all three leave together with no stagger.</p>
+  </div>
+
+  <script>
+    const btn = document.getElementById('toggle-btn');
+    btn.addEventListener('click', () => document.body.classList.toggle('ui-hidden'));
+    document.getElementById('theme-btn').addEventListener('click', () => {
+      const cur = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+      document.documentElement.dataset.theme = cur === 'light' ? 'dark' : 'light';
+    });
+  </script>
+</body>
+</html>

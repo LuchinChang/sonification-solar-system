@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Proto 01 — Horizontal Dock</title>
+  <link rel="stylesheet" href="./_tokens.css" />
+  <style>
+    /* ─── Dock shell ─────────────────────────────────────── */
+    #foundry-panel {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.45), 0 1px 0 rgba(255,200,140,0.06) inset;
+      padding: 10px 22px 12px;
+      transition: border-color var(--dur-base) var(--ease-smooth), box-shadow var(--dur-base) var(--ease-smooth);
+    }
+    #foundry-panel:hover { border-color: var(--glass-border-hover); }
+
+    .dock-section { display: flex; flex-direction: column; gap: 8px; }
+
+    .dock-header {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 4px;
+    }
+    .dock-icon { color: var(--accent-amber); font-size: 11px; }
+    .dock-title {
+      font-size: 9px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+    .keybindings-btn {
+      position: absolute;
+      top: -2px;
+      right: 0;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1px solid var(--glass-border);
+      background: transparent;
+      color: var(--text-dim);
+      font-size: 10px;
+      line-height: 1;
+      cursor: help;
+      opacity: 0.6;
+      display: grid;
+      place-items: center;
+      transition: all var(--dur-base) var(--ease-smooth);
+      font-family: var(--font-mono);
+    }
+    .keybindings-btn:hover {
+      opacity: 1;
+      color: var(--accent-amber);
+      border-color: var(--accent-amber);
+    }
+
+    .dock-divider {
+      height: 1px;
+      background: linear-gradient(to right, transparent, var(--glass-border), transparent);
+    }
+
+    /* ─── Instrument row ─────────────────────────────────── */
+    .dock-instrument {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: start;              /* align by top so 64px tokens match knobs */
+      gap: 24px;
+      padding: 6px 2px 4px;
+    }
+
+    .knob-cluster {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      position: relative;
+    }
+    .knob-cluster::after {
+      content: "";
+      position: absolute;
+      top: 18%;
+      bottom: 18%;
+      left: 50%;
+      width: 1px;
+      background: linear-gradient(to bottom, transparent, var(--glass-border), transparent);
+      transform: translateX(-0.5px);
+      pointer-events: none;
+    }
+
+    .knob-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: center;
+      width: 64px;
+    }
+    .knob-svg { width: 64px; height: 64px; cursor: ns-resize; }
+    .knob-track   { fill: none; stroke: var(--knob-track-stroke); stroke-width: 3; }
+    .knob-arc     { fill: none; stroke: var(--accent-amber); stroke-width: 3; stroke-linecap: round; }
+    .knob-hub     { fill: var(--hub-fill); stroke: var(--hub-stroke); stroke-width: 1.2; }
+    .knob-needle  { stroke: var(--accent-amber); stroke-width: 2; stroke-linecap: round; }
+
+    .knob-readout { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+    .knob-value  { color: var(--accent-amber); font-size: 16px; font-weight: 500; letter-spacing: 0.02em; }
+    .knob-unit   { color: var(--text-dim); font-size: 8px; letter-spacing: 0.15em; text-transform: uppercase; }
+
+    /* ─── Unified token size — everything occupies a 64px square footprint
+           so Sweeper, knobs, and Play read as equal visual weights. ─── */
+    .dock-token {
+      width: 64px;
+      height: 64px;
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      position: relative;
+    }
+    .token-label {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 8px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      white-space: nowrap;
+    }
+
+    /* ─── Sweeper spawn as 64px circle with radial-arm icon ──────────── */
+    .sweeper-spawn-btn {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: 1px solid var(--accent-copper);
+      background: rgba(200, 122, 46, 0.08);
+      color: var(--accent-copper);
+      font-family: var(--font-mono);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      position: relative;
+      padding: 0;
+      transition: all var(--dur-base) var(--ease-smooth);
+    }
+    .sweeper-spawn-btn:hover {
+      border-color: var(--accent-amber);
+      color: var(--accent-amber);
+      background: rgba(232, 160, 80, 0.12);
+      box-shadow: 0 0 0 3px rgba(232, 160, 80, 0.10);
+    }
+    .sweeper-icon-svg {
+      width: 44px;
+      height: 44px;
+      display: block;
+    }
+    .sweeper-spawn-kbd {
+      position: absolute;
+      bottom: 4px;
+      right: 4px;
+      font-size: 7.5px;
+      padding: 1px 4px;
+      border: 1px solid currentColor;
+      border-radius: 3px;
+      opacity: 0.65;
+      letter-spacing: 0.08em;
+      font-family: var(--font-mono);
+    }
+
+    /* ─── Play button as 64px circle ─────────────────────── */
+    .play-btn {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: 1px solid var(--accent-coral);
+      background: rgba(232, 71, 44, 0.10);
+      color: var(--accent-coral);
+      font-size: 30px;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: all var(--dur-base) var(--ease-smooth);
+    }
+    .play-btn:hover {
+      background: rgba(232, 71, 44, 0.22);
+      box-shadow: 0 0 0 3px rgba(232, 71, 44, 0.14);
+    }
+    .play-btn.playing { background: rgba(232, 71, 44, 0.20); }
+
+    /* Toggle in proto header */
+  </style>
+</head>
+<body>
+  <div class="backdrop-space"></div>
+
+  <div class="proto-header">
+    <span>Proto 01 · Dock</span>
+    <button id="theme-btn">Toggle theme</button>
+  </div>
+
+  <!-- NEW dock -->
+  <aside id="foundry-panel">
+    <section class="dock-section">
+      <header class="dock-header">
+        <span class="dock-icon">◉</span>
+        <span class="dock-title">Orbital Engine</span>
+        <button class="keybindings-btn" title="Keyboard shortcuts">?</button>
+      </header>
+      <div class="dock-divider"></div>
+      <div class="dock-instrument">
+        <!-- LEFT: create -->
+        <div class="knob-container">
+          <button class="sweeper-spawn-btn" title="Spawn sweeper [ N ]">
+            <svg class="sweeper-icon-svg" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <circle cx="16" cy="16" r="10" stroke="currentColor" stroke-width="0.75" stroke-dasharray="3 4"/>
+              <line   x1="16" y1="16" x2="26" y2="9" stroke="currentColor" stroke-width="1.5"/>
+              <circle cx="23.5" cy="10.5" r="2.5" stroke="currentColor" stroke-width="1.2"/>
+              <circle cx="16" cy="16" r="2" fill="currentColor"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- CENTER: tune -->
+        <div class="knob-cluster">
+          <div class="knob-container">
+            <svg class="knob-svg" viewBox="0 0 64 64">
+              <circle class="knob-track" cx="32" cy="32" r="25" />
+              <path class="knob-arc" d="M 14.4 49.6 A 25 25 0 1 1 49.6 49.6" />
+              <circle class="knob-hub" cx="32" cy="32" r="16" />
+              <g transform="rotate(-60 32 32)">
+                <line class="knob-needle" x1="32" y1="32" x2="32" y2="19" />
+              </g>
+            </svg>
+            <div class="knob-readout">
+              <span class="knob-value">500</span>
+              <span class="knob-unit"># Samples</span>
+            </div>
+          </div>
+
+          <div class="knob-container">
+            <svg class="knob-svg" viewBox="0 0 64 64">
+              <circle class="knob-track" cx="32" cy="32" r="25" />
+              <path class="knob-arc" d="M 14.4 49.6 A 25 25 0 0 1 32 7" />
+              <circle class="knob-hub" cx="32" cy="32" r="16" />
+              <g transform="rotate(-135 32 32)">
+                <line class="knob-needle" x1="32" y1="32" x2="32" y2="19" />
+              </g>
+            </svg>
+            <div class="knob-readout">
+              <span class="knob-value">60</span>
+              <span class="knob-unit">CPM</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: run -->
+        <div class="knob-container">
+          <button class="play-btn playing" title="Play / Pause [ Space ]">⏸</button>
+        </div>
+      </div>
+    </section>
+  </aside>
+
+  <script>
+    const btn = document.getElementById('theme-btn');
+    btn.addEventListener('click', () => {
+      const cur = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+      document.documentElement.dataset.theme = cur === 'light' ? 'dark' : 'light';
+    });
+  </script>
+</body>
+</html>
