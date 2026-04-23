@@ -118,7 +118,7 @@ describe('sweeper.length slider triggers geometry refresh', () => {
     closeEditor();
   });
 
-  it('mutates sweeper.size AND invokes the geometry-refresh hook on input', () => {
+  it('mutates sweeper.size AND invokes the geometry-refresh hook on input', async () => {
     const sweeper = new CanvasShape(0, 0, 'sweeper', 100);
     const resolver = (id: number) => (id === sweeper.id ? sweeper : null);
     initNodeEditor({ resolveSweeper: resolver });
@@ -139,9 +139,39 @@ describe('sweeper.length slider triggers geometry refresh', () => {
     slider.value = '123';
     slider.dispatchEvent(new Event('input', { bubbles: true }));
 
+    // Size mutation is synchronous; geometry refresh is rAF-coalesced so we
+    // yield one frame before asserting it was called.
     expect(sweeper.size).toBe(123);
+    await new Promise<void>(r => requestAnimationFrame(() => r()));
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(refresh).toHaveBeenCalledWith(sweeper);
+  });
+
+  it('coalesces rapid slider input to a single refresh per frame', async () => {
+    const sweeper = new CanvasShape(0, 0, 'sweeper', 100);
+    const resolver = (id: number) => (id === sweeper.id ? sweeper : null);
+    initNodeEditor({ resolveSweeper: resolver });
+    setSweeperResolver(resolver);
+    const refresh = vi.fn();
+    setSweeperGeometryRefresh(refresh);
+    openEditor(sweeper.id);
+
+    const def = getNodeDef('sweeper.length')!;
+    const node: Node = {
+      id: 'n1', type: 'sweeper.length', side: 'sweeper',
+      x: 0, y: 0, params: { radius: sweeper.size },
+    };
+    const el = def.ui!(node, () => {});
+    const slider = el.querySelector('input[type="range"]') as HTMLInputElement;
+
+    for (const v of ['50', '75', '123', '200']) {
+      slider.value = v;
+      slider.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    await new Promise<void>(r => requestAnimationFrame(() => r()));
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(sweeper.size).toBe(200);
   });
 
   it('does not throw when no geometry-refresh hook is registered', () => {

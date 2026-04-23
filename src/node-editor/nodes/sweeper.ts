@@ -55,6 +55,24 @@ export function setSweeperGeometryRefresh(fn: SweeperGeometryRefresh | null): vo
   refreshSweeperGeometry = fn;
 }
 
+// Coalesce geometry refreshes to at most one per animation frame. A slider
+// drag fires `input` ~60Hz; rebuildSweepTicks + drawScene running that often
+// stacks work on the same 16ms tick with no visible benefit — the next paint
+// can only show one result. Latest shape wins; earlier pending shape is
+// overwritten since dragging the same slider always targets one sweeper.
+let pendingGeometryShape: CanvasShape | null = null;
+let geometryRafId: number | null = null;
+function scheduleGeometryRefresh(shape: CanvasShape): void {
+  pendingGeometryShape = shape;
+  if (geometryRafId !== null) return;
+  geometryRafId = requestAnimationFrame(() => {
+    geometryRafId = null;
+    const s = pendingGeometryShape;
+    pendingGeometryShape = null;
+    if (s) refreshSweeperGeometry?.(s);
+  });
+}
+
 // ── Shared UI chrome (Martian Dusk tokens) ───────────────────────────────────
 
 const UI_FONT_MONO = 'var(--font-mono)';
@@ -159,7 +177,7 @@ registerNodeDef({
         // length tracks the visual playhead density. Re-bake ticks
         // immediately so codegen on closeEditor sees the new grid.
         sweeper.ticks = next;
-        refreshSweeperGeometry?.(sweeper);
+        scheduleGeometryRefresh(sweeper);
       }
       onChange({ params: { ...node.params, steps: next } });
     });
@@ -237,7 +255,7 @@ registerNodeDef({
       const sweeper = activeSweeper();
       if (sweeper) {
         sweeper.size = next;
-        refreshSweeperGeometry?.(sweeper);
+        scheduleGeometryRefresh(sweeper);
       }
       onChange({ params: { ...node.params, radius: next } });
     });

@@ -232,7 +232,10 @@ function renderNode(node: Node, def: NodeDefinition): HTMLDivElement {
     try {
       const ui = def.ui(node, patch => {
         Object.assign(node.params, patch.params ?? {});
-        refs?.root.dispatchEvent(new CustomEvent('graphChanged', { bubbles: true }));
+        // Param-only updates mutate in place; readouts self-update. Topology
+        // changes (node/edge add/remove) dispatch `graphChanged` from their
+        // own call sites — rebuilding every card on every slider tick was
+        // the lag culprit here.
       });
       card.appendChild(ui);
     } catch (err) {
