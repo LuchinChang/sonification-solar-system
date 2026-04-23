@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Proto 05 — Edge-mounted Ports</title>
+  <link rel="stylesheet" href="./_tokens.css" />
+  <style>
+    body { overflow: hidden; }
+    .canvas {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background:
+        radial-gradient(ellipse at 50% 60%, #1E1814 0%, #120F0E 70%);
+    }
+    [data-theme="light"] .canvas {
+      background: radial-gradient(ellipse at 50% 60%, #F7F2E7 0%, #EDE9E0 70%);
+    }
+
+    /* Cable SVG sits behind chips */
+    #cable-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+      overflow: visible;
+    }
+    #cable-path {
+      fill: none;
+      stroke: var(--accent-amber);
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      filter: drop-shadow(0 0 4px rgba(232, 160, 80, 0.4));
+    }
+    [data-theme="light"] #cable-path {
+      stroke: #B8441C;
+      filter: drop-shadow(0 0 4px rgba(184, 68, 28, 0.3));
+    }
+
+    /* Chip */
+    .ne-node {
+      position: absolute;
+      width: 220px;
+      border-radius: 8px;
+      padding: 10px 12px 12px;
+      font-family: var(--font-mono);
+      z-index: 2;
+      cursor: grab;
+      user-select: none;
+    }
+    .ne-node:active { cursor: grabbing; }
+
+    /* DARK mode chips */
+    .ne-node[data-side="data"] {
+      --acc: #C87A2E;
+      --chip-bg: #1A1310;
+      background: linear-gradient(180deg, rgba(200,122,46,0.14) 0%, var(--chip-bg) 100%);
+      border: 1px solid rgba(194, 118, 46, 0.28);
+      border-left: 3px solid var(--acc);
+      color: var(--text-primary);
+    }
+    .ne-node[data-side="sound"] {
+      --acc: #E8472C;
+      --chip-bg: #1A0F0C;
+      background: linear-gradient(180deg, rgba(232,71,44,0.14) 0%, var(--chip-bg) 100%);
+      border: 1px solid rgba(232, 71, 44, 0.28);
+      border-right: 3px solid var(--acc);
+      color: var(--text-primary);
+    }
+
+    /* LIGHT mode chips — unified palette (same hues as dark, bumped saturation) */
+    [data-theme="light"] .ne-node[data-side="data"] {
+      --acc: #C87A2E;
+      --chip-bg: #FCFAF6;
+      background: linear-gradient(180deg, rgba(200,122,46,0.24) 0%, var(--chip-bg) 100%);
+      border: 1px solid rgba(200, 122, 46, 0.36);
+      border-left: 3px solid var(--acc);
+      color: rgba(35,18,6,0.92);
+    }
+    [data-theme="light"] .ne-node[data-side="sound"] {
+      --acc: #E8472C;
+      --chip-bg: #FDFAF8;
+      background: linear-gradient(180deg, rgba(232,71,44,0.22) 0%, var(--chip-bg) 100%);
+      border: 1px solid rgba(232, 71, 44, 0.36);
+      border-right: 3px solid var(--acc);
+      color: rgba(35,18,6,0.92);
+    }
+
+    .ne-node .title {
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--acc);
+      margin-bottom: 6px;
+    }
+
+    .ne-port-row {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0;
+      font-size: 10.5px;
+    }
+    .ne-port-row.out { flex-direction: row-reverse; }
+
+    .port {
+      position: relative;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--acc);
+      border: 1.5px solid var(--acc);
+      /* Socket ring effect: notch into chip, then colored pad */
+      box-shadow:
+        0 0 0 2px var(--chip-bg),
+        0 0 0 3px var(--acc);
+      flex: 0 0 auto;
+    }
+    /* Edge-mount shifts — dot center lives 8px OUTSIDE the chip border so
+       the full dot + its socket ring sits visibly beyond the chip body */
+    .ne-port-row.in  .port { transform: translateX(calc(-50% - 8px)); }
+    .ne-port-row.out .port { transform: translateX(calc( 50% + 8px)); }
+    /* Larger hit area */
+    .port::after {
+      content: "";
+      position: absolute;
+      inset: -7px;
+      border-radius: 50%;
+    }
+
+    .port-label { color: var(--text-secondary); flex: 1; }
+    [data-theme="light"] .port-label { color: rgba(92,58,33,0.85); }
+    .ne-port-row.out .port-label { text-align: right; }
+
+    .port-kind {
+      font-size: 9px;
+      color: var(--acc);
+      opacity: 0.8;
+    }
+
+    /* Proto controls */
+    .proto-notes {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      max-width: 340px;
+      padding: 14px 16px;
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      background: var(--glass-bg);
+      backdrop-filter: var(--glass-blur);
+      color: var(--text-secondary);
+      font-size: 10.5px;
+      line-height: 1.6;
+      z-index: 10;
+    }
+    .proto-notes b { color: var(--accent-amber); letter-spacing: 0.05em; }
+    [data-theme="light"] .proto-notes b { color: #B8441C; }
+  </style>
+</head>
+<body>
+  <div class="proto-header">
+    <span>Proto 05 · Ports</span>
+    <button id="theme-btn">Toggle theme</button>
+  </div>
+
+  <div class="canvas">
+    <svg id="cable-svg"><path id="cable-path" /></svg>
+
+    <!-- DATA chip: accent stripe on LEFT, output port on RIGHT edge -->
+    <div class="ne-node" data-side="data" id="chip-data" style="left: 220px; top: 240px;">
+      <div class="title">Radial Distance</div>
+      <div class="ne-port-row out">
+        <div class="port" id="port-out"></div>
+        <span class="port-label">distance</span>
+        <span class="port-kind">N</span>
+      </div>
+      <div class="ne-port-row out">
+        <div class="port"></div>
+        <span class="port-label">angle</span>
+        <span class="port-kind">N</span>
+      </div>
+    </div>
+
+    <!-- SOUND chip: accent stripe on RIGHT, input port on LEFT edge -->
+    <div class="ne-node" data-side="sound" id="chip-sound" style="left: 720px; top: 280px;">
+      <div class="title">Low-pass Filter</div>
+      <div class="ne-port-row in">
+        <div class="port" id="port-in"></div>
+        <span class="port-kind">N</span>
+        <span class="port-label">cutoff</span>
+      </div>
+      <div class="ne-port-row in">
+        <div class="port"></div>
+        <span class="port-kind">N</span>
+        <span class="port-label">q</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="proto-notes">
+    <div style="margin-bottom:6px"><b>Proto 05 — Edge-mounted ports</b></div>
+    Drag either chip. The cable re-anchors to the port rect center, which now sits
+    <b>outside</b> the chip body thanks to <code>translateX(±55%)</code>.<br>
+    Data chip: stripe LEFT · outputs on right edge.<br>
+    Sound chip: stripe RIGHT · inputs on left edge.<br>
+    Zero changes to cable math.
+  </div>
+
+  <script>
+    // Theme toggle
+    document.getElementById('theme-btn').addEventListener('click', () => {
+      const cur = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+      document.documentElement.dataset.theme = cur === 'light' ? 'dark' : 'light';
+    });
+
+    // Port-anchor algorithm — same as cables.ts:108
+    function portAnchor(el) {
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+
+    function drawCable() {
+      const a = portAnchor(document.getElementById('port-out'));
+      const b = portAnchor(document.getElementById('port-in'));
+      const dx = Math.max(60, Math.abs(b.x - a.x) * 0.5);
+      const path = `M ${a.x} ${a.y} C ${a.x + dx} ${a.y}, ${b.x - dx} ${b.y}, ${b.x} ${b.y}`;
+      document.getElementById('cable-path').setAttribute('d', path);
+    }
+
+    // Dragging
+    let dragging = null, offsetX = 0, offsetY = 0;
+    document.querySelectorAll('.ne-node').forEach(chip => {
+      chip.addEventListener('pointerdown', e => {
+        dragging = chip;
+        offsetX = e.clientX - chip.offsetLeft;
+        offsetY = e.clientY - chip.offsetTop;
+        chip.setPointerCapture(e.pointerId);
+      });
+      chip.addEventListener('pointermove', e => {
+        if (dragging !== chip) return;
+        chip.style.left = (e.clientX - offsetX) + 'px';
+        chip.style.top  = (e.clientY - offsetY) + 'px';
+        drawCable();
+      });
+      chip.addEventListener('pointerup', () => dragging = null);
+    });
+
+    window.addEventListener('resize', drawCable);
+    requestAnimationFrame(drawCable);
+  </script>
+</body>
+</html>

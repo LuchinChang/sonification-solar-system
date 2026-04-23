@@ -1,0 +1,136 @@
+/* Shared tokens for UI polish prototypes — mirrors src/style.css */
+:root {
+  --bg-canvas:     #120F0E;
+  --color-sun:     #FFA030;
+  --color-lines:   rgba(194, 118, 46, 0.35);
+  --color-dots:    #E8472C;
+
+  --accent-copper: #C87A2E;
+  --accent-amber:  #E8A050;
+  --accent-coral:  #E8472C;
+
+  --glass-bg:           rgba(20, 13, 11, 0.78);
+  --glass-border:       rgba(194, 118, 46, 0.22);
+  --glass-border-hover: rgba(194, 118, 46, 0.55);
+  --glass-blur:         blur(20px) saturate(160%);
+
+  --font-mono:      'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --text-primary:   rgba(235, 210, 180, 0.93);
+  --text-secondary: rgba(175, 138, 95, 0.75);
+  --text-dim:       rgba(120, 88, 55, 0.58);
+
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-smooth:    cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast:  150ms;
+  --dur-base:  240ms;
+  --dur-slow:  320ms;
+
+  --bg-html:           #080604;
+  --tile-bg:           rgba(20, 12, 8, 0.72);
+  --knob-track-stroke: rgba(194, 118, 46, 0.18);
+  --hub-fill:          rgba(18, 10, 6, 0.95);
+  --hub-stroke:        rgba(194, 118, 46, 0.38);
+  --overlay-bg:        rgba(18, 15, 14, 0.92);
+
+  /* Proposed new node-editor palette (light mode) */
+  --ne-data-light:    #2B4C8C;   /* lapis */
+  --ne-sound-light:   #D43A1F;   /* vermilion */
+  --ne-sweeper-light: #C8821A;   /* burnt gold */
+  /* Dark mode chip accents stay the same as in node-editor/styles.css */
+  --ne-data-dark:    #C87A2E;
+  --ne-sound-dark:   #E8472C;
+  --ne-sweeper-dark: #E8A050;
+}
+
+[data-theme="light"] {
+  --bg-html:           #EDE9E0;
+  --accent-copper:     #E03C31;
+  --accent-amber:      #B8441C;
+  --accent-coral:      #D4621A;
+  --glass-bg:           rgba(252, 250, 246, 0.88);
+  --glass-border:       rgba(92, 58, 33, 0.20);
+  --glass-border-hover: rgba(92, 58, 33, 0.50);
+  --glass-blur:         blur(24px) saturate(180%);
+  --text-primary:   rgba(35, 18, 6, 0.92);
+  --text-secondary: rgba(92, 58, 33, 0.85);
+  --text-dim:       rgba(120, 80, 50, 0.60);
+  --tile-bg:           rgba(252, 250, 246, 0.72);
+  --knob-track-stroke: rgba(92, 58, 33, 0.22);
+  --hub-fill:          rgba(242, 238, 230, 0.95);
+  --hub-stroke:        rgba(92, 58, 33, 0.38);
+  --overlay-bg:        rgba(240, 237, 230, 0.95);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  min-height: 100vh;
+  background: var(--bg-html);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* Starfield backdrop for dock prototypes */
+.backdrop-space {
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse at 50% 60%, #2A1810 0%, #120F0E 60%, #080604 100%);
+  position: relative;
+  overflow: hidden;
+}
+.backdrop-space::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(1px 1px at 20% 30%, rgba(255,220,180,0.4), transparent),
+    radial-gradient(1px 1px at 70% 20%, rgba(255,180,120,0.3), transparent),
+    radial-gradient(1px 1px at 40% 70%, rgba(255,200,150,0.35), transparent),
+    radial-gradient(2px 2px at 85% 45%, rgba(255,160,48,0.5), transparent),
+    radial-gradient(1px 1px at 10% 85%, rgba(255,200,150,0.4), transparent);
+  background-size: 400px 400px, 500px 500px, 350px 350px, 600px 600px, 450px 450px;
+  pointer-events: none;
+}
+[data-theme="light"] .backdrop-space {
+  background: radial-gradient(ellipse at 50% 60%, #F5EFE3 0%, #EDE9E0 70%);
+}
+[data-theme="light"] .backdrop-space::before { opacity: 0.35; }
+
+/* Tiny sun in the center so the prototypes feel situated */
+.backdrop-space::after {
+  content: "";
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #FFC060 0%, #FFA030 50%, rgba(255,160,48,0) 80%);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 60px 20px rgba(255, 160, 48, 0.25);
+}
+
+.proto-header {
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 10px;
+  color: var(--text-dim);
+  z-index: 200;
+}
+.proto-header button {
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all var(--dur-base) var(--ease-smooth);
+}
+.proto-header button:hover { border-color: var(--glass-border-hover); color: var(--text-primary); }

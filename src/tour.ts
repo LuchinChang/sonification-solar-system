@@ -31,7 +31,7 @@ const TOUR_DONE_KEY = 'intro-tour-done';
 const tourSteps: TourStep[] = [
   { // 0 — Spawn a sweeper
     target: () => document.getElementById('foundry-shapes'),
-    text: 'Press <kbd>N</kbd> (or click <kbd>+ Sweeper</kbd>) to place a sweeper.',
+    text: 'Press <kbd>N</kbd> (or click the sweeper icon in the dock) to place a sweeper.',
     trigger: 'action',
   },
   { // 1 — Open the editor
