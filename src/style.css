@@ -56,7 +56,7 @@
      All dock tokens (sweeper btn, knobs, play btn) use --dock-token-size.
      The sweeper icon and play glyph scale independently inside the button.
      ────────────────────────────────────────────────────────── */
-  --dock-token-size:    64px;   /* outer diameter of Sweeper / Knob / Play */
+  --dock-token-size:    58px;   /* outer diameter of Sweeper / Knob / Play */
   --dock-token-gap:     24px;   /* horizontal gap between dock tokens      */
   --dock-cluster-gap:   24px;   /* gap between the two knobs in the cluster */
   --sweeper-icon-size:  44px;   /* radial-arm SVG inside the sweeper circle */
@@ -667,9 +667,10 @@ body.ui-hidden #foundry-panel {
    rescale the icon without changing the circle diameter.
    ══════════════════════════════════════════════════════════════ */
 .sweeper-spawn-btn {
+  margin-top: 5px;
   flex-shrink: 0;
-  width: var(--dock-token-size);
-  height: var(--dock-token-size);
+  width: calc(var(--dock-token-size) - 10px);
+  height: calc(var(--dock-token-size) - 10px);
   border-radius: 50%;
   border: 1px solid var(--accent-copper);
   background: rgba(200, 122, 46, 0.08);
@@ -744,9 +745,10 @@ body.ui-hidden #top-chrome > * {
    Adjust --play-icon-size in :root to rescale the ⏸/⏵ glyph.
    ══════════════════════════════════════════════════════════════ */
 .play-btn {
+  margin-top: 5px;
   flex-shrink: 0;
-  width: var(--dock-token-size);
-  height: var(--dock-token-size);
+  width: calc(var(--dock-token-size) - 10px);
+  height: calc(var(--dock-token-size) - 10px);
   border-radius: 50%;
   border: 1px solid var(--glass-border);
   background: var(--tile-bg);
@@ -775,6 +777,10 @@ body.ui-hidden #top-chrome > * {
   border-color: var(--accent-coral);
   color: var(--accent-coral);
   box-shadow: 0 0 8px rgba(232, 71, 44, 0.20);
+}
+
+.play-btn:not(.playing) {
+  padding-left: 2px;
 }
 
 .play-btn:focus-visible {

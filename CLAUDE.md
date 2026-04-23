@@ -8,7 +8,14 @@ Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-desig
 /setup-browser-cookies, /setup-deploy, /retro, /investigate, /document-release, /codex,
 /cso, /autoplan, /pair-agent, /careful, /freeze, /guard, /unfreeze, /gstack-upgrade, /learn.
 
-### Core Philosophy: The one and only guideline of the interface, the game, and the mappings is that they should enable and encourage users to explore more of the dataset (Solar System planet motions). Every UI choice and audio mapping should reward curiosity. This is an instantiation of the Sonification PLayground as detailed in the ICAD_2026_SonificationPlayground.pdf paper. You should make sure you have 
+### Commands
+- `npm run dev` — Vite dev server on port 5173
+- `npm test` — Vitest single run (20 suites pass, 220+ tests; 2 require `jsdom` — install if needed)
+- `npm run test:watch` — Vitest in watch mode
+- `npm run build` — TypeScript compile (`tsc`) then Vite bundle
+- `npm run deploy` — gh-pages deploy of `dist/`
+
+### Core Philosophy: The one and only guideline of the interface, the game, and the mappings is that they should enable and encourage users to explore more of the dataset (Solar System planet motions). Every UI choice and audio mapping should reward curiosity. This is an instantiation of the Sonification Playground as detailed in the ICAD_2026_SonificationPlayground.pdf paper.
 
 ### Architecture Rules:
 
@@ -20,6 +27,8 @@ Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-desig
 
 4. Modularity: Keep math separated from rendering and audio logic.
 
+5. Node Editor: `src/node-editor/` is a 13-file subsystem (cables, graph state, codegen, sidebar, animations). It follows a deferred-commit pattern — cable drags mutate graph in memory; Strudel re-evals only on panel close or Ctrl+Enter, not during drag.
+
 ### Analyze if you should work in a work tree
 1. Figure out if you should be working in a separate environment, if so, name the work tree properly
 
@@ -29,13 +38,13 @@ Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-desig
 
 ### Test the features yourself before telling me you are done
 
-1. Do a test commit to test yourself with the pre-commit tests
+1. Run `npm test` to verify all 22 test suites pass (no pre-commit hook — this is a manual step)
 
 #### E2E tests
 
-2. Test the newly added features yourself first (using either Chrome extension or preview, you should cliuck and see if there is sound, etc)
+2. Test the newly added features yourself first (using either Chrome extension or preview, you should click and see if there is sound, etc)
 
-3. Test a circle, a sweeper, a triangle, a square sequentially. When you spawn the shape, there shouldn't be any sound before you press play, or cmd+enter. You then should test every sound parameters available to the shape, and make sure everything works as epxected
+3. Only the sweeper shape is active (circle/triangle/rectangle were disabled 2026-04-21 and kept as LEGACY comments). Spawn a sweeper — no sound should play before pressing play or Cmd+Enter. Then test every sound parameter in the node editor and verify audio responds correctly.
 
 ### Maintain Progress.md
 
