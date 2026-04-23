@@ -125,12 +125,28 @@ describe('node-editor port tooltips + indicators (Unit 7)', () => {
       outputs: [{ id: 'distance', label: 'distance', kind: 'number' }],
       codegen: () => '',
     });
-    // Re-register a bare sound.frequency too so seedDefaultGraph can wire it.
+    // Round 2 seed wires all four chips unconditionally — register the
+    // matching pair (cluster-count + sound.gain) with minimal specs so the
+    // seed doesn't throw "unknown node type".
+    registerNodeDef({
+      type: 'data.cluster-count',
+      side: 'data',
+      label: 'Cluster Count',
+      outputs: [{ id: 'count', label: 'count', kind: 'number' }],
+      codegen: () => '',
+    });
     registerNodeDef({
       type: 'sound.frequency',
       side: 'sound',
       label: 'Frequency',
       inputs: [{ id: 'frequency', label: 'frequency', kind: 'number' }],
+      codegen: () => '',
+    });
+    registerNodeDef({
+      type: 'sound.gain',
+      side: 'sound',
+      label: 'Gain',
+      inputs: [{ id: 'amp', label: 'amp', kind: 'number' }],
       codegen: () => '',
     });
 

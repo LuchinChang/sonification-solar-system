@@ -103,14 +103,24 @@ describe('data-node perTickValue — 0..1 contract', () => {
     expect(v).toBeCloseTo(2 / 40, 6);
   });
 
-  it('cluster-count normalizes by shape.k', () => {
+  it('cluster-count returns per-slot density (link-lines / 20), 0 for empty slots', () => {
+    // Round 2 semantic: cluster-count no longer returns group.length/k
+    // (which pinned to 1 when the sky was busy). Instead it reports the
+    // slot's own density (link-lines per cluster), normalized against a
+    // 20-hit cap — the same curve the legacy `_toSweeperCode` used.
     const def = getNodeDef('data.cluster-count')!;
     const s   = buildSweeper(4);
+    // Slot far past shape.k is guaranteed empty → 0.
+    expect(def.perTickValue!(s, 0, 0, 99, 315)).toBe(0);
+    // Every call must stay in [0, 1] — invariant relied on by sound-chip
+    // curve/range transforms.
     for (let arm = 0; arm < s.sweepCount; arm++) {
       for (let t = 0; t < s.ticks; t++) {
-        const v = def.perTickValue!(s, arm, t, 0, 315);
-        expect(v).toBeGreaterThanOrEqual(0);
-        expect(v).toBeLessThanOrEqual(1);
+        for (let slot = 0; slot < s.k; slot++) {
+          const v = def.perTickValue!(s, arm, t, slot, 315);
+          expect(v).toBeGreaterThanOrEqual(0);
+          expect(v).toBeLessThanOrEqual(1);
+        }
       }
     }
   });

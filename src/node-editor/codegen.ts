@@ -1,27 +1,34 @@
 // src/node-editor/codegen.ts
 //
-// Graph → Strudel codegen with PRE-BAKED PATTERNS (round 1 refactor).
+// Graph → Strudel codegen with PRE-BAKED PATTERNS (round 2 refactor).
 //
-// Two-pass pipeline:
+// Two-pass pipeline, fanned out over (arm × slot):
 //
-//   Pass 1 — Stack resolution: for every (arm) × every data-chip that is
-//            referenced by a wired sound-chip edge, pre-compute a shared
+//   Pass 1 — Stack resolution: for every (arm, slot) × every data-chip that
+//            is referenced by a wired sound-chip edge, pre-compute a shared
 //            `SweepStack` of length `shape.ticks` by calling the data chip's
 //            `perTickValue(shape, arm, tick, slot, maxR)`. Cached per
-//            (dataNodeId, arm) so fan-out (one data chip → multiple sound
-//            chips) does not duplicate work.
+//            (dataNodeId, arm, slot) so fan-out (one data chip → multiple
+//            sound chips within the same voice) does not duplicate work.
+//            `slot` comes from the iteration axis, not a chip param — this
+//            is why `distance-to-sun`/`angle-variance` dropped their
+//            `defaultParams.slot`.
 //
-//   Pass 2 — Voice synthesis: for each arm, walk sound-chip codegen fns in
-//            topological order. Each sound chip reads its inbound stack via
-//            `ctx.resolveInboundStack`, applies its own curve/range transform,
-//            and emits a static Strudel chain fragment (e.g.
-//            `.freq("100.00 141.42 … 282.84")`). Fragments chain into a
-//            single voice: `s("<instrument>")<frag1><frag2>…`. Voices across
-//            arms are stacked via `.stack()` so they sound simultaneously.
+//   Pass 2 — Voice synthesis: for each (arm, slot), walk sound-chip codegen
+//            fns in topological order. Each sound chip reads its inbound
+//            stack via `ctx.resolveInboundStack`, applies its own
+//            curve/range transform, and emits a static Strudel chain
+//            fragment (e.g. `.freq("100.00 141.42 … 282.84")`). Fragments
+//            chain into a single voice tail-shaped as
+//            `<frag1><frag2>…s("<instrument>")`. Voices across all
+//            (arm, slot) pairs are stacked via `.stack()` so they sound
+//            simultaneously. With defaults (`sweepCount=1, k=4`) that's 4
+//            parallel voices — matching the legacy `_toSweeperCode()`
+//            behavior restored in round 2.
 //
-// No `signal(() => globalThis.__sw_…)` references are emitted — the old live-
-// signal pipeline has been removed (see `shapes.ts` where
-// `_publishSensorGlobals` was deleted).
+// Unwired sound chips stay in the graph (so a cable swap is reversible) but
+// contribute no fragment to the voice — preventing orphan `.freq(…)` /
+// `.note(…)` leakage when a cable is swapped between chips.
 
 import type { CanvasShape } from '../shapes';
 import { getNodeDef } from './registry';
@@ -50,10 +57,16 @@ export function compileGraphToStrudel(
   });
   if (soundNodes.length === 0) return baseBlock;
 
-  // Build one voice per arm, stacked.
+  // Fan out to (sweepCount × k) voices. Each (arm, slot) pair reads the
+  // slot-specific cluster values from the data chips, so with default k=4
+  // the user hears 4 parallel pitch/gain stacks per arm — matching the
+  // legacy `_toSweeperCode()` output.
+  const k = Math.max(1, shape.k);
   const voices: string[] = [];
   for (let arm = 0; arm < shape.sweepCount; arm++) {
-    voices.push(buildVoiceForArm(sweeperId, graph, shape, arm, soundNodes));
+    for (let slot = 0; slot < k; slot++) {
+      voices.push(buildVoiceForArmSlot(sweeperId, graph, shape, arm, slot, soundNodes));
+    }
   }
 
   // Ping-pong: Strudel's `.palindrome()` operates on the final patterned chain
@@ -67,20 +80,22 @@ export function compileGraphToStrudel(
 
 // ── Voice synthesis (Pass 2) ────────────────────────────────────────────────
 
-function buildVoiceForArm(
+function buildVoiceForArmSlot(
   sweeperId:  number,
   graph:      NodeGraph,
   shape:      CanvasShape,
   arm:        number,
+  slot:       number,
   soundNodes: Node[],
 ): string {
-  // Pass 1 — shared stack cache keyed on (dataNodeId, arm). `portId` is
-  // implicit: data nodes have at most one output port in current usage,
-  // and perTickValue is node-level not port-level.
+  // Pass 1 — shared stack cache keyed on (dataNodeId, arm, slot). Slot comes
+  // from the codegen-level iteration axis, not a data-chip param — so
+  // cluster-count(slot=0) vs cluster-count(slot=3) can legitimately produce
+  // different stacks within the same (arm) and must cache separately.
   const stackCache = new Map<string, SweepStack>();
 
   const getStack = (dataNodeId: string): SweepStack | null => {
-    const key = `${dataNodeId}@${arm}`;
+    const key = `${dataNodeId}@${arm}@${slot}`;
     const cached = stackCache.get(key);
     if (cached) return cached;
 
@@ -89,10 +104,6 @@ function buildVoiceForArm(
     const def = getNodeDef(dataNode.type);
     if (!def?.perTickValue) return null;
 
-    const slotRaw = dataNode.params['slot'];
-    const slot = typeof slotRaw === 'number' && slotRaw >= 0
-      ? Math.floor(slotRaw)
-      : 0;
     const maxR = shape.sweepMaxR > 0 ? shape.sweepMaxR : shape.size;
 
     const stack: SweepStack = new Array(shape.ticks);
@@ -130,6 +141,14 @@ function buildVoiceForArm(
     const def = getNodeDef(node.type);
     if (!def || def.side !== 'sound') continue;
     const inbound = graph.edges.filter(e => e.to.nodeId === node.id);
+    // Orphan sound chips (chips that declare input ports but have none
+    // wired) stay in the graph so the user can reconnect them, but they
+    // contribute no fragment — otherwise a stale .freq(…)/.note(…) leaks
+    // into the textarea after a cable swap. Chips with no declared inputs
+    // (pure param-emitters) are exempt: they're not "orphans", they're
+    // always-on utility fragments (e.g. a hypothetical `.palindrome()` chip).
+    const hasInputs = (def.inputs?.length ?? 0) > 0;
+    if (hasInputs && inbound.length === 0) continue;
     const frag = def.codegen(ctx, node.params, inbound);
     if (frag === '') continue;
     fragments.push(frag.startsWith('.') ? frag : `.${frag}`);
@@ -145,7 +164,10 @@ function buildVoiceForArm(
   // chain, and the synth voice is selected last. Mirror that shape here.
   const body = fragments.join('');
   const instrument = shape.instrument;
-  if (body === '') return `s("${instrument}")`;
+  // Every wired chip was skipped (all orphans in this (arm, slot) voice) —
+  // emit a muted voice so the user isn't greeted by a drone when they
+  // intentionally disconnect everything.
+  if (body === '') return `s("${instrument}").gain(0)`;
   const head = body.startsWith('.') ? body.slice(1) : body;
   return `${head}.s("${instrument}")`;
 }

@@ -46,7 +46,24 @@ export const clusterToleranceDef: NodeDefinition = {
   perTickValue: () => clamp(SWEEP_CLUSTER_THRESHOLD / 40, 0, 1),
 };
 
-/** Per-tick cluster count, normalized by `shape.k`. */
+/**
+ * Per-tick, per-slot cluster *density*.
+ *
+ * The codegen driver fans out voices over `(arm × slot)`, so this chip
+ * delivers each voice its own slot's link-line count (0 when the slot is
+ * empty), normalized against `CLUSTER_DENSITY_CAP`. Round 1 normalized by
+ * `shape.k` — which pinned to 1 whenever the top-k was full (nearly always
+ * in busy scenes), producing the flat-gain bug. Density gives you real
+ * per-tick variation: a cluster of 2 crossings reads quieter than a cluster
+ * of 10, and empty slots silence their voice entirely.
+ *
+ * The cap of 20 mirrors the legacy gain curve in
+ * [shapes.ts:782](../../shapes.ts:782):
+ *   `gain: 0.6 + Math.min(group.length / 20, 1.0) * 0.3`
+ * so the audible dynamic range here matches the pre-graph sweeper.
+ */
+export const CLUSTER_DENSITY_CAP = 20;
+
 export const clusterCountDef: NodeDefinition = {
   type:  'data.cluster-count',
   side:  'data',
@@ -54,16 +71,17 @@ export const clusterCountDef: NodeDefinition = {
   outputs: [{
     id: 'count', label: 'count', kind: 'number', continuous: true,
     min: 0, max: 1, unit: '0..1',
-    description: 'Cluster count at this tick, divided by the sweeper\'s k parameter. 0 when the ray is clear.',
+    description: 'Per-slot cluster density (link-lines per cluster) at this tick, normalized against a 20-hit cap. 0 when the voice\'s slot is empty.',
   }],
   codegen: () => '',
-  perTickValue(shape, arm, tick) {
+  perTickValue(shape, arm, tick, slot) {
     const armTicks = shape.sweepTicks[arm];
     if (!armTicks) return 0;
     const group = armTicks[tick];
     if (!group) return 0;
-    const k = Math.max(1, shape.k);
-    return clamp(group.length / k, 0, 1);
+    const c = group[slot];
+    if (!c) return 0;
+    return clamp(c.density / CLUSTER_DENSITY_CAP, 0, 1);
   },
 };
 
@@ -79,10 +97,8 @@ export const distanceToSunDef: NodeDefinition = {
     min: 0, max: 1, unit: '0..1',
     description: 'Distance from cluster centroid to Sun, normalized 0..1 against the sweeper arm length. Missing cluster → 0.',
   }],
-  defaultParams: { slot: 0 },
   codegen: () => '',
-  perTickValue(shape, arm, tick, _slotArg, maxR) {
-    const slot = _slotArg;
+  perTickValue(shape, arm, tick, slot, maxR) {
     const c = tickCluster(shape, arm, tick, slot);
     if (!c || maxR <= 0) return 0;
     return clamp(c.distance / maxR, 0, 1);
@@ -99,7 +115,6 @@ export const angleVarianceDef: NodeDefinition = {
     min: 0, max: 1, unit: '0..1',
     description: 'Standard deviation of link-line angles inside the selected cluster, normalized 0..1 against π.',
   }],
-  defaultParams: { slot: 0 },
   codegen: () => '',
   perTickValue(shape, arm, tick, slot) {
     const c = tickCluster(shape, arm, tick, slot);

@@ -1,5 +1,107 @@
 # Progress & lessons-learned
 
+## 2026-04-22 — Voice fan-out, slot-density gain, orphan-chip skip (bug-fix round 3)
+
+Five UX/semantic bugs on the graph-based sweeper pipeline, discovered after
+round 2 shipped the default-seeded graph to users. All five traced back to
+assumptions baked into round 1/2 that turned out to be wrong against
+the real Earth/Venus/Mars link-line geometry.
+
+### Bug 1 — Gain pinned to 1.0
+
+**Symptom.** `data.cluster-count → sound.gain` produced a flat
+`.gain("1.000 1.000 …")` pattern. The user heard a drone at full volume.
+
+**Root cause.** `clusterCountDef.perTickValue` normalized `group.length / shape.k`.
+With default `k=4` and a busy scene, `_clustersAtAngle` always fills the
+top-k slice → `group.length === 4` at every tick → normalized = 1.0 → gain = 1.0.
+The normalization hid its own floor.
+
+**Fix.** Re-purpose `data.cluster-count` as **per-slot cluster density**.
+`perTickValue(shape, arm, tick, slot)` now reads the cluster at that slot
+and returns `density / 20` (density = how many link-lines contributed to
+that cluster; cap of 20 matches the legacy gain curve). Empty slots → 0.
+Real per-tick variation: in the default scene each voice's gain stack
+spans ~0.04..0.81 with 11–13 unique values. Flat drone gone.
+
+**Lesson.** A normalization where `numerator ≤ denominator` *by construction*
+eventually pegs to 1. Plans need to simulate the normalization against the
+actual data distribution, not just prove the formula clamps to `[0, 1]`.
+E2E caught this — unit tests didn't, because synthetic cross-lines always
+produced a busy scene.
+
+### Bug 2 — Only one voice per arm
+
+**Symptom.** The user expected 4 stacked `.freq(…).gain(…)` patterns with
+the default `k=4`, but the graph pipeline collapsed every arm to a single
+voice.
+
+**Root cause.** Round 1's `compileGraphToStrudel` iterated `sweepCount`
+voices, ignoring `k`. The `slot` param on data chips was derived from
+`dataNode.params.slot` (always 0 by default). The legacy `_toSweeperCode`
+did fan out `sweepCount × k`, but that was lost in the round-1 rewrite.
+
+**Fix.** Fan out codegen over `(arm × slot)`: `buildVoiceForArmSlot(…, slot)`
+passes the slot index directly to `perTickValue`, keyed into the stack
+cache as `(dataNodeId, arm, slot)`. `defaultParams.slot` removed from
+distance/angle-variance chips — slot is now purely a codegen iteration
+axis. With defaults that's 4 parallel voices, each reading a different
+cluster slot, stacked via `.stack()`. Verified in preview: voice 0 at
+21..340 Hz (near Sun), voice 3 at 366..2030 Hz (far from Sun) — natural
+harmonic stacking across the sweep.
+
+**Lesson.** The "fan-out" axis was conflated between a data-chip param
+(per-node state) and a codegen iteration (per-voice). Separating them
+was the right move — the param version only supported one slot per chip;
+the iteration version gives every voice its own slot for free.
+
+### Bug 3 — Orphan `.freq(…)` / `.note(…)` after cable swap
+
+**Symptom.** Disconnecting `Frequency` and reconnecting a new `Pitch`
+chip left BOTH `.freq(…)` AND `.note(…)` in the textarea. Cable swap
+didn't truly swap.
+
+**Root cause.** `buildVoiceForArm` called every sound chip's `codegen`
+regardless of whether it was wired. Each sound chip's codegen had an
+`if (!edge) return '.freq(<fallback>)'` branch — so an unwired chip
+still emitted its fragment. Two sound chips = two fragments.
+
+**Fix.** Skip the chip in codegen when `def.inputs.length > 0 && inbound.length === 0`.
+Chips with declared input ports but no wires are treated as orphans and
+contribute nothing. Chips without declared inputs (pure param emitters)
+still run. Orphan chips stay in the graph so users can reconnect them.
+
+**Lesson.** "Graph contains node" ≠ "node emits code". The deferred-commit
+editor model treats the graph as truth, but truth about structure, not
+about audible fragments. The skip makes the semantics match user intent:
+"disconnected = silent".
+
+### Bug 4 — Default chips all overlapping
+
+**Symptom.** Four chips all at `(0, 0)` after a freshly spawned sweeper's
+editor opened. The panel's `renderAllNodes` fell back to a diagonal grid,
+but the layout wasn't predictable.
+
+**Fix.** Explicit 2×2 positions in `seedDefaultGraph`:
+Distance-to-Sun top-left, Frequency right of it; Cluster-Count bottom-left,
+Gain right of it. `COL_LEFT=264, COL_RIGHT=480, ROW_TOP=48, ROW_BOTTOM=186`.
+
+**Lesson.** The sidebar sweeper-controls panel floats over the first ~250px
+of the canvas. Original plan coords (`COL_LEFT=48`) placed data chips
+entirely behind the sidebar — unit tests passed (the coords were exact)
+but E2E screenshot exposed the occlusion. Shifted COL_LEFT to 264 to
+clear the sidebar. Planning-phase coords shouldn't trust the plan
+without seeing the rendered result.
+
+### Bug 5 — Frequency range too narrow
+
+**Fix.** `sound.frequency.defaultParams` moved from `{min: 100, max: 1000}`
+to `{min: 20, max: 4400}`. Slider bounds stayed at 20..20000 Hz so users
+can still push further. Exp curve keeps pitch perception smooth across
+the wider span.
+
+---
+
 ## 2026-04-22 — Voice structure + default-edge rendering (bug-fix round 2)
 
 Two bugs surfaced after the round-1 pre-bake refactor landed, both caused by

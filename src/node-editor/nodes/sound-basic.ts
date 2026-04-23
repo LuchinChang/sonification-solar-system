@@ -254,11 +254,11 @@ export const soundFrequencyDef: NodeDefinition = {
     min: 0, max: 1, unit: '0..1',
     description: 'Normalized 0..1 control signal mapped exponentially onto [min, max] Hz.',
   }],
-  defaultParams: { min: 100, max: 1000 },
+  defaultParams: { min: 20, max: 4400 },
 
   codegen(_ctx, params, inbound) {
-    const min = paramNumber(params, 'min', 100);
-    const max = paramNumber(params, 'max', 1000);
+    const min = paramNumber(params, 'min', 20);
+    const max = paramNumber(params, 'max', 4400);
     const edge = inbound.find(e => e.to.portId === 'frequency');
     if (!edge) {
       // Unwired: emit a scalar at the midpoint (exp interpolated at v = 0.5).

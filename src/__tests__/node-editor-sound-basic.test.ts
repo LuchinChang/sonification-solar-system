@@ -63,7 +63,9 @@ describe('sound-basic node definitions', () => {
 
   it('has the expected defaultParams', () => {
     expect(getNodeDef('sound.pitch')!.defaultParams).toEqual({ note: 'c4', root: 'c4', span: 12 });
-    expect(getNodeDef('sound.frequency')!.defaultParams).toEqual({ min: 100, max: 1000 });
+    // Round 2: frequency default covers 20..4400 Hz so the sweep spans most
+    // of the audible pitch space out of the box.
+    expect(getNodeDef('sound.frequency')!.defaultParams).toEqual({ min: 20, max: 4400 });
     expect(getNodeDef('sound.lpf')!.defaultParams).toEqual({ min: 40, max: 200 });
     expect(getNodeDef('sound.gain')!.defaultParams).toEqual({ min: 0, max: 1 });
   });
@@ -92,10 +94,10 @@ describe('sound-basic codegen — unwired (static)', () => {
     const g = createGraph(1);
     const n = addNode(g, { type: 'sound.frequency', side: 'sound', x: 0, y: 0 });
     const out = getNodeDef('sound.frequency')!.codegen(makeCtx(1, g), n.params, []);
-    // exp midpoint of 100..1000 = 100 * sqrt(10) ≈ 316.23
+    // exp midpoint of 20..4400 = sqrt(20 * 4400) = sqrt(88000) ≈ 296.65
     expect(out).toMatch(/^\.freq\(\d+\.\d+\)$/);
     const hz = parseFloat(out.replace('.freq(', '').replace(')', ''));
-    expect(hz).toBeCloseTo(316.23, 1);
+    expect(hz).toBeCloseTo(296.65, 1);
   });
 
   it('sound.lpf emits .lpf(mid) with new 40..200 default range', () => {
@@ -211,13 +213,9 @@ describe('sound-basic codegen — wired (baked pattern)', () => {
 // ── Default graph seeding ────────────────────────────────────────────────────
 
 describe('default graph seeding (openEditor)', () => {
-  it('falls back to sound-only when Unit 6 data nodes are absent', () => {
-    const g = _seedDefaultGraphForTests(123);
-    expect(g.sweeperId).toBe(123);
-    const types = g.nodes.map(n => n.type).sort();
-    expect(types).toEqual(['sound.frequency', 'sound.gain']);
-    expect(g.edges).toHaveLength(0);
-  });
+  // Round 2: the seed no longer silently falls back when data defs are
+  // missing — it throws via addNode("unknown node type"). In production
+  // app bootstrap always registers all defs, and tests must too.
 
   it('seeds distance→sound.frequency and cluster-count→sound.gain when data nodes are registered', () => {
     registerNodeDef({
@@ -270,25 +268,30 @@ describe('default graph seeding (openEditor)', () => {
     expect(clusterToGain!.to.portId).toBe('amp');
   });
 
-  it('skips data→sound wiring if port kinds are incompatible (graceful fallback)', () => {
+  it('seeds chips at the explicit 2×2 layout coordinates', () => {
+    // Round 2 Fix 4: the user asked for Distance-to-Sun top-left, Frequency
+    // to its right; Cluster-Count bottom-left, Gain to its right. Assert
+    // the four chips land at those exact coordinates rather than piling
+    // up at (0, 0).
     registerNodeDef({
-      type: 'data.distance-to-sun',
-      side: 'data',
-      label: 'Distance',
-      inputs:  [],
-      outputs: [{ id: 'distance', label: 'dist', kind: 'trigger' }],
-      defaultParams: {},
-      codegen: () => '',
-      perTickValue: () => 0,
+      type: 'data.distance-to-sun', side: 'data', label: 'Distance',
+      inputs: [], outputs: [{ id: 'distance', label: 'dist', kind: 'number' }],
+      defaultParams: {}, codegen: () => '', perTickValue: () => 0,
+    });
+    registerNodeDef({
+      type: 'data.cluster-count', side: 'data', label: 'Count',
+      inputs: [], outputs: [{ id: 'count', label: 'count', kind: 'number' }],
+      defaultParams: {}, codegen: () => '', perTickValue: () => 0,
     });
 
-    const g = _seedDefaultGraphForTests(1);
-    expect(g.nodes.map(n => n.type).sort()).toEqual([
-      'data.distance-to-sun',
-      'sound.frequency',
-      'sound.gain',
-    ]);
-    expect(g.edges).toHaveLength(0);
+    const g = _seedDefaultGraphForTests(99);
+    const byType = Object.fromEntries(g.nodes.map(n => [n.type, n]));
+    // COL_LEFT = 264 / COL_RIGHT = 480 in panel.seedDefaultGraph — shifted
+    // right to clear the floating sweeper-controls sidebar.
+    expect(byType['data.distance-to-sun']).toMatchObject({ x: 264, y: 48  });
+    expect(byType['sound.frequency']).toMatchObject(     { x: 480, y: 48  });
+    expect(byType['data.cluster-count']).toMatchObject(  { x: 264, y: 186 });
+    expect(byType['sound.gain']).toMatchObject(          { x: 480, y: 186 });
   });
 });
 

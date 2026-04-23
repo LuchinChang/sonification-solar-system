@@ -138,7 +138,11 @@ describe('compileGraphToStrudel — wired sound chip', () => {
     expect(out).toContain(`// @shape-end-${s.id}`);
   });
 
-  it('unwired sound chip emits the param fallback scalar, not a baked pattern', () => {
+  it('orphan sound chip (declares inputs, none wired) is skipped — no .freq(…) in output', () => {
+    // Round 2 Bug 3 fix: a sound chip with declared input ports but no
+    // inbound edges is treated as an orphan (e.g. user disconnected the
+    // cable but didn't delete the chip). Its codegen is NOT called, so
+    // stale .freq(…)/.note(…) can't leak into the textarea.
     registerNodeDef(makeDef({
       type: 'sound.f', side: 'sound',
       inputs: [{ id: 'in', label: 'in', kind: 'number' }],
@@ -155,10 +159,11 @@ describe('compileGraphToStrudel — wired sound chip', () => {
     addNode(g, { type: 'sound.f', side: 'sound', x: 0, y: 0 });
 
     const out = compileGraphToStrudel(s.id, g, s);
-    // Single-fragment voice: `.freq(100)` has its leading `.` stripped so
-    // the voice is `freq(100).s("<instrument>")`.
-    expect(out).toContain('freq(100)');
+    // Neither the baked pattern nor the unwired fallback may appear.
+    expect(out).not.toContain('freq(100)');
     expect(out).not.toContain('should-not-reach');
+    // All voices should fall through to the silent-voice fallback.
+    expect(out).toContain(`s("${s.instrument}").gain(0)`);
   });
 
   it('never emits signal(() => globalThis.__sw_…) — all values are baked', () => {
@@ -358,6 +363,92 @@ describe('compileGraphToStrudel — voice structure (Bug 1 regression)', () => {
     // Voice fragment: bare `s("square")`. Must not start with `.s`.
     expect(out).toContain(`s("square")`);
     expect(out).not.toMatch(/\n\s*\.s\("square"\)/);
+  });
+});
+
+// ── Round 2: voice fan-out over (arm × slot) ────────────────────────────────
+//
+// One sound chip wired to one data chip should produce `sweepCount × shape.k`
+// parallel voices — each voice reads the slot-specific stack, so defaults
+// (sweepCount=1, k=4) give 4 stacked `.freq(…)` occurrences in the block.
+
+describe('compileGraphToStrudel — voice fan-out (Round 2 Bug 2 regression)', () => {
+  it('emits shape.k voices per arm, each with its own .freq(…) pattern', () => {
+    // Data chip encodes slot into the output so we can visually confirm each
+    // voice reads its own slot.
+    registerNodeDef(makeDef({
+      type: 'data.slotsrc', side: 'data',
+      outputs: [{ id: 'v', label: 'v', kind: 'number' }],
+      perTickValue: (_shape, _arm, _tick, slot) => slot / 4,
+    }));
+    registerNodeDef(makeDef({
+      type: 'sound.f', side: 'sound',
+      inputs: [{ id: 'in', label: 'in', kind: 'number' }],
+      codegen(ctx, _params, inbound) {
+        const edge = inbound[0];
+        const stack = edge ? ctx.resolveInboundStack(edge.to.nodeId, edge.to.portId) : null;
+        return stack ? `.freq("${stack.map(v => v.toFixed(2)).join(' ')}")` : '.freq(0)';
+      },
+    }));
+
+    const s = makeSweeper();             // k = 4, sweepCount = 1, ticks = 8
+    const g = createGraph(s.id);
+    const d = addNode(g, { type: 'data.slotsrc', side: 'data',  x: 0, y: 0 });
+    const f = addNode(g, { type: 'sound.f',      side: 'sound', x: 0, y: 0 });
+    addEdge(g, {
+      from: { nodeId: d.id, portId: 'v',  dir: 'out' },
+      to:   { nodeId: f.id, portId: 'in', dir: 'in' },
+    });
+
+    const out = compileGraphToStrudel(s.id, g, s);
+
+    // Exactly 4 `.freq("…")`-or-`freq("…")` occurrences — one per slot.
+    const freqCount = (out.match(/freq\("/g) ?? []).length;
+    expect(freqCount).toBe(4);
+
+    // Each slot contributes its index/4 → 0.00, 0.25, 0.50, 0.75 — baked
+    // eight times per voice.
+    expect(out).toContain('0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00');
+    expect(out).toContain('0.25 0.25 0.25 0.25 0.25 0.25 0.25 0.25');
+    expect(out).toContain('0.50 0.50 0.50 0.50 0.50 0.50 0.50 0.50');
+    expect(out).toContain('0.75 0.75 0.75 0.75 0.75 0.75 0.75 0.75');
+
+    // Voices are chained via `.stack(…)` — with 4 voices there are 3 stacks.
+    const stackCount = (out.match(/\.stack\(/g) ?? []).length;
+    expect(stackCount).toBe(3);
+  });
+
+  it('fans out per (arm × slot) — sweepCount=2, k=3 → 6 voices', () => {
+    registerNodeDef(makeDef({
+      type: 'data.const', side: 'data',
+      outputs: [{ id: 'v', label: 'v', kind: 'number' }],
+      perTickValue: () => 0.5,
+    }));
+    registerNodeDef(makeDef({
+      type: 'sound.f', side: 'sound',
+      inputs: [{ id: 'in', label: 'in', kind: 'number' }],
+      codegen(ctx, _params, inbound) {
+        const edge = inbound[0];
+        const stack = edge ? ctx.resolveInboundStack(edge.to.nodeId, edge.to.portId) : null;
+        return stack ? `.freq("${stack.map(() => '150').join(' ')}")` : '.freq(0)';
+      },
+    }));
+
+    const s = makeSweeper();
+    s.k = 3;
+    s.sweepCount = 2;
+    const g = createGraph(s.id);
+    const d = addNode(g, { type: 'data.const', side: 'data',  x: 0, y: 0 });
+    const f = addNode(g, { type: 'sound.f',    side: 'sound', x: 0, y: 0 });
+    addEdge(g, {
+      from: { nodeId: d.id, portId: 'v',  dir: 'out' },
+      to:   { nodeId: f.id, portId: 'in', dir: 'in' },
+    });
+
+    const out = compileGraphToStrudel(s.id, g, s);
+    const freqCount = (out.match(/freq\("/g) ?? []).length;
+    // 2 arms × 3 slots = 6 voices, each with its own `.freq("150 …")`.
+    expect(freqCount).toBe(6);
   });
 });
 

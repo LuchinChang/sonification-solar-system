@@ -12,6 +12,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // Do NOT _resetRegistryForTests() in this file; the registrations only run
 // on first module evaluation.
 import '../node-editor/nodes/sweeper';
+// openEditor → seedDefaultGraph now requires the four default chips to be
+// registered (Round 2). sound-basic auto-registers at module import via
+// the panel→sound-basic chain, but data.ts needs an explicit register
+// call — otherwise the seed throws "unknown node type: data.…".
+import { registerDataNodes } from '../node-editor/nodes/data';
+registerDataNodes();
 import { getNodeDef } from '../node-editor';
 import { CanvasShape, resetNextId } from '../shapes';
 import { MIN_SHAPE_SIZE, MAX_SHAPE_SIZE } from '../state';
