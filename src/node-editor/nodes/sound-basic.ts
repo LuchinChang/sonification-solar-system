@@ -271,7 +271,7 @@ export const soundFrequencyDef: NodeDefinition = {
 
   ui(node, onChange) {
     return buildRangeUi(node, onChange, {
-      sliderMin: 20, sliderMax: 20000, step: 1,
+      sliderMin: 20, sliderMax: 4400, step: 1,
       unit:   'Hz (exp curve)',
       format: v => `${v.toFixed(0)} Hz`,
     });

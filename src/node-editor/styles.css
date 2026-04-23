@@ -856,8 +856,11 @@
   color: var(--text-dim);
 }
 .sidebar-chip select,
+.ne-node select,
 .sidebar-chip input[type="number"],
-.sidebar-chip input[type="range"] {
+.ne-node input[type="number"],
+.sidebar-chip input[type="range"],
+.ne-node input[type="range"] {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-primary);
@@ -866,7 +869,31 @@
   border-radius: 6px;
   padding: 4px 6px;
 }
-.sidebar-chip input[type="range"] {
+
+/* Selects: strip native chrome so our palette actually paints, draw our own chevron.
+   Color is pinned to a theme-independent parchment tone because the widget has
+   its own dark background — `--text-primary` would go dark-on-dark in light mode. */
+.sidebar-chip select,
+.ne-node select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  color: #F5E6D3;
+  padding-right: 22px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'><path fill='none' stroke='%23F5E6D3' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round' d='M1 1l4 4 4-4'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+  background-size: 9px 6px;
+  cursor: pointer;
+}
+.sidebar-chip select option,
+.ne-node select option {
+  color: #1a1210;
+  background: #F5E6D3;
+}
+
+.sidebar-chip input[type="range"],
+.ne-node input[type="range"] {
   appearance: none;
   -webkit-appearance: none;
   background: transparent;
@@ -877,19 +904,22 @@
 }
 
 /* Track — thin copper line inside the Martian Dusk palette */
-.sidebar-chip input[type="range"]::-webkit-slider-runnable-track {
+.sidebar-chip input[type="range"]::-webkit-slider-runnable-track,
+.ne-node input[type="range"]::-webkit-slider-runnable-track {
   height: 3px;
   background: var(--glass-border);
   border-radius: 3px;
 }
-.sidebar-chip input[type="range"]::-moz-range-track {
+.sidebar-chip input[type="range"]::-moz-range-track,
+.ne-node input[type="range"]::-moz-range-track {
   height: 3px;
   background: var(--glass-border);
   border-radius: 3px;
 }
 
 /* Thumb — amber disc, glows on hover */
-.sidebar-chip input[type="range"]::-webkit-slider-thumb {
+.sidebar-chip input[type="range"]::-webkit-slider-thumb,
+.ne-node input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   margin-top: -5px;          /* center 13px thumb over 3px track */
@@ -901,7 +931,8 @@
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.25);
   transition: box-shadow var(--dur-fast) var(--ease-out-quart);
 }
-.sidebar-chip input[type="range"]::-moz-range-thumb {
+.sidebar-chip input[type="range"]::-moz-range-thumb,
+.ne-node input[type="range"]::-moz-range-thumb {
   width: 13px;
   height: 13px;
   border-radius: 50%;
@@ -912,11 +943,15 @@
 }
 
 .sidebar-chip input[type="range"]:hover::-webkit-slider-thumb,
-.sidebar-chip input[type="range"]:focus::-webkit-slider-thumb {
+.sidebar-chip input[type="range"]:focus::-webkit-slider-thumb,
+.ne-node input[type="range"]:hover::-webkit-slider-thumb,
+.ne-node input[type="range"]:focus::-webkit-slider-thumb {
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.25), 0 0 10px var(--accent-amber);
 }
 .sidebar-chip input[type="range"]:hover::-moz-range-thumb,
-.sidebar-chip input[type="range"]:focus::-moz-range-thumb {
+.sidebar-chip input[type="range"]:focus::-moz-range-thumb,
+.ne-node input[type="range"]:hover::-moz-range-thumb,
+.ne-node input[type="range"]:focus::-moz-range-thumb {
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.25), 0 0 10px var(--accent-amber);
 }
 
