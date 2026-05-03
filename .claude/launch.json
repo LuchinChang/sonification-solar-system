@@ -7,6 +7,13 @@
       "runtimeArgs": ["run", "dev", "--", "--port", "5180", "--strictPort"],
       "port": 5180,
       "autoPort": false
+    },
+    {
+      "name": "presentation-slides",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "presentation"],
+      "port": 8765,
+      "autoPort": true
     }
   ]
 }

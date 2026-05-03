@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sonification Playground — CS 8803 SRD Final</title>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.css" id="theme" />
+
+  <style>
+    /* ----------------------------------------------------------------
+       Martian Dusk palette — mirrors the app so demo videos blend in.
+       Colors lifted from src/style.css.
+       ---------------------------------------------------------------- */
+    :root {
+      --bg-deep:       #080604;
+      --bg-canvas:     #120F0E;
+      --color-sun:     #FFA030;
+      --accent-copper: #C87A2E;
+      --accent-amber:  #E8A050;
+      --accent-coral:  #E8472C;
+      --text-primary:   rgba(235, 210, 180, 0.93);
+      --text-secondary: rgba(175, 138, 95, 0.78);
+      --text-dim:       rgba(120, 88, 55, 0.58);
+      --glass-bg:       rgba(20, 13, 11, 0.78);
+      --glass-border:   rgba(194, 118, 46, 0.32);
+      --font-mono:      'JetBrains Mono', 'Fira Code', 'Consolas', ui-monospace, monospace;
+    }
+
+    .reveal { font-family: 'Inter', system-ui, -apple-system, sans-serif; color: var(--text-primary); }
+    .reveal .slides { text-align: left; }
+    .reveal .slides section { padding: 0 3rem; }
+    body, .reveal-viewport { background: var(--bg-deep); }
+
+    /* Title hierarchy */
+    .reveal h1, .reveal h2, .reveal h3 { color: var(--text-primary); font-weight: 600; letter-spacing: -0.01em; text-transform: none; }
+    .reveal h1 { font-size: 2.0em; line-height: 1.1; }
+    .reveal h2 { font-size: 1.25em; line-height: 1.18; margin-bottom: 0.5em; }
+    .reveal h3 { font-size: 1.0em; color: var(--accent-amber); }
+
+    .reveal p, .reveal li { color: var(--text-primary); line-height: 1.4; font-size: 0.78em; }
+    .reveal em { color: var(--accent-amber); font-style: italic; }
+    .reveal strong { color: var(--color-sun); font-weight: 600; }
+    .reveal a { color: var(--accent-amber); }
+
+    /* Slide-number style: tiny, dim, top-right */
+    .reveal .slide-number {
+      background: transparent;
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+      font-size: 0.7em;
+      right: 1em; top: 1em; bottom: auto; left: auto;
+    }
+
+    /* --------------------------------------------------------------
+       Custom slide kinds
+       -------------------------------------------------------------- */
+
+    .title-slide { text-align: center !important; }
+    .title-slide h1 { font-size: 2.0em; max-width: 22ch; margin: 0 auto 0.6em; }
+    .title-slide .byline { color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.7em; letter-spacing: 0.04em; margin-top: 1.5em; }
+    .title-slide .footer { color: var(--text-dim); font-family: var(--font-mono); font-size: 0.55em; margin-top: 4em; }
+    .title-slide .sun-glyph {
+      width: 96px; height: 96px; margin: 0 auto 1.5em;
+      background: radial-gradient(circle at center, var(--color-sun) 0%, var(--accent-copper) 45%, transparent 75%);
+      border-radius: 50%;
+      filter: blur(0.5px);
+    }
+
+    /* Motivation beats */
+    .beats { display: grid; grid-template-columns: 1fr; gap: 0.5em; margin-top: 0.4em; }
+    .beat {
+      display: grid; grid-template-columns: 2em 1fr; align-items: start; gap: 0.7em;
+      padding: 0.45em 0.8em; background: var(--glass-bg); border-left: 3px solid var(--accent-copper);
+      border-radius: 4px;
+    }
+    .beat .num {
+      font-family: var(--font-mono); font-size: 1.15em; color: var(--color-sun);
+      line-height: 1; font-weight: 600;
+    }
+    .beat .body { font-size: 0.68em; line-height: 1.35; }
+    .beat .body strong { display: inline; color: var(--accent-amber); font-size: 1em; }
+
+    .takeaway {
+      margin-top: 0.7em; padding: 0.4em 1em; text-align: center;
+      font-style: italic; color: var(--color-sun); font-size: 0.85em;
+      border-top: 1px dashed var(--glass-border);
+    }
+
+    /* LLM screenshot placeholder */
+    .llm-placeholder {
+      background: repeating-linear-gradient(45deg, rgba(194,118,46,0.06) 0 8px, transparent 8px 16px);
+      border: 1px dashed var(--glass-border);
+      padding: 0.5em 0.8em;
+      font-family: var(--font-mono); font-size: 0.55em; color: var(--text-secondary);
+      border-radius: 4px;
+      margin-top: 0.3em;
+    }
+    .llm-placeholder .annotation {
+      display: block; margin-top: 0.3em;
+      color: var(--accent-coral); font-style: italic; font-family: 'Inter', sans-serif; font-size: 1.2em;
+      text-align: right;
+    }
+
+    /* Contribution cards */
+    .contrib { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2em; margin-top: 1em; }
+    .contrib .card {
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      border-radius: 6px; padding: 1em 1.1em;
+    }
+    .contrib .card .label {
+      font-family: var(--font-mono); font-size: 0.6em; color: var(--accent-copper);
+      text-transform: uppercase; letter-spacing: 0.1em;
+    }
+    .contrib .card h3 { color: var(--color-sun); margin: 0.2em 0 0.4em; font-size: 1.1em; }
+    .contrib .card p { font-size: 0.7em; line-height: 1.45; color: var(--text-primary); margin: 0; }
+
+    /* Slide 4 — playground figure with progressive overlays */
+    .playground-figure {
+      position: relative; margin: 0 auto; max-width: 880px;
+      background: var(--bg-canvas); border: 1px solid var(--glass-border);
+      border-radius: 6px; padding: 0.7em 1em;
+      display: grid; grid-template-rows: auto auto auto; gap: 0.5em;
+      font-size: 0.6em;
+    }
+    .pg-header {
+      font-family: var(--font-mono); font-size: 0.85em; color: var(--accent-amber);
+      letter-spacing: 0.06em; text-transform: uppercase; padding-bottom: 0.3em;
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .pg-rules { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7em; align-content: start; min-height: 7.5em; }
+    .pg-side { display: grid; gap: 0.35em; align-content: start; }
+    .pg-side-label {
+      font-family: var(--font-mono); font-size: 0.78em; color: var(--accent-copper);
+      letter-spacing: 0.06em;
+    }
+    .pg-rule {
+      background: rgba(194,118,46,0.07);
+      border: 1px solid var(--glass-border);
+      padding: 0.3em 0.55em; border-radius: 3px;
+      color: var(--text-primary); font-size: 0.95em;
+    }
+    .pg-mappings {
+      background: rgba(232, 71, 44, 0.06);
+      border: 1px solid rgba(232, 71, 44, 0.3);
+      border-radius: 4px; padding: 0.45em 0.8em;
+    }
+    .pg-mappings .pg-side-label { color: var(--accent-coral); }
+    .pg-bridges { display: grid; grid-template-columns: 1fr 1fr; gap: 0.25em 1em; margin-top: 0.25em; font-family: var(--font-mono); font-size: 0.78em; }
+    .pg-bridges span.arrow { color: var(--accent-coral); margin: 0 0.3em; }
+
+    /* Walkthrough slides — video + parameter readout */
+    .walk-slide { padding: 0 2rem !important; }
+    .walk-header {
+      display: flex; justify-content: space-between; align-items: center;
+      font-family: var(--font-mono); font-size: 0.7em; padding-bottom: 0.5em;
+      border-bottom: 1px solid var(--glass-border); margin-bottom: 0.8em;
+    }
+    .walk-phase { color: var(--accent-amber); letter-spacing: 0.06em; }
+    .walk-params { color: var(--text-secondary); }
+    .walk-params code { color: var(--color-sun); background: transparent; padding: 0 0.15em; }
+    .reveal .slides section .walk-video {
+      width: auto; max-width: 100%;
+      height: 540px; max-height: 540px;
+      aspect-ratio: 16 / 9;
+      margin: 0 auto; background: var(--bg-canvas);
+      border: 1px solid var(--glass-border); border-radius: 4px;
+      display: block; object-fit: cover;
+    }
+    .walk-video::-webkit-media-controls-panel { background: var(--bg-canvas); }
+    .walk-caption {
+      margin-top: 0.6em; text-align: center; font-style: italic;
+      color: var(--text-secondary); font-size: 0.75em;
+    }
+
+    /* Live demo backdrop */
+    .live-backdrop { text-align: center !important; padding: 0 6rem !important; }
+    .live-backdrop .live-badge {
+      display: inline-block; padding: 0.2em 0.8em; border-radius: 100px;
+      background: var(--accent-coral); color: var(--bg-deep);
+      font-family: var(--font-mono); font-size: 0.55em; font-weight: 600;
+      letter-spacing: 0.1em; margin-bottom: 1em;
+    }
+    .live-backdrop .arrow { font-size: 3em; color: var(--accent-amber); margin: 1em 0; opacity: 0.6; }
+    .live-backdrop .point { color: var(--text-secondary); font-size: 0.75em; font-family: var(--font-mono); }
+
+    /* Tech stack */
+    .stack-row { display: flex; gap: 1.5em; flex-wrap: wrap; margin-top: 1em; }
+    .stack-pill {
+      background: var(--glass-bg); border: 1px solid var(--glass-border);
+      padding: 0.5em 1em; border-radius: 100px;
+      font-family: var(--font-mono); font-size: 0.7em; color: var(--text-primary);
+    }
+    .stack-detail { font-size: 0.7em; line-height: 1.5; margin-top: 1em; color: var(--text-secondary); }
+    .stack-detail strong { color: var(--accent-amber); }
+
+    /* Future work */
+    .future { display: grid; gap: 0.45em; margin-top: 0.4em; }
+    .future-item {
+      padding: 0.5em 0.8em; border-left: 3px solid var(--accent-copper);
+      background: var(--glass-bg); border-radius: 4px;
+    }
+    .future-item.primary { border-left-color: var(--accent-coral); border-left-width: 5px; }
+    .future-item h3 { margin: 0 0 0.2em; font-size: 0.85em; }
+    .future-item.primary h3 { color: var(--color-sun); }
+    .future-item p { font-size: 0.62em; line-height: 1.4; margin: 0; color: var(--text-primary); }
+    .future-item .cite { font-family: var(--font-mono); font-size: 0.5em; color: var(--text-dim); margin-top: 0.25em; display: block; }
+
+    /* Closing */
+    .closing { text-align: center !important; }
+    .closing h1 { font-size: 1.8em; }
+    .closing .url {
+      font-family: var(--font-mono); font-size: 1.0em; color: var(--accent-amber);
+      margin-top: 1.5em; padding: 0.5em 1.2em; display: inline-block;
+      border: 1px solid var(--glass-border); border-radius: 100px;
+    }
+
+    /* Speaker note styling — only visible in speaker view */
+    .reveal .speaker-notes { font-family: 'Inter', sans-serif; }
+
+    /* Slide 7 split-screen for visual-vs-audio cameo */
+    .split {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0.6em;
+      margin-top: 0.4em;
+    }
+    .split .panel {
+      background: var(--bg-canvas); border: 1px solid var(--glass-border);
+      border-radius: 4px; aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center;
+      color: var(--text-dim); font-family: var(--font-mono); font-size: 0.7em;
+      position: relative; overflow: hidden;
+    }
+    .split .panel-label {
+      position: absolute; bottom: 0.4em; left: 0.6em;
+      color: var(--accent-amber); font-family: var(--font-mono); font-size: 0.7em;
+    }
+
+    /* Print styles */
+    @media print {
+      .reveal .slide-number { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <!-- ====================================================
+           SLIDE 1 — TITLE
+           ==================================================== -->
+      <section class="title-slide">
+        <div class="sun-glyph"></div>
+        <h1>Toward AI-Driven Sonification Design</h1>
+        <p style="color: var(--text-secondary); font-size: 0.95em; max-width: 28ch; margin: 0 auto;">
+          A Geometric Probing Playground for Planetary Link Lines
+        </p>
+        <div class="byline">
+          Lu-Chin Chang &nbsp;·&nbsp; Dr. Kelly Snook &nbsp;
+        </div>
+        <div class="footer">
+          https://luchinchang.github.io/sonification-solar-system/
+        </div>
+        <aside class="notes">
+          15 seconds. Land the title, name the venue, get to the next slide. Don't read the subtitle.
+        </aside>
+      </section>
+
+      <!-- ====================================================
+           SLIDE 2 — MOTIVATION
+           ==================================================== -->
+      <section>
+        <h2>Sonification design is bottlenecked by implementation, not imagination</h2>
+        <div class="beats">
+          <div class="beat">
+            <div class="num">1</div>
+            <div class="body">
+              <strong>The mapping space is combinatorial.</strong>
+              Every data dimension can drive pitch, rhythm, timbre, spatialization — through
+              any transfer function. Most published sonifications represent
+              <em>one</em> path through a vast space.
+            </div>
+          </div>
+          <div class="beat">
+            <div class="num">2</div>
+            <div class="body">
+              <strong>The design cycle is artisanal.</strong>
+              Each candidate mapping must be conceived, coded, rendered, listened to, and
+              adjusted by hand. Implementation cost dominates creative exploration.
+            </div>
+          </div>
+          <div class="beat">
+            <div class="num">3</div>
+            <div class="body">
+              <strong>Naive AI doesn't fix this.</strong>
+              <div class="llm-placeholder">
+                [ assets/llm-output.png — cropped chat showing first paragraph of mapping rationale + ~10 lines of code ]
+                <span class="annotation">"One mapping. No knobs. Where do I go from here?"</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="takeaway">The system needs <strong>structure</strong> to unlock AI's full capabilities.</div>
+        <aside class="notes">
+          90s budget. ~25s on each beat. Beats 1 and 2 are the paper's framing — the
+          mapping space is huge AND each candidate is expensive. Beat 3 is the AI bridge
+          you'll cash in at Future Work. The screenshot from running prompt.md goes here;
+          don't defend the prompt — the point is unsteerability, not incompetence.
+          The takeaway is the bridge to the next slide.
+        </aside>
+      </section>
+
+      <!-- ====================================================
+           SLIDE 3 — CONTRIBUTION
+           ==================================================== -->
+      <section>
+        <h2>Contributions</h2>
+        <div class="contrib">
+          <div class="card">
+            <div class="label">C1 · Paradigm</div>
+            <h3>The Sonification Playground</h3>
+            <p>
+              A rule-based, two-sided design framework. <em>Data-side rules</em> say what
+              becomes a signal; <em>sound-side rules</em> say what dimensions receive it.
+              Specific mappings are <em>searchable instances</em> within the rules — not
+              hand-crafted artifacts.
+            </p>
+          </div>
+          <div class="card">
+            <div class="label">C2 · Instantiation</div>
+            <h3>Planetary Link-Line System</h3>
+            <p>
+              A live, browser-based system that applies the paradigm to planetary link-line
+              geometry. Geometric probes (sweepers, shapes) trigger sound; output is
+              live-coded Strudel — human-readable and machine-parseable.
+            </p>
+          </div>
+        </div>
+        <p style="text-align: center; color: var(--text-dim); font-family: var(--font-mono); font-size: 0.6em; margin-top: 1.6em;">
+          Paper submitted to ICAD 2026
+        </p>
+        <aside class="notes">
+          30s. Two cards. C1 is the idea. C2 is the artifact. Read each card's title and
+          the first sentence; let the audience read the rest. Don't dwell.
+        </aside>
+      </section>
+
+      <!-- ====================================================
+           SLIDE 4 — THE PLAYGROUND (progressive reveal of Fig. 1)
+           ==================================================== -->
+      <section>
+        <h2>The Sonification Playground</h2>
+        <div class="playground-figure">
+          <div class="pg-header">Paradigm: Geometric Probing</div>
+
+          <div class="pg-rules">
+            <!-- Data side -->
+            <div class="pg-side fragment fade-in" data-fragment-index="2">
+              <div class="pg-side-label">Data-side Rules</div>
+              <div class="pg-rule">Shape ∩ Data → sound event trigger</div>
+              <div class="pg-rule">Sweeper: cluster density → signal</div>
+              <div class="pg-rule">Sweeper: cluster distance → signal</div>
+            </div>
+            <!-- Sound side -->
+            <div class="pg-side fragment fade-in" data-fragment-index="3">
+              <div class="pg-side-label">Sound-side Rules</div>
+              <div class="pg-rule">Continuous frequency range (e.g. 100–1000 Hz)</div>
+              <div class="pg-rule">Discrete pitch lattice (C-maj, pentatonic …)</div>
+              <div class="pg-rule">Rhythmic grid (256-step, free-form)</div>
+            </div>
+          </div>
+
+          <div class="pg-mappings fragment fade-in" data-fragment-index="4">
+            <div class="pg-side-label">Mappings — searchable bridges</div>
+            <div class="pg-bridges">
+              <div>cluster distance <span class="arrow">→</span> continuous freq</div>
+              <div>cluster density <span class="arrow">→</span> gain</div>
+              <div>cluster distance <span class="arrow">→</span> pitch in C major</div>
+              <div>cluster density <span class="arrow">→</span> MIDI velocity</div>
+            </div>
+          </div>
+        </div>
+        <aside class="notes">
+          90s. Four builds, ~22s each. Press space to advance.
+
+          Build 1 (state on entry): empty rules box, just the header. "Sonification design
+          has two sides — data and sound. Most work blurs them. We separate them
+          deliberately."
+
+          Build 2 (data-side): "Data-side rules say which geometric properties — intersections,
+          density, distance — become sound-generating signals."
+
+          Build 3 (sound-side): "Sound-side rules define the target dimensions —
+          continuous frequency, discrete pitch lattice, rhythmic grid."
+
+          Build 4 (mappings): "And the mappings — these are bridges. Each is a specific
+          instance. The space of bridges is what gets searched, by humans now and AI later."
+        </aside>
+      </section>
+
+      <!-- ====================================================
+           SLIDE 5 — WALKTHROUGH PHASE 0 + 1
+           ==================================================== -->
+      <section class="walk-slide">
+        <div class="walk-header">
+          <span class="walk-phase">Walkthrough · Phase 0+1 — causal model + ear training</span>
+          <span class="walk-params">
+            Earth–Moon · sweeper · <code>k=1→3</code> · <code>CPM=5</code> · <code>SR=200</code> · sine
+          </span>
+        </div>
+        <video class="walk-video" controls preload="metadata" poster="">
+          <source src="assets/phase0-1.mp4" type="video/mp4" />
+          Your browser does not support embedded video.
+        </video>
+        <p class="walk-caption">One arm. One cluster. One tone. Then density grows.</p>
+        <aside class="notes">
+          75s. Click to play the embedded video; narrate over it.
+
+          Narration arc: "The sweeper is a radial arm rotating from the sun. Each tick of
+          the arm scans the geometry; nearby link-line crossings cluster and become a
+          sound event. Right now it's k=1 — one cluster per tick — so you hear one tone
+          per beat. Watch the highlighted cluster pulse on the spike as the arm crosses
+          it. Now k=2 — two density tiers per tick, you hear a fatter sound. k=3 — denser
+          still."
+
+          The point of this slide: establish the causal chain. After this, every audio
+          claim has a mental model to attach to.
+        </aside>
+      </section>
+
+      <!-- ====================================================
+           SLIDE 6 — WALKTHROUGH PHASE 2 (regime flip)
+           ==================================================== -->
+      <section class="walk-slide">
+        <div class="walk-header">
+          <span class="walk-phase">Walkthrough · Phase 2 — regime flip on the same data</span>
+          <span class="walk-params">
+            Earth–Jupiter · <code>SR=35→805</code> · <code>k=3→30</code> · <code>CPM=5→16</code>
+          </span>
+        </div>
+        <video class="walk-video" controls preload="metadata" poster="">
+          <source src="assets/phase2.mp4" type="video/mp4" />
+          Your browser does not support embedded video.
+        </video>
+        <p class="walk-caption">Same data. Same probe. Two qualitatively different musics.</p>
+        <aside class="notes">
+          90s. The paradigm payoff slide.
+
+          Narration: "Same Earth–Jupiter pattern. First preset: low sample rate, slow
+          tempo, three density clusters. The sweeper fires sparse, harmonically related
+          frequency clusters — and you hear a chord progression. Major-key, almost
+          tonal." [pause for ~10s of audio]
+
+          "Now I crank the sampling rate up to 805, density to 30 clusters, tempo to 16.
+          Same pattern, same probe — listen." [pause]
+
+          "Different musical regime. Same playground rules. This is what 'searchable
+          mapping space' means in practice."
+        </aside>
+      </section>
+
+      <!-- ====================================================
+           SLIDE 7 — WALKTHROUGH PHASE 3 (visual/audio cameo)
+           ==================================================== -->
+      <section class="walk-slide">
+        <div class="walk-header">
+          <span class="walk-phase">Walkthrough · Phase 3 — sonification reveals what visualization conceals</span>
+          <span class="walk-params">Earth–Moon · <code>SR=805</code> vs <code>SR=795</code></span>
+        </div>
+        <video class="walk-video" controls preload="metadata" poster="" style="width: 100%; height: 280px; max-height: 280px; aspect-ratio: auto;">
+          <source src="assets/phase3.mp4" type="video/mp4" />
+        </video>
+        <div class="split fragment fade-in" style="margin-top: 0.5em;">
+          <div class="panel"><span class="panel-label">SR=805 — punchy spikes</span></div>
+          <div class="panel"><span class="panel-label">SR=795 — smooth wash</span></div>
+        </div>
+        <aside class="notes">
+          20s. Short and sharp.
+
+          Narration: "Two near-identical pictures. Same Earth–Moon link lines. Sample
+          rates 10 apart. Listen." [play A] [play B]
+
+          "Visually subtle. Sonically a categorical difference. The auditory channel is
+          surfacing structure the eye filters out."
+
+          Optional fragment reveal: split-screen of the two visuals side-by-side. Use if
+          you have wall-clock budget; cut if you're behind.
+        </aside>
+      </section>
+
+      <!-- ====================================================
+           SLIDE 8 — LIVE: NODE EDITOR REWRITE
+           ==================================================== -->
+      <section class="live-backdrop">
+        <span class="live-badge">● LIVE</span>
+        <h2>Rewriting the playground rules</h2>
+        <p style="color: var(--text-secondary); font-size: 0.85em; max-width: 30ch; margin: 0.5em auto 0;">
+          Same data. Same probe. Different sound-side.
+        </p>
+        <div class="arrow">↓</div>
+        <p class="point">Switch to the app window for the live demo.</p>
+        <aside class="notes">
+          60s. SWITCH TO THE APP WINDOW.
+
+          Pre-staged: Earth–Moon running with sweeper, default mapping audible.
+
+          Actions:
+            1. Open the node editor (click the edit-node button).
+            2. Show the existing graph: synth node + freq pattern + gain node.
+            3. Swap the synth: change instrument node from sawtooth to square (or similar).
+            4. Drop a low-pass filter data node onto the canvas.
+            5. Wire it: drag a cable from the filter output to the synth's filter input.
+            6. Press Ctrl+Enter to re-evaluate.
+            7. Listen — the audience hears a noticeably different timbre on the same probe.
+
+          FAILURE RECOVERY: if the eval fails or audio cuts out, switch to
+          assets/phase4-fallback.mp4 with the line "Let me play the recorded version of
+          this — the live audio context just dropped." Don't apologize. Move on.
+        </aside>
+      </section>
+
+      <!-- ====================================================
+           SLIDE 9 — TECH STACK
+           ==================================================== -->
+      <section>
+        <h2>Tech stack</h2>
+        <div class="stack-row">
+          <span class="stack-pill">TypeScript</span>
+          <span class="stack-pill">Vite</span>
+          <span class="stack-pill">HTML5 Canvas</span>
+          <span class="stack-pill">@strudel/core</span>
+          <span class="stack-pill">@strudel/webaudio</span>
+          <span class="stack-pill">@strudel/mini</span>
+        </div>
+        <div class="stack-detail">
+          <p><strong>Rendering:</strong> Canvas-based render loop on <code>requestAnimationFrame</code>; orbital lines pre-computed.</p>
+          <p><strong>Audio:</strong> Live-coded Strudel patterns concatenated per probe, evaluated via the Strudel REPL through the Web Audio API.</p>
+          <p><strong>Node editor:</strong> Custom 13-file subsystem with deferred-commit semantics — cable drags mutate the graph in memory; Strudel re-evaluates only on panel close or <code>Ctrl+Enter</code>.</p>
+        </div>
+        <p style="margin-top: 1em; font-family: var(--font-mono); font-size: 0.65em; color: var(--accent-amber);">
+          https://luchinchang.github.io/sonification-solar-system/
+        </p>
+        <aside class="notes">
+          30s. Pills first — name-drop the stack so the audience knows you didn't reach for
+          a bespoke audio engine. Read the three lines fast. Don't get pulled into Strudel
+          explanation; that's a Q&A topic.
+        </aside>
+      </section>
+
+      <!-- ====================================================
+           SLIDE 10 — FUTURE WORK
+           ==================================================== -->
+      <section>
+        <h2>Future work</h2>
+        <div class="future">
+          <div class="future-item primary">
+            <h3>Human-in-AI loop — closing the motivation</h3>
+            <p>
+              Actor–Critic architecture: an LLM <em>Actor</em> proposes Strudel mapping
+              edits given the current code, geometric context, and edit history.
+              A <em>Critic</em> preference model trained on the designer's pairwise A/B
+              listening tests (Bradley–Terry framework) steers exploration toward the
+              designer's taste. <em>"Mappings become like songs on a streaming service —
+              proposed, listened to, preferred or skipped, curated into playlists."</em>
+            </p>
+            <span class="cite">paper §5.1</span>
+          </div>
+          <div class="future-item">
+            <h3>Timbre as a new signal dimension</h3>
+            <p>
+              Cluster spectral content determined by the geometry of its constituent link
+              lines — every cluster gets a unique timbre tied to its local geometry.
+            </p>
+            <span class="cite">paper §5.2</span>
+          </div>
+          <div class="future-item">
+            <h3>Formal evaluation</h3>
+            <p>
+              Perceptual study with musicians and non-musicians to validate the three
+              listening regimes; accessibility evaluation for visually impaired users.
+            </p>
+            <span class="cite">paper §5.4</span>
+          </div>
+        </div>
+        <aside class="notes">
+          60s. Spend ~30s on the AI loop — it's the payoff for motivation bullet 3.
+
+          Narration on AI loop: "Remember the LLM screenshot from minute one? The reason
+          that fails isn't the model — it's that there's nowhere to iterate from. The
+          playground gives the LLM a structured space to propose within, and the Critic
+          gives it feedback. You become the listener-curator; the AI does the
+          combinatorial search."
+
+          Skim the other two bullets in 15s each. Don't over-claim — these are open
+          directions, not committed work.
+        </aside>
+      </section>
+
+      <!-- ====================================================
+           SLIDE 11 — CLOSING
+           ==================================================== -->
+      <section class="closing">
+        <h1>The planets are already dancing.</h1>
+        <p style="color: var(--text-secondary); font-size: 0.9em; max-width: 30ch; margin: 0 auto;">
+          The playground is an open invitation to listen, and to play.
+        </p>
+        <div class="url">https://luchinchang.github.io/sonification-solar-system/</div>
+        <p style="margin-top: 2em; color: var(--text-dim); font-family: var(--font-mono); font-size: 0.6em;">
+          Questions?
+        </p>
+        <aside class="notes">
+          15–30s. Closer line is from the paper's conclusion. Don't read the URL — let
+          the audience see it. Then step back and take questions.
+        </aside>
+      </section>
+
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+  <script>
+    Reveal.initialize({
+      hash: true,
+      slideNumber: 'c/t',
+      transition: 'fade',
+      transitionSpeed: 'fast',
+      backgroundTransition: 'fade',
+      controls: true,
+      progress: true,
+      center: true,
+      width: 1280,
+      height: 800,
+      margin: 0.06,
+      pdfSeparateFragments: false,
+      plugins: [ RevealNotes ]
+    });
+  </script>
+</body>
+</html>
