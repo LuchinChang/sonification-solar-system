@@ -57,13 +57,12 @@ export interface DomElements {
   patternSelectorEl: HTMLElement;
   patternCardsEl: HTMLElement;
 
-  // Cardioid pattern controls (only meaningful while cardioid pattern is active)
+  // Cardioid pattern controls (only meaningful while cardioid pattern is active).
+  // N (point count) is taken from the existing sample-rate knob — only the
+  // multiplier (n) needs its own slider here.
   cardioidControlsEl: HTMLElement;
-  cardioidNSlider: HTMLInputElement;
-  cardioidNValueEl: HTMLElement;
   cardioidNSliderMultiplier: HTMLInputElement;
   cardioidMultiplierValueEl: HTMLElement;
-  cardioidAnimateBtn: HTMLButtonElement;
 }
 
 function getEl(id: string): HTMLElement {
@@ -122,10 +121,7 @@ export function resolveDomElements(): DomElements {
     patternCardsEl: getEl('pattern-cards'),
 
     cardioidControlsEl: getEl('cardioid-controls'),
-    cardioidNSlider: getEl('cardioid-N-slider') as HTMLInputElement,
-    cardioidNValueEl: getEl('cardioid-N-value'),
     cardioidNSliderMultiplier: getEl('cardioid-n-slider') as HTMLInputElement,
     cardioidMultiplierValueEl: getEl('cardioid-n-value'),
-    cardioidAnimateBtn: getEl('cardioid-animate-btn') as HTMLButtonElement,
   };
 }

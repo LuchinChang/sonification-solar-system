@@ -14,9 +14,10 @@ export interface PatternCaption {
   duration: number;     // seconds to hold on screen
 }
 
-/** Per-pattern config for the cardioid (multiplication-table-on-a-circle) generator. */
+/** Per-pattern config for the cardioid (multiplication-table-on-a-circle) generator.
+ *  N (number of rim points) is taken from `state.sampleRate` at render time —
+ *  the existing sample-rate knob doubles as the cardioid's point count. */
 export interface CardioidConfig {
-  N: number;          // points evenly spaced on the rim — also the audio sample rate
   multiplier: number; // n in the rule: chord connects i → (i·n) mod N
   radius: number;     // chord-circle radius in canvas px
 }
@@ -149,21 +150,6 @@ export const PATTERNS: PlanetaryPattern[] = [
     ],
   },
   {
-    id: 'cardioid',
-    name: 'Cardioid (Multiplication Table)',
-    kind: 'cardioid',
-    cardioid: { N: 100, multiplier: 2, radius: 300 },
-    simYears: 1,
-    petals: 1,
-    captions: [
-      { atProgress: 0.00, text: 'A circle. N evenly-spaced points around it.', duration: 4 },
-      { atProgress: 0.25, text: 'For each point i, draw a chord to point (i × n) mod N.', duration: 5 },
-      { atProgress: 0.55, text: 'n = 2 reveals a cardioid. n = 3 a nephroid. Higher n curls tighter.', duration: 5 },
-      { atProgress: 0.85, text: 'Same probe, different geometry — slide n to hear the math change.', duration: 4 },
-      { atProgress: 0.97, text: 'The pattern is complete. The canvas is yours.', duration: 3 },
-    ],
-  },
-  {
     id: 'lunar-hexagon',
     name: 'Lunar Hexagon',
     planet1: 'Moon',
@@ -184,6 +170,23 @@ export const PATTERNS: PlanetaryPattern[] = [
       { atProgress: 0.35, text: '12.37 synodic months per year — nearly 2 per sixth of a turn.', duration: 5 },
       { atProgress: 0.60, text: 'A hexagonal symmetry emerges from this near-integer ratio.', duration: 5 },
       { atProgress: 0.85, text: 'The Lunar Hexagon — hidden geometry of our sky.', duration: 4 },
+      { atProgress: 0.97, text: 'The pattern is complete. The canvas is yours.', duration: 3 },
+    ],
+  },
+  {
+    // Non-planetary pattern. Lives at the end of the menu — separate from the
+    // planet link-line family. Sample rate (state.sampleRate) doubles as N here.
+    id: 'cardioid',
+    name: 'Cardioid (Multiplication Table)',
+    kind: 'cardioid',
+    cardioid: { multiplier: 2, radius: 300 },
+    simYears: 1,
+    petals: 1,
+    captions: [
+      { atProgress: 0.00, text: 'A circle. N evenly-spaced points around it.', duration: 4 },
+      { atProgress: 0.25, text: 'For each point i, draw a chord to point (i × n) mod N.', duration: 5 },
+      { atProgress: 0.55, text: 'n = 2 reveals a cardioid. n = 3 a nephroid. Higher n curls tighter.', duration: 5 },
+      { atProgress: 0.85, text: 'Same probe, different geometry — slide n to hear the math change.', duration: 4 },
       { atProgress: 0.97, text: 'The pattern is complete. The canvas is yours.', duration: 3 },
     ],
   },
@@ -223,10 +226,13 @@ export function renderPatternThumbnail(
   let lines: LinkLine[];
   if (pattern.kind === 'cardioid' && pattern.cardioid) {
     // Thumbnail: scale the cardioid to fit ~80% of the thumbnail size.
+    // Use a fixed point count for thumbnails (live N comes from state.sampleRate
+    // but thumbnails are rendered without state context).
     const thumbRadius = size * 0.40;
+    const thumbN = 200;
     lines = calculateCardioidLines(
       cx, cy,
-      pattern.cardioid.N, pattern.cardioid.multiplier, thumbRadius,
+      thumbN, pattern.cardioid.multiplier, thumbRadius,
     );
   } else if (pattern.geocentric) {
     const scale = computeAuScale(pattern, size);

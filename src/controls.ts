@@ -66,7 +66,7 @@ export function calculateLines(state: AppState, canvas: HTMLCanvasElement): void
   if (pattern.kind === 'cardioid' && pattern.cardioid) {
     state.linkLines = calculateCardioidLines(
       cx, cy,
-      pattern.cardioid.N, pattern.cardioid.multiplier, pattern.cardioid.radius,
+      state.sampleRate, pattern.cardioid.multiplier, pattern.cardioid.radius,
     );
   } else if (pattern.geocentric) {
     state.linkLines = calculateGeocentricLines(
@@ -202,8 +202,6 @@ function syncCardioidControlsVisibility(state: AppState, dom: DomElements): void
   dom.cardioidControlsEl.classList.toggle('hidden', !isCardioid);
   if (isCardioid && state.currentPattern.cardioid) {
     const c = state.currentPattern.cardioid;
-    dom.cardioidNSlider.value = String(c.N);
-    dom.cardioidNValueEl.textContent = String(c.N);
     dom.cardioidNSliderMultiplier.value = String(c.multiplier);
     dom.cardioidMultiplierValueEl.textContent = String(c.multiplier);
   }
@@ -221,7 +219,7 @@ function regenerateCardioidLines(state: AppState, dom: DomElements): void {
   const cy = dom.canvas.height / 2;
   state.fullLinkLines = calculateCardioidLines(
     cx, cy,
-    pattern.cardioid.N, pattern.cardioid.multiplier, pattern.cardioid.radius,
+    state.sampleRate, pattern.cardioid.multiplier, pattern.cardioid.radius,
   );
   state.linkLines = state.fullLinkLines;
   state.currentOuterR = pattern.cardioid.radius;
@@ -262,7 +260,7 @@ function applyPattern(state: AppState, dom: DomElements, pattern: PlanetaryPatte
 
     state.fullLinkLines = calculateCardioidLines(
       cx, cy,
-      pattern.cardioid.N, pattern.cardioid.multiplier, pattern.cardioid.radius,
+      state.sampleRate, pattern.cardioid.multiplier, pattern.cardioid.radius,
     );
   } else {
     const au1 = Math.min(pattern.au1 ?? 1, pattern.au2 ?? 1);
@@ -343,7 +341,7 @@ function showPatternSelector(state: AppState, dom: DomElements): void {
     const planets = document.createElement('span');
     planets.className = 'pattern-card-planets';
     if (pattern.kind === 'cardioid' && pattern.cardioid) {
-      planets.textContent = `N=${pattern.cardioid.N} \u00b7 n=${pattern.cardioid.multiplier}`;
+      planets.textContent = `N=${state.sampleRate} \u00b7 n=${pattern.cardioid.multiplier}`;
     } else {
       planets.textContent = `${pattern.planet1 ?? ''} \u2014 ${pattern.planet2 ?? ''}`;
     }
@@ -688,60 +686,16 @@ export function setupEventHandlers(
   });
 
   // ── Cardioid pattern controls ──────────────────────────────────────────────
-  // N and n sliders mutate the active pattern's cardioid config in place,
-  // then regenerate linkLines (without wiping shapes). Animate-n steps the
-  // multiplier by +1 every 500ms so each integer is audibly distinct.
-  let cardioidAnimateHandle: ReturnType<typeof setInterval> | null = null;
-  const stopCardioidAnimate = (): void => {
-    if (cardioidAnimateHandle !== null) {
-      clearInterval(cardioidAnimateHandle);
-      cardioidAnimateHandle = null;
-    }
-    dom.cardioidAnimateBtn.setAttribute('aria-pressed', 'false');
-    dom.cardioidAnimateBtn.textContent = 'Animate n';
-  };
-
-  dom.cardioidNSlider.addEventListener('input', () => {
-    const pattern = state.currentPattern;
-    if (pattern.kind !== 'cardioid' || !pattern.cardioid) return;
-    pattern.cardioid.N = clamp(parseInt(dom.cardioidNSlider.value, 10), 10, 500);
-    dom.cardioidNValueEl.textContent = String(pattern.cardioid.N);
-    regenerateCardioidLines(state, dom);
-  });
-
+  // The cardioid pattern reuses the existing sample-rate knob for N (point
+  // count). Only the multiplier (n) gets a dedicated slider. Slider edits
+  // mutate the active pattern's cardioid config in place, then regenerate
+  // linkLines without wiping shapes — geometry morphs mid-playback.
   dom.cardioidNSliderMultiplier.addEventListener('input', () => {
     const pattern = state.currentPattern;
     if (pattern.kind !== 'cardioid' || !pattern.cardioid) return;
     pattern.cardioid.multiplier = clamp(parseInt(dom.cardioidNSliderMultiplier.value, 10), 1, 50);
     dom.cardioidMultiplierValueEl.textContent = String(pattern.cardioid.multiplier);
     regenerateCardioidLines(state, dom);
-  });
-
-  dom.cardioidAnimateBtn.addEventListener('click', () => {
-    const pattern = state.currentPattern;
-    if (pattern.kind !== 'cardioid' || !pattern.cardioid) return;
-    if (cardioidAnimateHandle !== null) {
-      stopCardioidAnimate();
-      return;
-    }
-    dom.cardioidAnimateBtn.setAttribute('aria-pressed', 'true');
-    dom.cardioidAnimateBtn.textContent = 'Stop';
-    cardioidAnimateHandle = setInterval(() => {
-      const p = state.currentPattern;
-      if (p.kind !== 'cardioid' || !p.cardioid) {
-        stopCardioidAnimate();
-        return;
-      }
-      const next = p.cardioid.multiplier + 1;
-      if (next > 50) {
-        stopCardioidAnimate();
-        return;
-      }
-      p.cardioid.multiplier = next;
-      dom.cardioidNSliderMultiplier.value = String(next);
-      dom.cardioidMultiplierValueEl.textContent = String(next);
-      regenerateCardioidLines(state, dom);
-    }, 500);
   });
 
   // Global mousemove (three concurrent drags)

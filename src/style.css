@@ -704,13 +704,11 @@ body.ui-hidden #foundry-panel {
 /* ══════════════════════════════════════════════════════════════
    CARDIOID PATTERN CONTROLS
    Visible only when the active pattern's kind is 'cardioid'.
-   Sits inside #controls-section under the main instrument row.
+   The inner .sidebar-chip pulls visual styling from the
+   node-editor stylesheet so this control matches the rest of
+   the chip-style UI.
    ══════════════════════════════════════════════════════════════ */
 .cardioid-controls {
-  display: flex;
-  flex-direction: row;
-  gap: 14px;
-  align-items: center;
   padding: 8px 12px 4px 12px;
   border-top: 1px dashed rgba(194, 118, 46, 0.22);
   margin-top: 6px;
@@ -718,17 +716,14 @@ body.ui-hidden #foundry-panel {
 .cardioid-controls.hidden {
   display: none;
 }
-.cardioid-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 110px;
+.cardioid-controls .sidebar-chip {
+  /* Span the dock width and let the slider stretch full-width. */
+  min-width: 220px;
 }
-.cardioid-label {
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--accent-copper);
+.cardioid-controls .sidebar-chip input[type="range"] {
+  width: 100%;
+}
+.cardioid-controls .sidebar-chip-title {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -738,36 +733,8 @@ body.ui-hidden #foundry-panel {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: var(--accent-amber);
-}
-.cardioid-row input[type="range"] {
-  width: 100%;
-  accent-color: var(--accent-copper);
-  cursor: pointer;
-}
-.cardioid-animate-btn {
-  background: rgba(200, 122, 46, 0.08);
-  color: var(--accent-copper);
-  border: 1px solid var(--accent-copper);
-  border-radius: 4px;
-  padding: 6px 12px;
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition:
-    border-color var(--dur-base) var(--ease-out-quart),
-    color        var(--dur-base) var(--ease-out-quart),
-    background   var(--dur-base) var(--ease-out-quart);
-}
-.cardioid-animate-btn:hover {
-  border-color: var(--accent-amber);
-  color: var(--accent-amber);
-  background: rgba(232, 160, 80, 0.14);
-}
-.cardioid-animate-btn[aria-pressed="true"] {
-  background: var(--accent-amber);
-  color: #120F0E;
-  border-color: var(--accent-amber);
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 /* ══════════════════════════════════════════════════════════════
