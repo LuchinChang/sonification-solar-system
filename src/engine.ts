@@ -198,6 +198,40 @@ export function calculateGeocentricLines(
   return lines;
 }
 
+/**
+ * Calculate cardioid (multiplication-table-on-a-circle) link lines.
+ *
+ * Place N evenly-spaced points around a circle of radius `radius` centered
+ * at (cx, cy). For each point i, draw a chord from i to (i * n) mod N.
+ *
+ * - n = 2 produces a cardioid
+ * - n = 3 produces a nephroid
+ * - n >= 5 produces increasingly intricate epicycloids
+ *
+ * Sample rate equals N: every chord becomes one segment in `state.linkLines`,
+ * so sweepers probing this pattern hear N intersection-cluster ticks per cycle.
+ */
+export function calculateCardioidLines(
+  cx: number,
+  cy: number,
+  N: number,
+  n: number,
+  radius: number,
+): LinkLine[] {
+  if (N <= 0) return [];
+  const pts: Point[] = new Array(N);
+  for (let i = 0; i < N; i++) {
+    const theta = (2 * Math.PI * i) / N;
+    pts[i] = { x: cx + radius * Math.cos(theta), y: cy + radius * Math.sin(theta) };
+  }
+  const m = ((n % N) + N) % N;
+  const lines: LinkLine[] = new Array(N);
+  for (let i = 0; i < N; i++) {
+    lines[i] = { p1: pts[i], p2: pts[(i * m) % N] };
+  }
+  return lines;
+}
+
 /** Clamp a value to [lo, hi]. */
 export function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));

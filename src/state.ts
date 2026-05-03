@@ -150,8 +150,8 @@ export interface AppState {
 export function createInitialState(): AppState {
   const pattern = PATTERNS[0];
   const auScale = 300;
-  const outerR  = Math.max(pattern.au1, pattern.au2) * auScale;
-  const innerR  = Math.min(pattern.au1, pattern.au2) * auScale;
+  const outerR  = Math.max(pattern.au1 ?? 1, pattern.au2 ?? 1) * auScale;
+  const innerR  = Math.min(pattern.au1 ?? 1, pattern.au2 ?? 1) * auScale;
 
   return {
     // Orbital engine

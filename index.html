@@ -190,6 +190,47 @@
           </div>
 
         </div><!-- /dock-instrument -->
+
+        <!-- ── Cardioid pattern controls (visible only when Cardioid pattern is active) ── -->
+        <div id="cardioid-controls" class="cardioid-controls hidden" aria-label="Cardioid pattern parameters">
+          <div class="cardioid-row">
+            <label class="cardioid-label" for="cardioid-N-slider">
+              Points <span class="cardioid-readout" id="cardioid-N-value">100</span>
+            </label>
+            <input
+              id="cardioid-N-slider"
+              type="range"
+              min="10"
+              max="500"
+              step="1"
+              value="100"
+              aria-label="Cardioid point count (N)"
+            />
+          </div>
+          <div class="cardioid-row">
+            <label class="cardioid-label" for="cardioid-n-slider">
+              Multiplier <span class="cardioid-readout" id="cardioid-n-value">2</span>
+            </label>
+            <input
+              id="cardioid-n-slider"
+              type="range"
+              min="1"
+              max="50"
+              step="1"
+              value="2"
+              aria-label="Cardioid multiplier (n)"
+            />
+          </div>
+          <div class="cardioid-row">
+            <button
+              id="cardioid-animate-btn"
+              type="button"
+              class="cardioid-animate-btn"
+              aria-pressed="false"
+              title="Animate the multiplier — 1 step every 500 ms"
+            >Animate n</button>
+          </div>
+        </div>
       </section>
 
     </aside>

@@ -67,6 +67,12 @@ function mockDom(): DomElements {
     loadConfigInput: el() as unknown as HTMLInputElement,
     patternSelectorEl: el() as unknown as HTMLElement,
     patternCardsEl: el() as unknown as HTMLElement,
+    cardioidControlsEl: el() as unknown as HTMLElement,
+    cardioidNSlider: el() as unknown as HTMLInputElement,
+    cardioidNValueEl: el() as unknown as HTMLElement,
+    cardioidNSliderMultiplier: el() as unknown as HTMLInputElement,
+    cardioidMultiplierValueEl: el() as unknown as HTMLElement,
+    cardioidAnimateBtn: el() as unknown as HTMLButtonElement,
   };
 }
 

@@ -56,6 +56,14 @@ export interface DomElements {
   // Pattern selector (P hotkey modal)
   patternSelectorEl: HTMLElement;
   patternCardsEl: HTMLElement;
+
+  // Cardioid pattern controls (only meaningful while cardioid pattern is active)
+  cardioidControlsEl: HTMLElement;
+  cardioidNSlider: HTMLInputElement;
+  cardioidNValueEl: HTMLElement;
+  cardioidNSliderMultiplier: HTMLInputElement;
+  cardioidMultiplierValueEl: HTMLElement;
+  cardioidAnimateBtn: HTMLButtonElement;
 }
 
 function getEl(id: string): HTMLElement {
@@ -112,5 +120,12 @@ export function resolveDomElements(): DomElements {
 
     patternSelectorEl: getEl('pattern-selector'),
     patternCardsEl: getEl('pattern-cards'),
+
+    cardioidControlsEl: getEl('cardioid-controls'),
+    cardioidNSlider: getEl('cardioid-N-slider') as HTMLInputElement,
+    cardioidNValueEl: getEl('cardioid-N-value'),
+    cardioidNSliderMultiplier: getEl('cardioid-n-slider') as HTMLInputElement,
+    cardioidMultiplierValueEl: getEl('cardioid-n-value'),
+    cardioidAnimateBtn: getEl('cardioid-animate-btn') as HTMLButtonElement,
   };
 }

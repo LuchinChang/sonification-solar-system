@@ -4,7 +4,7 @@
 // and playback toggle.
 
 import { CanvasShape, resetNextId, type ShapeType } from './shapes';
-import { calculateGeocentricLines, calculateEllipticalLines, clamp } from './engine';
+import { calculateGeocentricLines, calculateEllipticalLines, calculateCardioidLines, clamp } from './engine';
 import { PATTERNS, computeAuScale, renderPatternThumbnail, type PlanetaryPattern } from './patterns';
 import type { AppState } from './state';
 import {
@@ -62,19 +62,25 @@ export function editorShouldConsumeDeleteKey(): boolean {
 export function calculateLines(state: AppState, canvas: HTMLCanvasElement): void {
   const cx = canvas.width / 2;
   const cy = canvas.height / 2;
-  if (state.currentPattern.geocentric) {
+  const pattern = state.currentPattern;
+  if (pattern.kind === 'cardioid' && pattern.cardioid) {
+    state.linkLines = calculateCardioidLines(
+      cx, cy,
+      pattern.cardioid.N, pattern.cardioid.multiplier, pattern.cardioid.radius,
+    );
+  } else if (pattern.geocentric) {
     state.linkLines = calculateGeocentricLines(
       cx, cy, state.sampleRate,
       state.currentOuterR, state.currentInnerR,
       state.currentOuterPeriod, state.currentInnerPeriod,
       state.currentSimYears,
-      state.currentPattern.eccentricity1 ?? 0,
-      state.currentPattern.precessionPeriodYears1 ?? 1000,
+      pattern.eccentricity1 ?? 0,
+      pattern.precessionPeriodYears1 ?? 1000,
     );
   } else {
     state.linkLines = calculateEllipticalLines(
       cx, cy, state.sampleRate,
-      state.currentPattern.planet1, state.currentPattern.planet2,
+      pattern.planet1 ?? 'Earth', pattern.planet2 ?? 'Venus',
       state.currentSimYears, state.currentAuScale,
     );
   }
@@ -188,6 +194,49 @@ export function finishDrawAnimation(state: AppState, dom: DomElements, tour: Tou
   setTimeout(() => tour.start(), 800);
 }
 
+// ── Cardioid pattern helpers ─────────────────────────────────────────────────
+// Toggle the visibility of #cardioid-controls based on whether the active
+// pattern is the cardioid kind. Called from applyPattern() and the bootstrap.
+function syncCardioidControlsVisibility(state: AppState, dom: DomElements): void {
+  const isCardioid = state.currentPattern.kind === 'cardioid';
+  dom.cardioidControlsEl.classList.toggle('hidden', !isCardioid);
+  if (isCardioid && state.currentPattern.cardioid) {
+    const c = state.currentPattern.cardioid;
+    dom.cardioidNSlider.value = String(c.N);
+    dom.cardioidNValueEl.textContent = String(c.N);
+    dom.cardioidNSliderMultiplier.value = String(c.multiplier);
+    dom.cardioidMultiplierValueEl.textContent = String(c.multiplier);
+  }
+}
+
+// Regenerate cardioid linkLines after an N or n slider change. Unlike
+// applyPattern(), this does NOT clear existing shapes — it just refreshes
+// the chord set, re-bakes sweeper caches, and re-evaluates Strudel. Shapes
+// the user has spawned keep playing across the geometry change.
+function regenerateCardioidLines(state: AppState, dom: DomElements): void {
+  const pattern = state.currentPattern;
+  if (pattern.kind !== 'cardioid' || !pattern.cardioid) return;
+
+  const cx = dom.canvas.width / 2;
+  const cy = dom.canvas.height / 2;
+  state.fullLinkLines = calculateCardioidLines(
+    cx, cy,
+    pattern.cardioid.N, pattern.cardioid.multiplier, pattern.cardioid.radius,
+  );
+  state.linkLines = state.fullLinkLines;
+  state.currentOuterR = pattern.cardioid.radius;
+  state.orbitalMaxRadius = pattern.cardioid.radius * 1.05;
+
+  rebuildAllCaches(state);
+
+  patchHeader(dom.telemetryTextarea, pattern.name, state.shapes.length, state.sampleRate, state.cpm);
+  const hasSweeper = rebuildSweeperPatterns(dom.telemetryTextarea, state.shapes, pattern.name, state.sampleRate, state.cpm);
+  if (hasSweeper && state.audioInitialized) {
+    playLiveCode(state.strudelRepl, dom.telemetryTextarea.value);
+  }
+  updateTelemetry(dom, state);
+}
+
 // ── Pattern application ──────────────────────────────────────────────────────
 // Swaps the active planetary pattern: recomputes orbital radii, rebuilds link
 // lines, clears existing shapes, and kicks off the draw-animation. Shared by
@@ -198,45 +247,63 @@ function applyPattern(state: AppState, dom: DomElements, pattern: PlanetaryPatte
 
   const minDim = Math.min(dom.canvas.width, dom.canvas.height);
   state.currentAuScale = computeAuScale(pattern, minDim);
-
-  const au1 = Math.min(pattern.au1, pattern.au2);
-  const au2 = Math.max(pattern.au1, pattern.au2);
-  state.currentInnerR = au1 * state.currentAuScale;
-  state.currentOuterR = au2 * state.currentAuScale;
-
-  if (pattern.au1 < pattern.au2) {
-    state.currentInnerPeriod = pattern.period1;
-    state.currentOuterPeriod = pattern.period2;
-  } else {
-    state.currentInnerPeriod = pattern.period2;
-    state.currentOuterPeriod = pattern.period1;
-  }
   state.currentSimYears = pattern.simYears;
-  state.orbitalMaxRadius = state.currentOuterR * 1.05;
 
   const cx = dom.canvas.width / 2;
   const cy = dom.canvas.height / 2;
-  if (pattern.geocentric) {
-    state.fullLinkLines = calculateGeocentricLines(
-      cx, cy, state.sampleRate,
-      state.currentOuterR, state.currentInnerR,
-      state.currentOuterPeriod, state.currentInnerPeriod,
-      state.currentSimYears,
-      pattern.eccentricity1 ?? 0,
-      pattern.precessionPeriodYears1 ?? 1000,
+
+  if (pattern.kind === 'cardioid' && pattern.cardioid) {
+    // Cardioid: no AU-based orbit; use the configured radius as the bounding circle.
+    state.currentInnerR = 0;
+    state.currentOuterR = pattern.cardioid.radius;
+    state.currentInnerPeriod = 1;
+    state.currentOuterPeriod = 1;
+    state.orbitalMaxRadius = pattern.cardioid.radius * 1.05;
+
+    state.fullLinkLines = calculateCardioidLines(
+      cx, cy,
+      pattern.cardioid.N, pattern.cardioid.multiplier, pattern.cardioid.radius,
     );
   } else {
-    state.fullLinkLines = calculateEllipticalLines(
-      cx, cy, state.sampleRate,
-      pattern.planet1, pattern.planet2,
-      state.currentSimYears, state.currentAuScale,
-    );
+    const au1 = Math.min(pattern.au1 ?? 1, pattern.au2 ?? 1);
+    const au2 = Math.max(pattern.au1 ?? 1, pattern.au2 ?? 1);
+    state.currentInnerR = au1 * state.currentAuScale;
+    state.currentOuterR = au2 * state.currentAuScale;
+
+    const p1 = pattern.period1 ?? 365.25;
+    const p2 = pattern.period2 ?? 365.25;
+    if ((pattern.au1 ?? 0) < (pattern.au2 ?? 0)) {
+      state.currentInnerPeriod = p1;
+      state.currentOuterPeriod = p2;
+    } else {
+      state.currentInnerPeriod = p2;
+      state.currentOuterPeriod = p1;
+    }
+    state.orbitalMaxRadius = state.currentOuterR * 1.05;
+
+    if (pattern.geocentric) {
+      state.fullLinkLines = calculateGeocentricLines(
+        cx, cy, state.sampleRate,
+        state.currentOuterR, state.currentInnerR,
+        state.currentOuterPeriod, state.currentInnerPeriod,
+        state.currentSimYears,
+        pattern.eccentricity1 ?? 0,
+        pattern.precessionPeriodYears1 ?? 1000,
+      );
+    } else {
+      state.fullLinkLines = calculateEllipticalLines(
+        cx, cy, state.sampleRate,
+        pattern.planet1 ?? 'Earth', pattern.planet2 ?? 'Venus',
+        state.currentSimYears, state.currentAuScale,
+      );
+    }
   }
   state.linkLines = state.fullLinkLines;
 
   while (state.shapes.length > 0) state.shapes.pop();
   state.activeShape = null;
   state.flashCooldowns.clear();
+  syncCardioidControlsVisibility(state, dom);
   updateTelemetry(dom, state);
 
   startDrawAnimation(state, dom);
@@ -275,7 +342,11 @@ function showPatternSelector(state: AppState, dom: DomElements): void {
 
     const planets = document.createElement('span');
     planets.className = 'pattern-card-planets';
-    planets.textContent = `${pattern.planet1} \u2014 ${pattern.planet2}`;
+    if (pattern.kind === 'cardioid' && pattern.cardioid) {
+      planets.textContent = `N=${pattern.cardioid.N} \u00b7 n=${pattern.cardioid.multiplier}`;
+    } else {
+      planets.textContent = `${pattern.planet1 ?? ''} \u2014 ${pattern.planet2 ?? ''}`;
+    }
     card.appendChild(planets);
 
     card.addEventListener('click', () => selectPattern(state, dom, pattern.id));
@@ -400,8 +471,15 @@ export function handleResize(state: AppState, dom: DomElements): void {
   if (state.currentPattern) {
     const minDim = Math.min(dom.canvas.width, dom.canvas.height);
     state.currentAuScale = computeAuScale(state.currentPattern, minDim);
-    state.currentOuterR = Math.max(state.currentPattern.au1, state.currentPattern.au2) * state.currentAuScale;
-    state.currentInnerR = Math.min(state.currentPattern.au1, state.currentPattern.au2) * state.currentAuScale;
+    if (state.currentPattern.kind === 'cardioid' && state.currentPattern.cardioid) {
+      state.currentInnerR = 0;
+      state.currentOuterR = state.currentPattern.cardioid.radius;
+    } else {
+      const au1 = state.currentPattern.au1 ?? 1;
+      const au2 = state.currentPattern.au2 ?? 1;
+      state.currentOuterR = Math.max(au1, au2) * state.currentAuScale;
+      state.currentInnerR = Math.min(au1, au2) * state.currentAuScale;
+    }
     state.orbitalMaxRadius = state.currentOuterR * 1.05;
   }
   calculateLines(state, dom.canvas);
@@ -448,19 +526,30 @@ function restoreFromSnapshot(state: AppState, dom: DomElements, snap: ConfigSnap
   state.currentPattern = pat;
   const minDim = Math.min(dom.canvas.width, dom.canvas.height);
   state.currentAuScale = computeAuScale(pat, minDim);
-  const au1 = Math.min(pat.au1, pat.au2);
-  const au2 = Math.max(pat.au1, pat.au2);
-  state.currentInnerR = au1 * state.currentAuScale;
-  state.currentOuterR = au2 * state.currentAuScale;
-  if (pat.au1 < pat.au2) {
-    state.currentInnerPeriod = pat.period1;
-    state.currentOuterPeriod = pat.period2;
+
+  if (pat.kind === 'cardioid' && pat.cardioid) {
+    state.currentInnerR = 0;
+    state.currentOuterR = pat.cardioid.radius;
+    state.currentInnerPeriod = 1;
+    state.currentOuterPeriod = 1;
   } else {
-    state.currentInnerPeriod = pat.period2;
-    state.currentOuterPeriod = pat.period1;
+    const auMin = Math.min(pat.au1 ?? 1, pat.au2 ?? 1);
+    const auMax = Math.max(pat.au1 ?? 1, pat.au2 ?? 1);
+    state.currentInnerR = auMin * state.currentAuScale;
+    state.currentOuterR = auMax * state.currentAuScale;
+    const p1 = pat.period1 ?? 365.25;
+    const p2 = pat.period2 ?? 365.25;
+    if ((pat.au1 ?? 0) < (pat.au2 ?? 0)) {
+      state.currentInnerPeriod = p1;
+      state.currentOuterPeriod = p2;
+    } else {
+      state.currentInnerPeriod = p2;
+      state.currentOuterPeriod = p1;
+    }
   }
   state.currentSimYears  = pat.simYears;
   state.orbitalMaxRadius = state.currentOuterR * 1.05;
+  syncCardioidControlsVisibility(state, dom);
 
   // Rebuild link lines with restored sample rate
   state.sampleRate = snap.sampleRate;
@@ -596,6 +685,63 @@ export function setupEventHandlers(
   dom.playPauseBtn.addEventListener('click', () => {
     tour.notify('play-pressed');
     togglePlayback(state, dom);
+  });
+
+  // ── Cardioid pattern controls ──────────────────────────────────────────────
+  // N and n sliders mutate the active pattern's cardioid config in place,
+  // then regenerate linkLines (without wiping shapes). Animate-n steps the
+  // multiplier by +1 every 500ms so each integer is audibly distinct.
+  let cardioidAnimateHandle: ReturnType<typeof setInterval> | null = null;
+  const stopCardioidAnimate = (): void => {
+    if (cardioidAnimateHandle !== null) {
+      clearInterval(cardioidAnimateHandle);
+      cardioidAnimateHandle = null;
+    }
+    dom.cardioidAnimateBtn.setAttribute('aria-pressed', 'false');
+    dom.cardioidAnimateBtn.textContent = 'Animate n';
+  };
+
+  dom.cardioidNSlider.addEventListener('input', () => {
+    const pattern = state.currentPattern;
+    if (pattern.kind !== 'cardioid' || !pattern.cardioid) return;
+    pattern.cardioid.N = clamp(parseInt(dom.cardioidNSlider.value, 10), 10, 500);
+    dom.cardioidNValueEl.textContent = String(pattern.cardioid.N);
+    regenerateCardioidLines(state, dom);
+  });
+
+  dom.cardioidNSliderMultiplier.addEventListener('input', () => {
+    const pattern = state.currentPattern;
+    if (pattern.kind !== 'cardioid' || !pattern.cardioid) return;
+    pattern.cardioid.multiplier = clamp(parseInt(dom.cardioidNSliderMultiplier.value, 10), 1, 50);
+    dom.cardioidMultiplierValueEl.textContent = String(pattern.cardioid.multiplier);
+    regenerateCardioidLines(state, dom);
+  });
+
+  dom.cardioidAnimateBtn.addEventListener('click', () => {
+    const pattern = state.currentPattern;
+    if (pattern.kind !== 'cardioid' || !pattern.cardioid) return;
+    if (cardioidAnimateHandle !== null) {
+      stopCardioidAnimate();
+      return;
+    }
+    dom.cardioidAnimateBtn.setAttribute('aria-pressed', 'true');
+    dom.cardioidAnimateBtn.textContent = 'Stop';
+    cardioidAnimateHandle = setInterval(() => {
+      const p = state.currentPattern;
+      if (p.kind !== 'cardioid' || !p.cardioid) {
+        stopCardioidAnimate();
+        return;
+      }
+      const next = p.cardioid.multiplier + 1;
+      if (next > 50) {
+        stopCardioidAnimate();
+        return;
+      }
+      p.cardioid.multiplier = next;
+      dom.cardioidNSliderMultiplier.value = String(next);
+      dom.cardioidMultiplierValueEl.textContent = String(next);
+      regenerateCardioidLines(state, dom);
+    }, 500);
   });
 
   // Global mousemove (three concurrent drags)

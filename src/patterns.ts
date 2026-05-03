@@ -4,7 +4,7 @@
 // Each pattern describes two planets whose orbital link lines
 // trace a spirograph-like curve over a full resonance cycle.
 
-import { calculateGeocentricLines, calculateEllipticalLines, type LinkLine } from './engine';
+import { calculateGeocentricLines, calculateEllipticalLines, calculateCardioidLines, type LinkLine } from './engine';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -14,21 +14,35 @@ export interface PatternCaption {
   duration: number;     // seconds to hold on screen
 }
 
+/** Per-pattern config for the cardioid (multiplication-table-on-a-circle) generator. */
+export interface CardioidConfig {
+  N: number;          // points evenly spaced on the rim — also the audio sample rate
+  multiplier: number; // n in the rule: chord connects i → (i·n) mod N
+  radius: number;     // chord-circle radius in canvas px
+}
+
+export type PatternKind = 'planet' | 'cardioid';
+
 export interface PlanetaryPattern {
   id: string;
   name: string;
-  planet1: string;      // inner planet
-  planet2: string;      // outer planet
-  au1: number;          // inner orbital radius (AU)
-  au2: number;          // outer orbital radius (AU)
-  period1: number;      // inner orbital period (days)
-  period2: number;      // outer orbital period (days)
-  simYears: number;     // years for one full pattern cycle
+  /** 'planet' (default) uses heliocentric/geocentric VSOP87. 'cardioid' uses multiplication-table chords. */
+  kind?: PatternKind;
+  /** Planet-pattern fields — required when kind is 'planet' (or undefined). Optional for cardioid. */
+  planet1?: string;
+  planet2?: string;
+  au1?: number;
+  au2?: number;
+  period1?: number;
+  period2?: number;
+  simYears: number;     // years for one full pattern cycle (cardioid: cycle length for the draw animation)
   petals: number;       // approximate petal count (visual descriptor)
   captions: PatternCaption[];
-  geocentric?: boolean;              // true = Earth at center (default: heliocentric)
-  eccentricity1?: number;            // inner body orbital eccentricity
-  precessionPeriodYears1?: number;   // perigee precession period (years)
+  geocentric?: boolean;              // true = Earth at center (default: heliocentric); planet-only
+  eccentricity1?: number;            // inner body orbital eccentricity; planet-only
+  precessionPeriodYears1?: number;   // perigee precession period (years); planet-only
+  /** Cardioid generator parameters — required when kind is 'cardioid'. */
+  cardioid?: CardioidConfig;
 }
 
 // ─── Pattern Catalogue ────────────────────────────────────────
@@ -135,6 +149,21 @@ export const PATTERNS: PlanetaryPattern[] = [
     ],
   },
   {
+    id: 'cardioid',
+    name: 'Cardioid (Multiplication Table)',
+    kind: 'cardioid',
+    cardioid: { N: 100, multiplier: 2, radius: 300 },
+    simYears: 1,
+    petals: 1,
+    captions: [
+      { atProgress: 0.00, text: 'A circle. N evenly-spaced points around it.', duration: 4 },
+      { atProgress: 0.25, text: 'For each point i, draw a chord to point (i × n) mod N.', duration: 5 },
+      { atProgress: 0.55, text: 'n = 2 reveals a cardioid. n = 3 a nephroid. Higher n curls tighter.', duration: 5 },
+      { atProgress: 0.85, text: 'Same probe, different geometry — slide n to hear the math change.', duration: 4 },
+      { atProgress: 0.97, text: 'The pattern is complete. The canvas is yours.', duration: 3 },
+    ],
+  },
+  {
     id: 'lunar-hexagon',
     name: 'Lunar Hexagon',
     planet1: 'Moon',
@@ -164,10 +193,12 @@ export const PATTERNS: PlanetaryPattern[] = [
 
 /**
  * Compute a pixels-per-AU scale factor so the outer orbit fills
- * roughly 40% of the smaller canvas dimension.
+ * roughly 40% of the smaller canvas dimension. Cardioid patterns return 1
+ * (no AU scaling — they use absolute pixel radius).
  */
 export function computeAuScale(pattern: PlanetaryPattern, canvasMinDim: number): number {
-  const maxAu = Math.max(pattern.au1, pattern.au2);
+  if (pattern.kind === 'cardioid') return 1;
+  const maxAu = Math.max(pattern.au1 ?? 1, pattern.au2 ?? 1);
   const targetRadius = canvasMinDim * 0.4;
   return targetRadius / maxAu;
 }
@@ -188,24 +219,32 @@ export function renderPatternThumbnail(
 
   const cx = size / 2;
   const cy = size / 2;
-  const scale = computeAuScale(pattern, size);
-  const r1 = pattern.au1 * scale;
-  const r2 = pattern.au2 * scale;
 
   let lines: LinkLine[];
-  if (pattern.geocentric) {
+  if (pattern.kind === 'cardioid' && pattern.cardioid) {
+    // Thumbnail: scale the cardioid to fit ~80% of the thumbnail size.
+    const thumbRadius = size * 0.40;
+    lines = calculateCardioidLines(
+      cx, cy,
+      pattern.cardioid.N, pattern.cardioid.multiplier, thumbRadius,
+    );
+  } else if (pattern.geocentric) {
+    const scale = computeAuScale(pattern, size);
+    const r1 = (pattern.au1 ?? 0) * scale;
+    const r2 = (pattern.au2 ?? 0) * scale;
     lines = calculateGeocentricLines(
       cx, cy, 300,
       r2, r1,
-      pattern.period2, pattern.period1,
+      pattern.period2 ?? 365.25, pattern.period1 ?? 27.32,
       pattern.simYears,
       pattern.eccentricity1 ?? 0,
       pattern.precessionPeriodYears1 ?? 1000,
     );
   } else {
+    const scale = computeAuScale(pattern, size);
     lines = calculateEllipticalLines(
       cx, cy, 300,
-      pattern.planet1, pattern.planet2,
+      pattern.planet1 ?? 'Earth', pattern.planet2 ?? 'Venus',
       pattern.simYears, scale,
     );
   }
