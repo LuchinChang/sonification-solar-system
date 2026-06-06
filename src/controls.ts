@@ -29,6 +29,7 @@ import {
 import { playLiveCode, syncStrudelCps, resumeAudioContext, suspendAudioContext, getAudioTime } from './audio';
 import { openEditor, closeEditor, isEditorOpen, currentSweeperId } from './node-editor';
 import { setTheme } from './theme';
+import { initKeybindingsPanel } from './keybindings';
 import { drawScene } from './renderer';
 import {
   type ConfigSnapshot,
@@ -869,43 +870,12 @@ export function setupEventHandlers(
     setTheme(state.currentTheme, dom.themeToggleBtn);
   });
 
-  // Keybindings popover — ? button in the dock header opens/closes the panel.
-  // IMPORTANT: keep index.html #keybindings-popover in sync with the hotkey
-  // switch at the bottom of this function.
-  const kbBtn = document.getElementById('keybindings-btn');
-  const kbPop = document.getElementById('keybindings-popover');
-  if (kbBtn !== null && kbPop !== null) {
-    // Position the popover so its arrow points at the ? button. We read the
-    // ? rect at open time so the popover follows window resizes and theme
-    // toggles without us having to recalculate on every frame.
-    const anchorPopover = (): void => {
-      const r = kbBtn.getBoundingClientRect();
-      // Anchor right edge of popover ~24px right of the ? button, so the
-      // arrow (positioned by CSS at the right side) lands near the button.
-      kbPop.style.right = `${Math.max(8, window.innerWidth - r.right - 12)}px`;
-      kbPop.style.bottom = `${Math.max(12, window.innerHeight - r.top + 14)}px`;
-      kbPop.style.left = 'auto';
-    };
-    const toggleKb = (): void => {
-      if (kbPop.hasAttribute('hidden')) {
-        anchorPopover();
-        kbPop.removeAttribute('hidden');
-      } else {
-        kbPop.setAttribute('hidden', '');
-      }
-    };
-    kbBtn.addEventListener('click', toggleKb);
-    window.addEventListener('resize', () => {
-      if (!kbPop.hasAttribute('hidden')) anchorPopover();
-    });
-    // Click outside to close (capture phase so it beats other handlers).
-    document.addEventListener('click', e => {
-      if (kbPop.hasAttribute('hidden')) return;
-      const t = e.target;
-      if (t instanceof Node && (kbPop.contains(t) || kbBtn.contains(t))) return;
-      kbPop.setAttribute('hidden', '');
-    }, true);
-  }
+  // Persistent keybindings panel (src/keybindings.ts). Mounts the left-edge
+  // panel and exposes toggle(). The ? button in the dock header and the ? key
+  // (wired in the keydown handler below) both flip it expanded ⇄ collapsed.
+  const keybindings = initKeybindingsPanel();
+  document.getElementById('keybindings-btn')
+    ?.addEventListener('click', () => keybindings.toggle());
 
   // Keyboard shortcuts
   document.addEventListener('keydown', e => {
@@ -933,14 +903,13 @@ export function setupEventHandlers(
       return;
     }
 
-    // Escape also closes the keybindings popover if open.
-    if (e.key === 'Escape') {
-      const pop = document.getElementById('keybindings-popover');
-      if (pop !== null && !pop.hasAttribute('hidden')) {
-        e.preventDefault();
-        pop.setAttribute('hidden', '');
-        return;
-      }
+    // '?' toggles the persistent keybindings panel. e.key is already '?'
+    // (Shift+/) so no modifier check is needed; gated above on text inputs so
+    // typing ? in the live-code editor won't trigger it.
+    if (e.key === '?') {
+      e.preventDefault();
+      keybindings.toggle();
+      return;
     }
 
     switch (e.key.toLowerCase()) {

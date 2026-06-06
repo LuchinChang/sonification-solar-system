@@ -215,36 +215,10 @@
 
     </aside>
 
-    <!-- ╔════════════════════════════════════════════════════════╗ -->
-    <!-- ║            KEYBINDINGS POPOVER                         ║ -->
-    <!-- ║  Toggled by the ? button in the dock header.           ║ -->
-    <!-- ║  IMPORTANT: keep in sync with src/controls.ts switch   ║ -->
-    <!-- ╚════════════════════════════════════════════════════════╝ -->
-    <div
-      id="keybindings-popover"
-      class="keybindings-popover"
-      role="dialog"
-      aria-label="Keyboard shortcuts"
-      hidden
-    >
-      <div class="kb-header">
-        <span class="kb-title">Keybindings</span>
-        <span class="kb-sub">press ? or esc to close</span>
-      </div>
-      <dl class="kb-list">
-        <dt><kbd>Space</kbd></dt>                   <dd>Play / Pause</dd>
-        <dt><kbd>D</kbd></dt>                       <dd>Toggle dock</dd>
-        <dt><kbd>N</kbd></dt>                       <dd>Spawn sweeper</dd>
-        <dt><kbd>P</kbd></dt>                       <dd>Pattern selector</dd>
-        <dt><kbd>E</kbd></dt>                       <dd>Node editor</dd>
-        <dt><kbd>I</kbd></dt>                       <dd>Telemetry panel</dd>
-        <dt><kbd>Esc</kbd></dt>                     <dd>Close panel</dd>
-        <dt><kbd>⌫</kbd></dt>                       <dd>Delete shape</dd>
-        <dt><kbd>⌘</kbd><kbd>S</kbd></dt>           <dd>Save config</dd>
-        <dt><kbd>⌘</kbd><kbd>↵</kbd></dt>           <dd>Evaluate code</dd>
-        <dt><kbd>⌘</kbd><kbd>scroll</kbd></dt>      <dd>Samples / orbit</dd>
-      </dl>
-    </div>
+    <!-- The keyboard-shortcuts UI is now the persistent left-edge panel built
+         in src/keybindings.ts (mounted to <body> at runtime). The old
+         #keybindings-popover lived here; it was retired in favour of that
+         single, data-driven source of truth. -->
 
     <!-- ╔════════════════════════════════════════════════════════╗ -->
     <!-- ║    LIVE CODE TELEMETRY PANEL  (I key toggles)         ║ -->

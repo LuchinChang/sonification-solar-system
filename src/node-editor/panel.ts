@@ -28,6 +28,7 @@ import { getNodeDef } from './registry';
 import { applyPlaybackNode } from './nodes/playback';
 import { openSidebar, closeSidebar } from './sidebar';
 import { mountToolbox, refreshToolbox } from './toolbox';
+import { setEditorActive } from '../keybindings';
 import type { Node, NodeDefinition, NodeGraph, PortSpec } from './types';
 // Side-effect import: registers the four sound-basic NodeDefinitions so the
 // default-graph seeding below can find them via getNodeDef().
@@ -157,6 +158,8 @@ export function openEditor(sweeperId: number): void {
   refs.root.removeAttribute('inert');
   // Unit 2 — open the shape-options sidebar alongside the editor.
   openSidebar(sweeperId);
+  // Brighten the Node Editor section in the persistent keybindings panel.
+  setEditorActive(true);
   attachKeyHandler();
 }
 
@@ -400,6 +403,8 @@ export function closeEditor(): void {
   refs.root.setAttribute('inert', '');
   // Unit 2 — hide the shape-options sidebar.
   closeSidebar();
+  // Re-dim the Node Editor section in the persistent keybindings panel.
+  setEditorActive(false);
 
   // Unit 14 — DEFERRED COMMIT. Compile the in-memory graph to a full sweeper
   // block, persist the snapshot onto the shape, and hand the fresh block to

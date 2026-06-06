@@ -825,78 +825,133 @@ body.ui-hidden #top-chrome > * {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   KEYBINDINGS POPOVER  — opens from the ? button in the dock header.
-   Fixed-position glass card. Stays in sync with src/controls.ts
-   hotkey switch at the top of the file — update both together.
+   PERSISTENT KEYBINDINGS PANEL  (src/keybindings.ts)
+   Left-edge mirror of #telemetry-panel. Always present; collapses to a
+   40px peek-tab. Source of truth is the KEYBINDINGS array — this is docs
+   only, the hotkey dispatch lives in src/controls.ts.
    ══════════════════════════════════════════════════════════════ */
-.keybindings-popover {
-  /* JS sets right + bottom at open time (see anchorPopover in controls.ts)
-     so the arrow points at the ? button in the dock header. Defaults below
-     are fallback values if JS hasn't anchored yet. */
+.shortcuts-panel {
   position: fixed;
-  bottom: 100px;
-  right: 24px;
-  min-width: 260px;
-  max-width: 320px;
-  background: var(--overlay-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: 10px;
+  left: 0;
+  top: 80px;                 /* clear of #top-chrome (Save/Load/Theme) */
+  z-index: 16;
+
+  /* Flex row: [content | tab] — tab on the canvas-facing (right) edge. */
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+
+  max-height: calc(100vh - 100px);
+
+  background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.55), 0 1px 0 rgba(255, 200, 140, 0.05) inset;
-  padding: 14px 16px 12px;
-  z-index: 60;
-  animation: kb-pop-in var(--dur-base) var(--ease-out-quart) both;
+  border: 1px solid var(--glass-border);
+  border-left: none;
+  border-radius: 0 14px 14px 0;
+
+  box-shadow:
+    4px 0 24px rgba(0, 0, 0, 0.50),
+    0 0 0 1px rgba(255, 180, 80, 0.03) inset;
+
+  /* Default: fully open. */
+  transform: translateX(0);
+  transition:
+    transform    var(--dur-slow) var(--ease-out-quart),
+    border-color var(--dur-base) var(--ease-out-quart),
+    box-shadow   var(--dur-base) var(--ease-out-quart);
 }
-.keybindings-popover[hidden] { display: none; }
-@keyframes kb-pop-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+
+/* Only the 40px tab pokes out when collapsed. */
+.shortcuts-panel.collapsed {
+  transform: translateX(calc(-100% + 40px));
 }
-.keybindings-popover::before {
-  content: "";
-  position: absolute;
-  bottom: -6px;
-  right: 16px;                          /* aligned near the ? button */
-  width: 10px;
-  height: 10px;
-  background: var(--overlay-bg);
-  border-right: 1px solid var(--glass-border);
-  border-bottom: 1px solid var(--glass-border);
-  transform: rotate(45deg);
+
+.shortcuts-panel:hover {
+  border-color: var(--glass-border-hover);
 }
-.keybindings-popover .kb-header {
+
+/* Peek-tab — vertical handle, always visible on the right edge. */
+.shortcuts-tab {
+  flex: 0 0 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  transition: color var(--dur-fast), background var(--dur-fast);
+}
+.shortcuts-tab:hover {
+  color: var(--accent-amber);
+  background: rgba(194, 118, 46, 0.06);
+}
+
+/* Content pane. */
+.shortcuts-inner {
+  width: 232px;
+  overflow-y: auto;
+  padding: 14px 16px 14px;
+  /* Fade content with the slide so re-expanding feels like one motion. */
+  opacity: 1;
+  transition: opacity var(--dur-base) var(--ease-out-quart);
+}
+.shortcuts-panel.collapsed .shortcuts-inner {
+  opacity: 0;
+}
+
+.shortcuts-header {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--glass-border);
 }
-.keybindings-popover .kb-title {
+.shortcuts-title {
   font-size: 10px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--accent-amber);
 }
-.keybindings-popover .kb-sub {
+.shortcuts-sub {
   font-size: 9px;
   color: var(--text-dim);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
 }
-.keybindings-popover .kb-list {
+
+/* Copper divider between sections. */
+.shortcuts-section + .shortcuts-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--glass-border);
+}
+.shortcuts-section-title {
+  margin: 0 0 8px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent-copper);
+}
+
+.shortcuts-list {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 6px 14px;
   margin: 0;
 }
-.keybindings-popover dt {
+.shortcuts-list dt {
   display: flex;
   gap: 4px;
   justify-content: flex-end;
   align-items: center;
 }
-.keybindings-popover kbd {
+/* Keycap with subtle depth + press-shadow. */
+.shortcuts-list kbd {
   font-family: var(--font-mono);
   font-size: 9.5px;
   padding: 2px 6px;
@@ -908,14 +963,51 @@ body.ui-hidden #top-chrome > * {
   background: rgba(194, 118, 46, 0.08);
   color: var(--text-primary);
   line-height: 1.2;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
 }
-[data-theme="light"] .keybindings-popover kbd { background: rgba(92, 58, 33, 0.06); }
-.keybindings-popover dd {
+[data-theme="light"] .shortcuts-list kbd {
+  background: rgba(92, 58, 33, 0.06);
+  box-shadow: 0 1px 0 rgba(92, 58, 33, 0.18);
+}
+.shortcuts-list dd {
   color: var(--text-secondary);
   font-size: 11px;
   display: flex;
   align-items: center;
   margin: 0;
+}
+
+/* Dimmable section — dark until its editor is open (.section-active). */
+.shortcuts-section.dimmable {
+  opacity: 0.4;
+  transition: opacity var(--dur-base) var(--ease-out-quart);
+}
+.shortcuts-section.dimmable.section-active {
+  opacity: 1;
+}
+.shortcuts-caption {
+  margin: 6px 0 0;
+  font-size: 9px;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+/* Staggered entrance — re-plays on every expand because the :not(.collapsed)
+   match toggles, which restarts the animation. */
+.shortcuts-panel:not(.collapsed) .shortcuts-section:not(.dimmable) {
+  animation: shortcuts-row-in var(--dur-base) var(--ease-out-quart) both;
+}
+.shortcuts-panel:not(.collapsed) .shortcuts-section:nth-of-type(1) { animation-delay: 30ms; }
+.shortcuts-panel:not(.collapsed) .shortcuts-section:nth-of-type(2) { animation-delay: 70ms; }
+.shortcuts-panel:not(.collapsed) .shortcuts-section:nth-of-type(3) { animation-delay: 110ms; }
+.shortcuts-panel:not(.collapsed) .shortcuts-section:nth-of-type(4) { animation-delay: 150ms; }
+@keyframes shortcuts-row-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shortcuts-panel:not(.collapsed) .shortcuts-section { animation: none; }
 }
 
 /* ══════════════════════════════════════════════════════════════
