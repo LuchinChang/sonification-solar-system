@@ -65,25 +65,32 @@ export function drawScene(ctx: CanvasRenderingContext2D, state: AppState): void 
   ctx.fillStyle = ct.bg;
   ctx.fillRect(0, 0, w, h);
 
-  const cx = w / 2;
-  const cy = h / 2;
-
-  // Sun (radial glow + solid core + breathing pulse)
-  const breathPhase = Math.sin(performance.now() / 4000 * Math.PI * 2);
-  const glowRadius = 34 + breathPhase * 8;
-  const sunGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowRadius);
-  sunGlow.addColorStop(0,   ct.sunGlow0);
-  sunGlow.addColorStop(0.5, ct.sunGlow1);
-  sunGlow.addColorStop(1,   ct.sunGlow2);
-  ctx.beginPath();
-  ctx.arc(cx, cy, glowRadius, 0, Math.PI * 2);
-  ctx.fillStyle = sunGlow;
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.arc(cx, cy, 10, 0, Math.PI * 2);
-  ctx.fillStyle = ct.sunCore;
-  ctx.fill();
+  // LEGACY (2026-06-06): Sun glyph removed — visually irrelevant to the
+  // link-lines, per user request. The simulation still anchors at the canvas
+  // center via sunPos()/state and sweeper arms still emanate from it; this only
+  // drops the *drawn* sun. cx/cy lived here solely to position the sun glow and
+  // the dust sun-proximity falloff (dust draw also removed below), so they are
+  // quarantined together to keep `tsc --noEmit` (noUnusedLocals) happy.
+  // To revive: uncomment this block AND the dust draw call further down.
+  // const cx = w / 2;
+  // const cy = h / 2;
+  //
+  // // Sun (radial glow + solid core + breathing pulse)
+  // const breathPhase = Math.sin(performance.now() / 4000 * Math.PI * 2);
+  // const glowRadius = 34 + breathPhase * 8;
+  // const sunGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowRadius);
+  // sunGlow.addColorStop(0,   ct.sunGlow0);
+  // sunGlow.addColorStop(0.5, ct.sunGlow1);
+  // sunGlow.addColorStop(1,   ct.sunGlow2);
+  // ctx.beginPath();
+  // ctx.arc(cx, cy, glowRadius, 0, Math.PI * 2);
+  // ctx.fillStyle = sunGlow;
+  // ctx.fill();
+  //
+  // ctx.beginPath();
+  // ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+  // ctx.fillStyle = ct.sunCore;
+  // ctx.fill();
 
   // Orbital link lines (progressive during draw animation)
   ctx.strokeStyle = ct.linkLine;
@@ -113,8 +120,12 @@ export function drawScene(ctx: CanvasRenderingContext2D, state: AppState): void 
     shape.drawPlayhead(ctx);
   }
 
-  // Ambient dust particles
-  updateAndDrawDust(ctx, state.dustMotes, 16, w, h, cx, cy, state.currentTheme === 'dark');
+  // LEGACY (2026-06-06): Ambient dust particles removed — visually irrelevant
+  // to the link-lines, per user request. initDust()/state.dustMotes + their
+  // tests stay intact; only the per-frame draw is dropped. To revive, uncomment
+  // this AND restore cx/cy in the sun block above (dust uses them for the
+  // sun-proximity brightness falloff).
+  // updateAndDrawDust(ctx, state.dustMotes, 16, w, h, cx, cy, state.currentTheme === 'dark');
 
   // LC signature monogram
   ctx.save();
