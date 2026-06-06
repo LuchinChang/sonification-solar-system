@@ -10,7 +10,7 @@ Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-desig
 
 ### Commands
 - `npm run dev` — Vite dev server on port 5173
-- `npm test` — Vitest single run (20 suites pass, 220+ tests; 2 require `jsdom` — install if needed)
+- `npm test` — Vitest single run (24 suites, 266 tests pass, 4 skipped; some skipped tests require `jsdom` — install if needed)
 - `npm run test:watch` — Vitest in watch mode
 - `npm run build` — TypeScript compile (`tsc`) then Vite bundle
 - `npm run deploy` — gh-pages deploy of `dist/`
@@ -38,7 +38,7 @@ Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-desig
 
 ### Test the features yourself before telling me you are done
 
-1. Run `npm test` to verify all 22 test suites pass (no pre-commit hook — this is a manual step)
+1. Run `npm test` to verify all 24 test suites pass. A local pre-commit hook (`.git/hooks/pre-commit`) also runs `tsc --noEmit` + `vitest run` and blocks the commit on failure — but it's local-only (not version-controlled), so run the tests yourself rather than relying on it.
 
 #### E2E tests
 
