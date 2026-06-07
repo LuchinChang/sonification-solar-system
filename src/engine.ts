@@ -221,6 +221,14 @@ export const SOLAR_SYNODIC_ROTATION_DAYS = 27.275;
 export const MOON_VIEW_JITTER_DAYS = 0.45;
 export const MOON_VIEW_JITTER_PERIOD_DAYS = 109.1; // ≈ 4 × SOLAR_SYNODIC_ROTATION_DAYS
 
+// ─── Eclipse markers (currently UNWIRED) ──────────────────────────
+// `calculateMoonEclipses` + the constants/type below are kept and unit-tested
+// but no longer used by any pattern: eclipses (Sun-Moon syzygy at a node) arise
+// from the synodic month + 18.6-yr nodal cycle, which have nothing to do with
+// the hexagon's solar-rotation/lunar-month resonance. Removed from the Moon-Earth
+// figure 2026-06-07 as a conceptually unrelated overlay; retained here in case a
+// future pattern wants to plot eclipses on their own.
+
 /** Lunar orbit inclination to the ecliptic, degrees. */
 export const MOON_INCLINATION_DEG = 5.145;
 /** Nodal regression period (line of nodes), years — retrograde. */

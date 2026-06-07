@@ -180,7 +180,7 @@ export const PATTERNS: PlanetaryPattern[] = [
       { atProgress: 0.30, text: 'Each view, the Moon falls a little behind — the dots drift.', duration: 5 },
       { atProgress: 0.55, text: 'Its distance swells and shrinks six times per turn.', duration: 5 },
       { atProgress: 0.75, text: 'Six corners emerge: the Lunar Hexagon.', duration: 5 },
-      { atProgress: 0.88, text: 'Bright dots mark eclipses — Sun, Earth and Moon in a line.', duration: 4 },
+      { atProgress: 0.88, text: 'Small loops trace the Moon dallying along its course.', duration: 4 },
       { atProgress: 0.97, text: 'The pattern is complete. The canvas is yours.', duration: 3 },
     ],
   },

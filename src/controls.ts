@@ -4,7 +4,7 @@
 // and playback toggle.
 
 import { CanvasShape, resetNextId, type ShapeType } from './shapes';
-import { calculateGeocentricLines, calculateEllipticalLines, calculateCardioidLines, calculateMoonHexagonLines, calculateMoonEclipses, SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS, clamp } from './engine';
+import { calculateGeocentricLines, calculateEllipticalLines, calculateCardioidLines, calculateMoonHexagonLines, SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS, clamp } from './engine';
 import { PATTERNS, computeAuScale, renderPatternThumbnail, type PlanetaryPattern } from './patterns';
 import type { AppState } from './state';
 import {
@@ -64,8 +64,6 @@ export function calculateLines(state: AppState, canvas: HTMLCanvasElement): void
   const cx = canvas.width / 2;
   const cy = canvas.height / 2;
   const pattern = state.currentPattern;
-  // Eclipse markers belong to the moon-hexagon pattern only; clear by default.
-  state.eclipseDots = [];
   if (pattern.kind === 'cardioid' && pattern.cardioid) {
     state.linkLines = calculateCardioidLines(
       cx, cy,
@@ -78,12 +76,6 @@ export function calculateLines(state: AppState, canvas: HTMLCanvasElement): void
     const apsidalDays = (pattern.precessionPeriodYears1 ?? 8.85) * 365.25;
     state.linkLines = calculateMoonHexagonLines(
       cx, cy, state.sampleRate, a, e, anomMonth, apsidalDays,
-      SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS,
-    );
-    const totalDays = state.sampleRate * SOLAR_SYNODIC_ROTATION_DAYS;
-    state.eclipseDots = calculateMoonEclipses(
-      cx, cy, totalDays, a, e, anomMonth, apsidalDays, pattern.period2 ?? 365.2422,
-      undefined, undefined, undefined,
       SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS,
     );
   } else if (pattern.geocentric) {
@@ -268,9 +260,6 @@ function applyPattern(state: AppState, dom: DomElements, pattern: PlanetaryPatte
   const cx = dom.canvas.width / 2;
   const cy = dom.canvas.height / 2;
 
-  // Eclipse markers belong to the moon-hexagon pattern only; clear by default.
-  state.eclipseDots = [];
-
   if (pattern.kind === 'cardioid' && pattern.cardioid) {
     // Cardioid: no AU-based orbit; use the configured radius as the bounding circle.
     state.currentInnerR = 0;
@@ -300,12 +289,6 @@ function applyPattern(state: AppState, dom: DomElements, pattern: PlanetaryPatte
     const apsidalDays = (pattern.precessionPeriodYears1 ?? 8.85) * 365.25;
     state.fullLinkLines = calculateMoonHexagonLines(
       cx, cy, state.sampleRate, a, e, anomMonth, apsidalDays,
-      SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS,
-    );
-    const totalDays = state.sampleRate * SOLAR_SYNODIC_ROTATION_DAYS;
-    state.eclipseDots = calculateMoonEclipses(
-      cx, cy, totalDays, a, e, anomMonth, apsidalDays, state.currentOuterPeriod,
-      undefined, undefined, undefined,
       SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS,
     );
   } else {

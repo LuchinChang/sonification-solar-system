@@ -8,7 +8,6 @@ import type { Point } from './geometry';
 import type { CanvasShape } from './shapes';
 import type { PlanetaryPattern } from './patterns';
 import { PATTERNS } from './patterns';
-import type { EclipseDot } from './engine';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -97,10 +96,6 @@ export interface AppState {
   linkLines: LinkLine[];
   fullLinkLines: LinkLine[];
 
-  // Moon-hexagon eclipse markers (empty for every other pattern).
-  // True Sun-Earth-Moon alignments: syzygy occurring near a lunar node.
-  eclipseDots: EclipseDot[];
-
   // Draw animation
   drawAnimActive: boolean;
   drawAnimStartTime: number;
@@ -171,7 +166,6 @@ export function createInitialState(): AppState {
     sampleRate: 500,
     linkLines: [],
     fullLinkLines: [],
-    eclipseDots: [],
 
     // Draw animation
     drawAnimActive: false,
