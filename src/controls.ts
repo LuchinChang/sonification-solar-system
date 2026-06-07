@@ -4,7 +4,7 @@
 // and playback toggle.
 
 import { CanvasShape, resetNextId, type ShapeType } from './shapes';
-import { calculateGeocentricLines, calculateEllipticalLines, calculateCardioidLines, clamp } from './engine';
+import { calculateGeocentricLines, calculateEllipticalLines, calculateCardioidLines, calculateMoonHexagonLines, SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS, clamp } from './engine';
 import { PATTERNS, computeAuScale, renderPatternThumbnail, type PlanetaryPattern } from './patterns';
 import type { AppState } from './state';
 import {
@@ -68,6 +68,15 @@ export function calculateLines(state: AppState, canvas: HTMLCanvasElement): void
     state.linkLines = calculateCardioidLines(
       cx, cy,
       state.sampleRate, pattern.cardioid.multiplier, pattern.cardioid.radius,
+    );
+  } else if (pattern.kind === 'moon-hexagon') {
+    const a = state.currentInnerR;
+    const e = pattern.eccentricity1 ?? 0;
+    const anomMonth = pattern.period1 ?? 27.5545;
+    const apsidalDays = (pattern.precessionPeriodYears1 ?? 8.85) * 365.25;
+    state.linkLines = calculateMoonHexagonLines(
+      cx, cy, state.sampleRate, a, e, anomMonth, apsidalDays,
+      SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS,
     );
   } else if (pattern.geocentric) {
     state.linkLines = calculateGeocentricLines(
@@ -262,6 +271,25 @@ function applyPattern(state: AppState, dom: DomElements, pattern: PlanetaryPatte
     state.fullLinkLines = calculateCardioidLines(
       cx, cy,
       state.sampleRate, pattern.cardioid.multiplier, pattern.cardioid.radius,
+    );
+  } else if (pattern.kind === 'moon-hexagon') {
+    // Stroboscopic Moon hexagon: scale by the Moon's own apogee, sample once
+    // per Sun-Earth-View (27.275 d). Sample rate = number of views drawn;
+    // default to ~one full hexagon as the exploration starting point.
+    const a = (pattern.au1 ?? 0.00257) * state.currentAuScale;
+    const e = pattern.eccentricity1 ?? 0;
+    state.currentInnerR = a;
+    state.currentOuterR = a;
+    state.currentInnerPeriod = pattern.period1 ?? 27.5545;
+    state.currentOuterPeriod = pattern.period2 ?? 365.2422;
+    state.orbitalMaxRadius = a * (1 + e) * 1.05;
+    state.sampleRate = 600;
+
+    const anomMonth = state.currentInnerPeriod;
+    const apsidalDays = (pattern.precessionPeriodYears1 ?? 8.85) * 365.25;
+    state.fullLinkLines = calculateMoonHexagonLines(
+      cx, cy, state.sampleRate, a, e, anomMonth, apsidalDays,
+      SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS,
     );
   } else {
     const au1 = Math.min(pattern.au1 ?? 1, pattern.au2 ?? 1);

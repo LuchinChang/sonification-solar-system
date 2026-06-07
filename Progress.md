@@ -1,5 +1,82 @@
 # Progress & lessons-learned
 
+## 2026-06-06b — Scallop loops via jittered strobe (NOT dense plotting)
+
+To match Hartmut's reference more closely (woven "scallop" loops on the hexagon
+edges), the first attempt plotted the Moon **densely** in the co-rotating
+Sun-Earth-View frame. **It produced a circle, not a hexagon** — verified by
+rendering.
+
+**Why dense fails.** The Moon hits apogee once per anomalistic month, and over
+44 yr that happens at *every* angle → the dense curve touches the outer radius
+everywhere → the envelope is a full circle. The six corners exist *only* because
+the 27.275-day strobe **aliases** apogee onto six angles. Sampling finely
+destroys the very aliasing that makes the hexagon.
+
+**The fix — jittered strobe.** Keep the 27.275-day strobe (so the hexagon
+survives) but offset each Sun-Earth-View time by a small periodic amount:
+`t = n·viewDays + jitterDays·sin(2π·t/jitterPeriodDays)`. The offset nudges the
+Moon's longitude by more than the ~0.6° gap between consecutive views, so the
+polyline crosses itself into small loops, while the radius (hence the six-fold)
+is essentially unchanged. Empirically tuned `MOON_VIEW_JITTER_DAYS = 0.45`,
+`MOON_VIEW_JITTER_PERIOD_DAYS = 109.1` (≈ 4 views) reproduces the reference's
+woven edge. Segment count stays ~600, so the sweeper audio "follows the
+scallops" with no perf change. `calculateMoonHexagonLines` gained
+`jitterDays`/`jitterPeriodDays` params (default 0 = clean hexagon, used by tests).
+
+**Lesson.** When a figure is a *stroboscopic/aliased* artifact, "add detail by
+sampling finer" is exactly backwards — it erases the artifact. Add detail by
+perturbing the sample *times*, not by adding samples.
+
+## 2026-06-06 — Moon-Earth lunar hexagon (replaces Lunar Hexagon)
+
+Replaced the chord-based `lunar-hexagon` pattern with `moon-earth` (`kind:
+'moon-hexagon'`), reproducing the lunar hexagon from Hartmut Warm's *Signature
+of the Celestial Spheres*. New engine fns in `src/engine.ts`:
+`calculateMoonHexagonLines` + `calculateMoonEclipses`.
+
+### Gotcha 1 — a dense inertial trace is NOT a hexagon; the strobe is everything
+
+**Symptom.** First implementation traced the Moon's precessing ellipse densely
+(every sample) → a smeared ring/flower, not a hexagon.
+
+**Root cause.** The hexagon only exists in the **stroboscopic frame**: sample
+the Moon's geocentric position once per *Sun-Earth-View* = the synodic
+solar-rotation period **27.275 days**, then connect consecutive samples. Per
+sample the longitude regresses ≈0.62° (beat vs 27.322 d sidereal month) while
+the distance phase regresses ≈3.65° (beat vs 27.555 d anomalistic month), so
+distance completes ≈6 cycles per longitude turn → six lobes. `rmin/rmax ≈
+0.896` (perigee/apogee), matching the reference's 363k/405k km.
+
+**Lesson.** The sample interval *is* the algorithm. Don't increase resolution to
+"smooth" a strobe figure — that destroys it.
+
+### Gotcha 2 — eclipse markers, not all syzygies
+
+True conjunctions (every ~14.8 d) plotted at their real positions fill the whole
+annulus (the Sun points everywhere over 44 yr) and bury the hexagon. The
+reference's sparse dots are **eclipses**: a syzygy occurring near a lunar node.
+`calculateMoonEclipses` adds the node cycle (incl 5.145°, nodal regression
+18.6 yr) and keeps only syzygies with |ecliptic latitude| < 0.9° → ~2.8/yr
+(solar=New, lunar=Full), drawn as gold/red dots on the hexagon.
+
+### Gotcha 3 (process) — edit inside the worktree, not the main checkout
+
+The Explore agent reported main-repo absolute paths; edits initially landed in
+the main checkout while the dev server + `vitest` ran against the worktree, so
+"passing tests" were testing unmodified code. Fix: `git -C main diff -- <files>
+| git -C worktree apply`, then revert main. **Lesson:** when in a worktree, all
+edit paths must be under the worktree root; verify with `git status` in the
+worktree before trusting a green test run.
+
+### Verification note
+
+Headless preview can't satisfy the AudioContext gate (overlay stays up) and ran
+multiple page mounts, making screenshots unreliable. Verified instead via 272
+passing unit tests + a `vite-node` render of the real engine to PNG (hexagon +
+123 eclipses over 43.9 yr ≈ 2.8/yr). Live sweeper *audio* over the new geometry
+was not verifiable headless.
+
 ## 2026-04-22 — Voice fan-out, slot-density gain, orphan-chip skip (bug-fix round 3)
 
 Five UX/semantic bugs on the graph-based sweeper pipeline, discovered after

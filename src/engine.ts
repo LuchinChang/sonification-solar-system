@@ -198,6 +198,191 @@ export function calculateGeocentricLines(
   return lines;
 }
 
+// ─── Moon–Earth stroboscopic hexagon ──────────────────────────────
+//
+// Reproduces the "lunar hexagon" from Hartmut Warm's *Signature of the
+// Celestial Spheres*. The Moon's geocentric position is sampled once per
+// "Sun-Earth-View" — the synodic solar-rotation period, 27.275 days — and
+// consecutive samples are connected. Each sample the Moon's longitude
+// regresses ≈0.62° (beat vs the sidereal month) while its distance phase
+// regresses ≈3.65° (beat vs the anomalistic month); the distance therefore
+// completes ≈6 cycles per longitude revolution → six lobes → a hexagon.
+// A *dense* trace would smear into a ring; the hexagon exists only at the
+// 27.275-day strobe interval.
+
+/** Synodic solar-rotation period ("Sun-Earth-View" interval), in days. */
+export const SOLAR_SYNODIC_ROTATION_DAYS = 27.275;
+
+/**
+ * Sun-Earth-View timing jitter used by the live pattern to reproduce Hartmut's
+ * scallop loops. Empirically tuned (amplitude ~0.45 d, period ≈ 4 Sun-Earth-Views)
+ * to match the reference figure's woven edge while keeping the six-fold hexagon.
+ */
+export const MOON_VIEW_JITTER_DAYS = 0.45;
+export const MOON_VIEW_JITTER_PERIOD_DAYS = 109.1; // ≈ 4 × SOLAR_SYNODIC_ROTATION_DAYS
+
+// ─── Eclipse markers (currently UNWIRED) ──────────────────────────
+// `calculateMoonEclipses` + the constants/type below are kept and unit-tested
+// but no longer used by any pattern: eclipses (Sun-Moon syzygy at a node) arise
+// from the synodic month + 18.6-yr nodal cycle, which have nothing to do with
+// the hexagon's solar-rotation/lunar-month resonance. Removed from the Moon-Earth
+// figure 2026-06-07 as a conceptually unrelated overlay; retained here in case a
+// future pattern wants to plot eclipses on their own.
+
+/** Lunar orbit inclination to the ecliptic, degrees. */
+export const MOON_INCLINATION_DEG = 5.145;
+/** Nodal regression period (line of nodes), years — retrograde. */
+export const MOON_NODAL_PERIOD_YEARS = 18.6;
+/**
+ * Ecliptic-latitude limit (degrees) below which a syzygy counts as an eclipse.
+ * Real eclipses require the Moon near a node at New/Full Moon; ~0.9° keeps the
+ * set sparse (a few per year) so the markers read as discrete points on the
+ * hexagon rather than filling the annulus.
+ */
+export const ECLIPSE_LAT_LIMIT_DEG = 0.9;
+
+/** A true Sun-Earth-Moon alignment: `solar` = New Moon eclipse, `lunar` = Full Moon eclipse. */
+export type EclipseDot = { x: number; y: number; atProgress: number; kind: 'solar' | 'lunar' };
+
+/**
+ * Moon geocentric position at time `t` (days), inertial frame.
+ * Mean anomaly advances at the anomalistic rate and the line of apsides
+ * precesses at the apsidal rate, so the longitude (ν + ω) advances at the
+ * sidereal rate (1/T_anom + 1/T_apsidal = 1/T_sidereal). Returns canvas
+ * coords plus radius `r`, ecliptic longitude `lambda`, and mean anomaly `M`.
+ */
+function moonPosAt(
+  cx: number,
+  cy: number,
+  t: number,
+  a: number,
+  e: number,
+  anomMonth: number,
+  apsidalDays: number,
+): { x: number; y: number; r: number; lambda: number } {
+  const M = (t / anomMonth) * 2 * Math.PI;
+  const E = solveKepler(M, e);
+  const nu = 2 * Math.atan2(
+    Math.sqrt(1 + e) * Math.sin(E / 2),
+    Math.sqrt(1 - e) * Math.cos(E / 2),
+  );
+  const r = a * (1 - e * Math.cos(E));
+  const omega = (t / apsidalDays) * 2 * Math.PI;
+  const lambda = nu + omega;
+  return { x: cx + r * Math.cos(lambda), y: cy + r * Math.sin(lambda), r, lambda };
+}
+
+/** Time (days) of the n-th Sun-Earth-View, with the optional timing jitter applied. */
+function hexViewTime(n: number, viewDays: number, jitterDays: number, jitterPeriodDays: number): number {
+  const tBase = n * viewDays;
+  return tBase + jitterDays * Math.sin((2 * Math.PI * tBase) / jitterPeriodDays);
+}
+
+/**
+ * Stroboscopic Moon hexagon: `sampleCount` Moon positions taken every
+ * `viewDays` (default 27.275 d), connected as a polyline. These segments are
+ * the pattern's link lines — sweepers probe them like any other pattern.
+ *
+ * Optional **timing jitter** reproduces Hartmut Warm's scallop loops: each
+ * Sun-Earth-View time is offset by `jitterDays·sin(2π·t/jitterPeriodDays)`,
+ * modelling the small (~0.15 d) fluctuation in the Sun-Earth-View interval.
+ * Because that offset nudges the Moon's longitude by more than the ~0.6° gap
+ * between consecutive views, the polyline crosses itself into small loops while
+ * the radius (hence the six-fold hexagon) is essentially unchanged. The default
+ * `jitterDays = 0` gives the clean hexagon (used by the unit tests); the live
+ * pattern passes a small non-zero value.
+ */
+export function calculateMoonHexagonLines(
+  cx: number,
+  cy: number,
+  sampleCount: number,
+  a: number,
+  e: number,
+  anomMonth: number,
+  apsidalDays: number,
+  viewDays: number = SOLAR_SYNODIC_ROTATION_DAYS,
+  jitterDays: number = 0,
+  jitterPeriodDays: number = 365.2422,
+): LinkLine[] {
+  const lines: LinkLine[] = [];
+  const sampleAt = (n: number) =>
+    moonPosAt(cx, cy, hexViewTime(n, viewDays, jitterDays, jitterPeriodDays), a, e, anomMonth, apsidalDays);
+  let prev = sampleAt(0);
+  for (let n = 1; n <= sampleCount; n++) {
+    const cur = sampleAt(n);
+    lines.push({ p1: { x: prev.x, y: prev.y }, p2: { x: cur.x, y: cur.y } });
+    prev = cur;
+  }
+  return lines;
+}
+
+/**
+ * Find eclipse dots over `[0, totalDays]`: true Sun-Earth-Moon alignments.
+ *
+ * A syzygy (sign-flip of sin(λ_moon − λ_sun)) only produces an eclipse when the
+ * Moon is also near a node — i.e. its ecliptic latitude β = i·sin(λ_moon − Ω)
+ * is small, where the node longitude Ω regresses with an 18.6-year period.
+ * `kind` is `solar` at New Moon (cos(λ_moon − λ_sun) > 0) or `lunar` at Full
+ * Moon. Dots carry `atProgress` (0..1) so they reveal in sync with the draw-in.
+ *
+ * The result is naturally sparse (a handful per year), so the markers read as
+ * discrete points on the hexagon rather than filling the annulus — matching the
+ * reference figure.
+ *
+ * Each dot is **snapped to the nearest Sun-Earth-View vertex** (using the same
+ * `viewDays`/jitter as the hexagon) so it sits exactly on the drawn curve rather
+ * than floating at its true off-vertex position.
+ */
+export function calculateMoonEclipses(
+  cx: number,
+  cy: number,
+  totalDays: number,
+  a: number,
+  e: number,
+  anomMonth: number,
+  apsidalDays: number,
+  sunYearDays: number = 365.2422,
+  nodalPeriodYears: number = MOON_NODAL_PERIOD_YEARS,
+  latLimitDeg: number = ECLIPSE_LAT_LIMIT_DEG,
+  fineStepDays: number = 0.25,
+  viewDays: number = SOLAR_SYNODIC_ROTATION_DAYS,
+  jitterDays: number = 0,
+  jitterPeriodDays: number = 365.2422,
+): EclipseDot[] {
+  const dots: EclipseDot[] = [];
+  const steps = Math.max(2, Math.ceil(totalDays / fineStepDays));
+  const nodalDays = nodalPeriodYears * 365.25;
+  const incl = MOON_INCLINATION_DEG * (Math.PI / 180);
+  const latLimit = latLimitDeg * (Math.PI / 180);
+
+  const sample = (i: number) => {
+    const t = (i / steps) * totalDays;
+    const m = moonPosAt(cx, cy, t, a, e, anomMonth, apsidalDays);
+    const sunLambda = (t / sunYearDays) * 2 * Math.PI;
+    return { m, t, dSyz: m.lambda - sunLambda, syz: Math.sin(m.lambda - sunLambda) };
+  };
+
+  let prev = sample(0);
+  for (let i = 1; i <= steps; i++) {
+    const cur = sample(i);
+    // Syzygy: sin(λ_moon − λ_sun) crosses zero between samples.
+    if (prev.syz * cur.syz < 0) {
+      // Moon's ecliptic latitude at the crossing (node Ω regresses over 18.6 yr).
+      const omegaNode = -(cur.t / nodalDays) * 2 * Math.PI;
+      const beta = Math.asin(Math.sin(incl) * Math.sin(cur.m.lambda - omegaNode));
+      if (Math.abs(beta) < latLimit) {
+        const kind: EclipseDot['kind'] = Math.cos(cur.dSyz) > 0 ? 'solar' : 'lunar';
+        // Snap to the nearest Sun-Earth-View vertex so the dot sits on the curve.
+        const n = Math.round(cur.t / viewDays);
+        const v = moonPosAt(cx, cy, hexViewTime(n, viewDays, jitterDays, jitterPeriodDays), a, e, anomMonth, apsidalDays);
+        dots.push({ x: v.x, y: v.y, atProgress: cur.t / totalDays, kind });
+      }
+    }
+    prev = cur;
+  }
+  return dots;
+}
+
 /**
  * Calculate cardioid (multiplication-table-on-a-circle) link lines.
  *

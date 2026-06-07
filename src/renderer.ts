@@ -104,6 +104,24 @@ export function drawScene(ctx: CanvasRenderingContext2D, state: AppState): void 
     ctx.stroke();
   }
 
+  // Moon-hexagon: a dot at each Sun-Earth-View position, so the figure reads as
+  // "positions + connecting lines" (like Hartmut's). Other patterns draw lines
+  // only. Reveal count tracks the draw-in via drawLineCount.
+  if (state.currentPattern.kind === 'moon-hexagon' && state.linkLines.length > 0) {
+    ctx.save();
+    ctx.fillStyle = state.currentTheme === 'dark'
+      ? 'rgba(194, 118, 46, 0.9)'
+      : 'rgba(92, 58, 33, 0.75)';
+    const dotCount = state.drawAnimActive ? state.drawLineCount : state.linkLines.length;
+    const first = state.linkLines[0].p1;
+    ctx.beginPath(); ctx.arc(first.x, first.y, 1.3, 0, Math.PI * 2); ctx.fill();
+    for (let i = 0; i < dotCount; i++) {
+      const p = state.linkLines[i].p2;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 1.3, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
   // Shapes, intersection dots, playheads, trigger rings
   for (const shape of state.shapes) {
     shape.draw(ctx);
