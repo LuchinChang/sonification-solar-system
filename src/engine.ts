@@ -264,6 +264,12 @@ function moonPosAt(
   return { x: cx + r * Math.cos(lambda), y: cy + r * Math.sin(lambda), r, lambda };
 }
 
+/** Time (days) of the n-th Sun-Earth-View, with the optional timing jitter applied. */
+function hexViewTime(n: number, viewDays: number, jitterDays: number, jitterPeriodDays: number): number {
+  const tBase = n * viewDays;
+  return tBase + jitterDays * Math.sin((2 * Math.PI * tBase) / jitterPeriodDays);
+}
+
 /**
  * Stroboscopic Moon hexagon: `sampleCount` Moon positions taken every
  * `viewDays` (default 27.275 d), connected as a polyline. These segments are
@@ -291,11 +297,8 @@ export function calculateMoonHexagonLines(
   jitterPeriodDays: number = 365.2422,
 ): LinkLine[] {
   const lines: LinkLine[] = [];
-  const sampleAt = (n: number) => {
-    const tBase = n * viewDays;
-    const t = tBase + jitterDays * Math.sin((2 * Math.PI * tBase) / jitterPeriodDays);
-    return moonPosAt(cx, cy, t, a, e, anomMonth, apsidalDays);
-  };
+  const sampleAt = (n: number) =>
+    moonPosAt(cx, cy, hexViewTime(n, viewDays, jitterDays, jitterPeriodDays), a, e, anomMonth, apsidalDays);
   let prev = sampleAt(0);
   for (let n = 1; n <= sampleCount; n++) {
     const cur = sampleAt(n);
@@ -317,6 +320,10 @@ export function calculateMoonHexagonLines(
  * The result is naturally sparse (a handful per year), so the markers read as
  * discrete points on the hexagon rather than filling the annulus — matching the
  * reference figure.
+ *
+ * Each dot is **snapped to the nearest Sun-Earth-View vertex** (using the same
+ * `viewDays`/jitter as the hexagon) so it sits exactly on the drawn curve rather
+ * than floating at its true off-vertex position.
  */
 export function calculateMoonEclipses(
   cx: number,
@@ -330,6 +337,9 @@ export function calculateMoonEclipses(
   nodalPeriodYears: number = MOON_NODAL_PERIOD_YEARS,
   latLimitDeg: number = ECLIPSE_LAT_LIMIT_DEG,
   fineStepDays: number = 0.25,
+  viewDays: number = SOLAR_SYNODIC_ROTATION_DAYS,
+  jitterDays: number = 0,
+  jitterPeriodDays: number = 365.2422,
 ): EclipseDot[] {
   const dots: EclipseDot[] = [];
   const steps = Math.max(2, Math.ceil(totalDays / fineStepDays));
@@ -354,7 +364,10 @@ export function calculateMoonEclipses(
       const beta = Math.asin(Math.sin(incl) * Math.sin(cur.m.lambda - omegaNode));
       if (Math.abs(beta) < latLimit) {
         const kind: EclipseDot['kind'] = Math.cos(cur.dSyz) > 0 ? 'solar' : 'lunar';
-        dots.push({ x: cur.m.x, y: cur.m.y, atProgress: cur.t / totalDays, kind });
+        // Snap to the nearest Sun-Earth-View vertex so the dot sits on the curve.
+        const n = Math.round(cur.t / viewDays);
+        const v = moonPosAt(cx, cy, hexViewTime(n, viewDays, jitterDays, jitterPeriodDays), a, e, anomMonth, apsidalDays);
+        dots.push({ x: v.x, y: v.y, atProgress: cur.t / totalDays, kind });
       }
     }
     prev = cur;

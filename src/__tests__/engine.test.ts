@@ -147,6 +147,20 @@ describe('calculateMoonEclipses', () => {
     const tight = calculateMoonEclipses(cx, cy, totalDays, a, e, anomMonth, apsidalDays, sunYear, 18.6, 0.4);
     expect(tight.length).toBeLessThan(wide.length);
   });
+
+  it('snaps each eclipse onto a Sun-Earth-View vertex (on the curve)', () => {
+    const jit = [SOLAR_SYNODIC_ROTATION_DAYS, 0.45, 109.1] as const;
+    const lines = calculateMoonHexagonLines(cx, cy, 588, a, e, anomMonth, apsidalDays, ...jit);
+    const key = (x: number, y: number) => `${x.toFixed(2)},${y.toFixed(2)}`;
+    const verts = new Set<string>([key(lines[0].p1.x, lines[0].p1.y)]);
+    for (const l of lines) verts.add(key(l.p2.x, l.p2.y));
+    const eclipses = calculateMoonEclipses(
+      cx, cy, totalDays, a, e, anomMonth, apsidalDays, sunYear,
+      undefined, undefined, undefined, ...jit,
+    );
+    expect(eclipses.length).toBeGreaterThan(0);
+    for (const d of eclipses) expect(verts.has(key(d.x, d.y))).toBe(true);
+  });
 });
 
 // ── clamp ────────────────────────────────────────────────────────────────────

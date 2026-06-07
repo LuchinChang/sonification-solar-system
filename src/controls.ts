@@ -83,6 +83,8 @@ export function calculateLines(state: AppState, canvas: HTMLCanvasElement): void
     const totalDays = state.sampleRate * SOLAR_SYNODIC_ROTATION_DAYS;
     state.eclipseDots = calculateMoonEclipses(
       cx, cy, totalDays, a, e, anomMonth, apsidalDays, pattern.period2 ?? 365.2422,
+      undefined, undefined, undefined,
+      SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS,
     );
   } else if (pattern.geocentric) {
     state.linkLines = calculateGeocentricLines(
@@ -303,6 +305,8 @@ function applyPattern(state: AppState, dom: DomElements, pattern: PlanetaryPatte
     const totalDays = state.sampleRate * SOLAR_SYNODIC_ROTATION_DAYS;
     state.eclipseDots = calculateMoonEclipses(
       cx, cy, totalDays, a, e, anomMonth, apsidalDays, state.currentOuterPeriod,
+      undefined, undefined, undefined,
+      SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS,
     );
   } else {
     const au1 = Math.min(pattern.au1 ?? 1, pattern.au2 ?? 1);
