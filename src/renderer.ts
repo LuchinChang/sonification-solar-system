@@ -104,6 +104,24 @@ export function drawScene(ctx: CanvasRenderingContext2D, state: AppState): void 
     ctx.stroke();
   }
 
+  // Moon-hexagon eclipse markers (progressive reveal, synced to the draw-in).
+  // Sparse dots at true Sun-Earth-Moon alignments — solar (New Moon) in gold,
+  // lunar (Full Moon, "blood moon") in red. Visual-only; no effect on audio.
+  if (state.eclipseDots.length > 0) {
+    ctx.save();
+    ctx.shadowBlur = 5;
+    for (const d of state.eclipseDots) {
+      if (state.drawAnimActive && d.atProgress > state.drawAnimProgress) continue;
+      const color = d.kind === 'solar' ? '#FACC15' : '#EF4444';
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   // Shapes, intersection dots, playheads, trigger rings
   for (const shape of state.shapes) {
     shape.draw(ctx);

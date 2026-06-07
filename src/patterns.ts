@@ -4,7 +4,7 @@
 // Each pattern describes two planets whose orbital link lines
 // trace a spirograph-like curve over a full resonance cycle.
 
-import { calculateGeocentricLines, calculateEllipticalLines, calculateCardioidLines, type LinkLine } from './engine';
+import { calculateGeocentricLines, calculateEllipticalLines, calculateCardioidLines, calculateMoonHexagonLines, type LinkLine } from './engine';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ export interface CardioidConfig {
   radius: number;     // chord-circle radius in canvas px
 }
 
-export type PatternKind = 'planet' | 'cardioid';
+export type PatternKind = 'planet' | 'cardioid' | 'moon-hexagon';
 
 export interface PlanetaryPattern {
   id: string;
@@ -149,27 +149,38 @@ export const PATTERNS: PlanetaryPattern[] = [
       { atProgress: 0.97, text: 'The pattern is complete. The canvas is yours.', duration: 3 },
     ],
   },
+  // LEGACY (2026-06-06): the original 'lunar-hexagon' drew instantaneous
+  // Moon→Sun *chords* (geocentric: true → calculateGeocentricLines). Replaced
+  // by the stroboscopic 'moon-earth' hexagon below, which plots the Moon's own
+  // position sampled per Sun-Earth-View. Kept here in case the chord variant is
+  // revived; calculateGeocentricLines is still live for other geocentric uses.
+  // {
+  //   id: 'lunar-hexagon', name: 'Lunar Hexagon', planet1: 'Moon', planet2: 'Sun',
+  //   au1: 0.00257, au2: 1.0, period1: 27.32, period2: 365.25, simYears: 17.9,
+  //   petals: 6, geocentric: true, eccentricity1: 0.0549, precessionPeriodYears1: 8.85,
+  //   captions: [ ...Moon↔Sun chord narration... ],
+  // },
   {
-    id: 'lunar-hexagon',
-    name: 'Lunar Hexagon',
+    id: 'moon-earth',
+    name: 'Moon - Earth',
+    kind: 'moon-hexagon',
     planet1: 'Moon',
-    planet2: 'Sun',
-    au1: 0.00257,
-    au2: 1.0,
-    period1: 27.32,
-    period2: 365.25,
-    simYears: 17.9,
+    planet2: 'Earth',        // display label only; geometry is Moon-about-Earth
+    au1: 0.00257,            // Moon semi-major axis (~384,400 km)
+    au2: 1.0,                // kept for catalogue symmetry; unused by the geometry
+    period1: 27.5545,        // anomalistic month — drives the Moon's distance phase
+    period2: 365.2422,       // tropical year — Sun longitude, for syzygy detection
+    simYears: 44,            // ~one full hexagon (588 Sun-Earth-Views); explorable via sample rate
     petals: 6,
-    geocentric: true,
     eccentricity1: 0.0549,
-    precessionPeriodYears1: 8.85,
+    precessionPeriodYears1: 8.85,   // apsidal precession; with period1 → sidereal longitude
     captions: [
-      { atProgress: 0.00, text: 'The Moon and Sun, as seen from Earth...', duration: 4 },
-      { atProgress: 0.06, text: 'A line connects the Moon to the Sun at each moment.', duration: 5 },
-      { atProgress: 0.15, text: 'Every two New Moons, the alignment rotates about 60 degrees.', duration: 5 },
-      { atProgress: 0.35, text: '12.37 synodic months per year — nearly 2 per sixth of a turn.', duration: 5 },
-      { atProgress: 0.60, text: 'A hexagonal symmetry emerges from this near-integer ratio.', duration: 5 },
-      { atProgress: 0.85, text: 'The Lunar Hexagon — hidden geometry of our sky.', duration: 4 },
+      { atProgress: 0.00, text: 'The Moon, seen from Earth at each Sun-Earth-View...', duration: 4 },
+      { atProgress: 0.08, text: 'One position every 27.275 days — the Sun’s synodic rotation.', duration: 5 },
+      { atProgress: 0.30, text: 'Each view, the Moon falls a little behind — the dots drift.', duration: 5 },
+      { atProgress: 0.55, text: 'Its distance swells and shrinks six times per turn.', duration: 5 },
+      { atProgress: 0.75, text: 'Six corners emerge: the Lunar Hexagon.', duration: 5 },
+      { atProgress: 0.88, text: 'Bright dots mark eclipses — Sun, Earth and Moon in a line.', duration: 4 },
       { atProgress: 0.97, text: 'The pattern is complete. The canvas is yours.', duration: 3 },
     ],
   },
@@ -201,8 +212,14 @@ export const PATTERNS: PlanetaryPattern[] = [
  */
 export function computeAuScale(pattern: PlanetaryPattern, canvasMinDim: number): number {
   if (pattern.kind === 'cardioid') return 1;
-  const maxAu = Math.max(pattern.au1 ?? 1, pattern.au2 ?? 1);
   const targetRadius = canvasMinDim * 0.4;
+  if (pattern.kind === 'moon-hexagon') {
+    // Scale by the Moon's own apogee distance — NOT max(au1, au2). The Sun's
+    // 1.0 AU is irrelevant here; scaling to it would render the flower microscopic.
+    const apogeeAu = (pattern.au1 ?? 0.00257) * (1 + (pattern.eccentricity1 ?? 0));
+    return targetRadius / apogeeAu;
+  }
+  const maxAu = Math.max(pattern.au1 ?? 1, pattern.au2 ?? 1);
   return targetRadius / maxAu;
 }
 
@@ -233,6 +250,15 @@ export function renderPatternThumbnail(
     lines = calculateCardioidLines(
       cx, cy,
       thumbN, pattern.cardioid.multiplier, thumbRadius,
+    );
+  } else if (pattern.kind === 'moon-hexagon') {
+    const scale = computeAuScale(pattern, size);
+    const a = (pattern.au1 ?? 0.00257) * scale;
+    lines = calculateMoonHexagonLines(
+      cx, cy, 588,
+      a, pattern.eccentricity1 ?? 0,
+      pattern.period1 ?? 27.5545,
+      (pattern.precessionPeriodYears1 ?? 8.85) * 365.25,
     );
   } else if (pattern.geocentric) {
     const scale = computeAuScale(pattern, size);
