@@ -4,7 +4,7 @@
 // and playback toggle.
 
 import { CanvasShape, resetNextId, type ShapeType } from './shapes';
-import { calculateGeocentricLines, calculateEllipticalLines, calculateCardioidLines, calculateMoonHexagonLines, calculateMoonEclipses, SOLAR_SYNODIC_ROTATION_DAYS, clamp } from './engine';
+import { calculateGeocentricLines, calculateEllipticalLines, calculateCardioidLines, calculateMoonHexagonLines, calculateMoonEclipses, SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS, clamp } from './engine';
 import { PATTERNS, computeAuScale, renderPatternThumbnail, type PlanetaryPattern } from './patterns';
 import type { AppState } from './state';
 import {
@@ -78,6 +78,7 @@ export function calculateLines(state: AppState, canvas: HTMLCanvasElement): void
     const apsidalDays = (pattern.precessionPeriodYears1 ?? 8.85) * 365.25;
     state.linkLines = calculateMoonHexagonLines(
       cx, cy, state.sampleRate, a, e, anomMonth, apsidalDays,
+      SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS,
     );
     const totalDays = state.sampleRate * SOLAR_SYNODIC_ROTATION_DAYS;
     state.eclipseDots = calculateMoonEclipses(
@@ -297,6 +298,7 @@ function applyPattern(state: AppState, dom: DomElements, pattern: PlanetaryPatte
     const apsidalDays = (pattern.precessionPeriodYears1 ?? 8.85) * 365.25;
     state.fullLinkLines = calculateMoonHexagonLines(
       cx, cy, state.sampleRate, a, e, anomMonth, apsidalDays,
+      SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS,
     );
     const totalDays = state.sampleRate * SOLAR_SYNODIC_ROTATION_DAYS;
     state.eclipseDots = calculateMoonEclipses(

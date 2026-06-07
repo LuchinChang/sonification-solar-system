@@ -1,5 +1,33 @@
 # Progress & lessons-learned
 
+## 2026-06-06b — Scallop loops via jittered strobe (NOT dense plotting)
+
+To match Hartmut's reference more closely (woven "scallop" loops on the hexagon
+edges), the first attempt plotted the Moon **densely** in the co-rotating
+Sun-Earth-View frame. **It produced a circle, not a hexagon** — verified by
+rendering.
+
+**Why dense fails.** The Moon hits apogee once per anomalistic month, and over
+44 yr that happens at *every* angle → the dense curve touches the outer radius
+everywhere → the envelope is a full circle. The six corners exist *only* because
+the 27.275-day strobe **aliases** apogee onto six angles. Sampling finely
+destroys the very aliasing that makes the hexagon.
+
+**The fix — jittered strobe.** Keep the 27.275-day strobe (so the hexagon
+survives) but offset each Sun-Earth-View time by a small periodic amount:
+`t = n·viewDays + jitterDays·sin(2π·t/jitterPeriodDays)`. The offset nudges the
+Moon's longitude by more than the ~0.6° gap between consecutive views, so the
+polyline crosses itself into small loops, while the radius (hence the six-fold)
+is essentially unchanged. Empirically tuned `MOON_VIEW_JITTER_DAYS = 0.45`,
+`MOON_VIEW_JITTER_PERIOD_DAYS = 109.1` (≈ 4 views) reproduces the reference's
+woven edge. Segment count stays ~600, so the sweeper audio "follows the
+scallops" with no perf change. `calculateMoonHexagonLines` gained
+`jitterDays`/`jitterPeriodDays` params (default 0 = clean hexagon, used by tests).
+
+**Lesson.** When a figure is a *stroboscopic/aliased* artifact, "add detail by
+sampling finer" is exactly backwards — it erases the artifact. Add detail by
+perturbing the sample *times*, not by adding samples.
+
 ## 2026-06-06 — Moon-Earth lunar hexagon (replaces Lunar Hexagon)
 
 Replaced the chord-based `lunar-hexagon` pattern with `moon-earth` (`kind:

@@ -4,7 +4,7 @@
 // Each pattern describes two planets whose orbital link lines
 // trace a spirograph-like curve over a full resonance cycle.
 
-import { calculateGeocentricLines, calculateEllipticalLines, calculateCardioidLines, calculateMoonHexagonLines, type LinkLine } from './engine';
+import { calculateGeocentricLines, calculateEllipticalLines, calculateCardioidLines, calculateMoonHexagonLines, SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS, type LinkLine } from './engine';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -259,6 +259,7 @@ export function renderPatternThumbnail(
       a, pattern.eccentricity1 ?? 0,
       pattern.period1 ?? 27.5545,
       (pattern.precessionPeriodYears1 ?? 8.85) * 365.25,
+      SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS,
     );
   } else if (pattern.geocentric) {
     const scale = computeAuScale(pattern, size);

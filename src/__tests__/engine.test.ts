@@ -85,6 +85,29 @@ describe('calculateMoonHexagonLines', () => {
     expect(maxima).toBeGreaterThanOrEqual(5);
     expect(maxima).toBeLessThanOrEqual(7);
   });
+
+  it('timing jitter keeps count + distance band but adds edge loops', () => {
+    const countMaxima = (ls: { p1: { x: number; y: number }; p2: { x: number; y: number } }[]) => {
+      const r = [Math.hypot(ls[0].p1.x - cx, ls[0].p1.y - cy)];
+      for (const l of ls) r.push(Math.hypot(l.p2.x - cx, l.p2.y - cy));
+      let m = 0;
+      for (let i = 1; i < r.length - 1; i++) if (r[i] > r[i - 1] && r[i] > r[i + 1]) m++;
+      return m;
+    };
+    const clean = calculateMoonHexagonLines(cx, cy, 588, a, e, anomMonth, apsidalDays);
+    const jittered = calculateMoonHexagonLines(
+      cx, cy, 588, a, e, anomMonth, apsidalDays, SOLAR_SYNODIC_ROTATION_DAYS, 0.45, 109.1,
+    );
+    expect(jittered).toHaveLength(588); // same segment count → no audio-cost change
+    const lo = a * (1 - e) - 1e-6, hi = a * (1 + e) + 1e-6;
+    for (const l of jittered) {
+      const r = Math.hypot(l.p2.x - cx, l.p2.y - cy);
+      expect(r).toBeGreaterThanOrEqual(lo);
+      expect(r).toBeLessThanOrEqual(hi);
+    }
+    // Loops show up as extra distance-maxima beyond the clean hexagon's ~6.
+    expect(countMaxima(jittered)).toBeGreaterThan(countMaxima(clean));
+  });
 });
 
 describe('calculateMoonEclipses', () => {

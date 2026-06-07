@@ -213,6 +213,14 @@ export function calculateGeocentricLines(
 /** Synodic solar-rotation period ("Sun-Earth-View" interval), in days. */
 export const SOLAR_SYNODIC_ROTATION_DAYS = 27.275;
 
+/**
+ * Sun-Earth-View timing jitter used by the live pattern to reproduce Hartmut's
+ * scallop loops. Empirically tuned (amplitude ~0.45 d, period ≈ 4 Sun-Earth-Views)
+ * to match the reference figure's woven edge while keeping the six-fold hexagon.
+ */
+export const MOON_VIEW_JITTER_DAYS = 0.45;
+export const MOON_VIEW_JITTER_PERIOD_DAYS = 109.1; // ≈ 4 × SOLAR_SYNODIC_ROTATION_DAYS
+
 /** Lunar orbit inclination to the ecliptic, degrees. */
 export const MOON_INCLINATION_DEG = 5.145;
 /** Nodal regression period (line of nodes), years — retrograde. */
@@ -260,6 +268,15 @@ function moonPosAt(
  * Stroboscopic Moon hexagon: `sampleCount` Moon positions taken every
  * `viewDays` (default 27.275 d), connected as a polyline. These segments are
  * the pattern's link lines — sweepers probe them like any other pattern.
+ *
+ * Optional **timing jitter** reproduces Hartmut Warm's scallop loops: each
+ * Sun-Earth-View time is offset by `jitterDays·sin(2π·t/jitterPeriodDays)`,
+ * modelling the small (~0.15 d) fluctuation in the Sun-Earth-View interval.
+ * Because that offset nudges the Moon's longitude by more than the ~0.6° gap
+ * between consecutive views, the polyline crosses itself into small loops while
+ * the radius (hence the six-fold hexagon) is essentially unchanged. The default
+ * `jitterDays = 0` gives the clean hexagon (used by the unit tests); the live
+ * pattern passes a small non-zero value.
  */
 export function calculateMoonHexagonLines(
   cx: number,
@@ -270,11 +287,18 @@ export function calculateMoonHexagonLines(
   anomMonth: number,
   apsidalDays: number,
   viewDays: number = SOLAR_SYNODIC_ROTATION_DAYS,
+  jitterDays: number = 0,
+  jitterPeriodDays: number = 365.2422,
 ): LinkLine[] {
   const lines: LinkLine[] = [];
-  let prev = moonPosAt(cx, cy, 0, a, e, anomMonth, apsidalDays);
+  const sampleAt = (n: number) => {
+    const tBase = n * viewDays;
+    const t = tBase + jitterDays * Math.sin((2 * Math.PI * tBase) / jitterPeriodDays);
+    return moonPosAt(cx, cy, t, a, e, anomMonth, apsidalDays);
+  };
+  let prev = sampleAt(0);
   for (let n = 1; n <= sampleCount; n++) {
-    const cur = moonPosAt(cx, cy, n * viewDays, a, e, anomMonth, apsidalDays);
+    const cur = sampleAt(n);
     lines.push({ p1: { x: prev.x, y: prev.y }, p2: { x: cur.x, y: cur.y } });
     prev = cur;
   }
