@@ -149,6 +149,26 @@ export const PATTERNS: PlanetaryPattern[] = [
       { atProgress: 0.97, text: 'The pattern is complete. The canvas is yours.', duration: 3 },
     ],
   },
+  {
+    id: 'jupiter-uranus',
+    name: 'Jupiter - Uranus',
+    planet1: 'Jupiter',
+    planet2: 'Uranus',
+    au1: 5.203,        // ELEMENTS.Jupiter.a — matches earth-jupiter's au2
+    au2: 19.189,       // ELEMENTS.Uranus.a (19.18916464)
+    period1: 4332.6,   // Jupiter sidereal period (days) — matches earth-jupiter
+    period2: 30688.5,  // Uranus sidereal period (days) ≈ 84.01 yr
+    simYears: 84,      // one full Uranus orbit
+    petals: 6,
+    captions: [
+      { atProgress: 0.00, text: 'Jupiter and Uranus — the outer giants begin their slow dance...', duration: 4 },
+      { atProgress: 0.15, text: 'Uranus takes 84 Earth years to circle the Sun just once.', duration: 5 },
+      { atProgress: 0.35, text: 'In that same span, Jupiter laps the Sun about seven times.', duration: 5 },
+      { atProgress: 0.60, text: 'Six broad petals open between the two distant orbits.', duration: 5 },
+      { atProgress: 0.85, text: 'Jupiter - Uranus — the slow waltz of the outer giants.', duration: 4 },
+      { atProgress: 0.97, text: 'The pattern is complete. The canvas is yours.', duration: 3 },
+    ],
+  },
   // LEGACY (2026-06-06): the original 'lunar-hexagon' drew instantaneous
   // Moon→Sun *chords* (geocentric: true → calculateGeocentricLines). Replaced
   // by the stroboscopic 'moon-earth' hexagon below, which plots the Moon's own
