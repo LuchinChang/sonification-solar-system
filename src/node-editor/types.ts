@@ -9,7 +9,7 @@
 // curve/range transform, and emit a static Strudel pattern string (e.g.
 // `.freq("100 141 200 …")`). No live signal(() => globalThis.__sw_…) reads.
 
-import type { CanvasShape } from '../shapes';
+import type { CanvasShape, ShapeType } from '../shapes';
 
 // ── Side: which column a node lives in inside the editor ─────────────────────
 
@@ -125,6 +125,24 @@ export interface NodeDefinition {
   inputs?:  PortSpec[];
   outputs?: PortSpec[];
   defaultParams?: Record<string, unknown>;
+
+  /**
+   * Optional palette restriction. When set, the toolbox only offers this node
+   * while editing a probe whose `shape.type` is in the list (e.g. the discrete
+   * `sound.rhythm` / `data.collision` nodes are `['circle']`). Undefined → the
+   * node is available for every probe type (the default for sweeper nodes).
+   */
+  appliesTo?: ShapeType[];
+
+  /**
+   * Sound-side fragment ordering hint within a voice. The codegen voice-builder
+   * stable-sorts sound fragments by this (default 0) before chaining them, so
+   * higher values chain LATER. `sound.rhythm` uses a high value because its
+   * `.struct(...)` must restructure the value pattern AFTER `.freq()`/`.note()`
+   * already own the timeline — see the Step-0 Strudel spike: value-first keeps
+   * hap values clean (`"c3"`), struct-first leaks the gate (`{value:1,…}`).
+   */
+  tailOrder?: number;
 
   /**
    * Emit the Strudel source fragment for this node. Unit 14 composes all the

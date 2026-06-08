@@ -6,19 +6,28 @@
 // Audio (Strudel) is intentionally NOT wired here — code generation only.
 
 import type { Point } from './geometry';
-import { angleStdev, getRaySegmentDist, pointToSegmentDist } from './geometry';
+import { angleStdev, getLineCircleIntersections, getRaySegmentDist, pointToSegmentDist } from './geometry';
 import { resolveOscillator } from './generator-options';
-// LEGACY: disabled 2026-04-21 — non-sweeper shape support, kept for future revival.
-// To re-enable: un-comment this block and re-add 'circle' | 'triangle' | 'rectangle' to ShapeType.
-/*
-import { getLineCircleIntersections } from './geometry';
-*/
 import type { ShapeConfig, NodeGraphSnapshot } from './config-snapshot';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
-export type ShapeType   = 'sweeper';
+// A "geometric probe" is any shape whose intersection with the orbital link-line
+// field drives sound. Two probe kinds are live:
+//   • 'sweeper' — a rotating ray cast outward from a pivot; reads clusters by
+//                 distance (continuous contour → freq/gain).
+//   • 'circle'  — a closed perimeter; an angular playhead sweeps it and the
+//                 perimeter↔orbit crossings form a rhythm (discrete events).
+// Both feed the SAME node-editor pipeline via sweepTicks[arm][tick][slot] — a
+// circle is just sweepCount=1 with crossings binned by angle (bakeDiscreteTicks).
+// LEGACY (still quarantined): 'triangle' | 'rectangle' polygon probes.
+export type ShapeType   = 'sweeper' | 'circle';
 // LEGACY: previous union was 'circle' | 'triangle' | 'rectangle' | 'sweeper'
+
+/** True for discrete (closed-perimeter) probes whose audio is rhythm-first. */
+export function isDiscreteProbe(type: ShapeType): boolean {
+  return type === 'circle';
+}
 export type PlaybackMode = 'constant-time' | 'constant-speed';
 
 /**
@@ -88,8 +97,10 @@ interface TriggerAnimation {
  *  Exported so the data-side `cluster-tolerance` node can read the live value
  *  it publishes onto globalThis.__sw_<id>_tol each frame. */
 export const SWEEP_CLUSTER_THRESHOLD = 2;
-/** Accent colour palette for sweeper shapes — each sweeper gets a distinct hue. */
+/** Accent colour palette for probes — each probe gets a distinct hue. */
 const SWEEP_PALETTE = ['#2DD4BF', '#C084FC', '#F472B6', '#60A5FA', '#FACC15', '#FB923C', '#34D399', '#A78BFA'];
+/** Number of distinct probe accent colours before the palette must repeat. */
+export const PROBE_PALETTE_SIZE = SWEEP_PALETTE.length;
 
 /** Convert a hex colour (#RRGGBB) to an rgba() string with the given alpha. */
 function hexRgba(hex: string, alpha: number): string {
@@ -193,6 +204,8 @@ export class CanvasShape {
   cachedIntersections: CachedIntersection[];
   /** Live trigger animations (glowing rings). Pruned each frame. */
   activeAnimations: TriggerAnimation[];
+  /** Last tick the playhead fired a crossing ring for; edge-triggers the pulse. */
+  lastRingTick: number;
   /** Intersection count — kept up-to-date by rebuildIntersectionCache(). */
   intersectionCount: number;
   /** Live clusters recomputed every frame (sweeper only). Flat across all arms. */
@@ -243,6 +256,7 @@ export class CanvasShape {
     this.prevPlayheadAngle   = 3 * Math.PI / 2;
     this.cachedIntersections = [];
     this.activeAnimations    = [];
+    this.lastRingTick        = -1;
     this.intersectionCount   = 0;
     this.k                   = 4;
     this.sweepCount          = 1;
@@ -275,7 +289,9 @@ export class CanvasShape {
       id: this.id, type: this.type, x: this.x, y: this.y,
       size: this.size, instrument: this.instrument,
     };
-    if (this.type === 'sweeper') {
+    // Both probe kinds (sweeper + discrete circle) carry the same baked-pattern
+    // fields and an optional node-graph, so persist them for either.
+    if (this.type === 'sweeper' || this.type === 'circle') {
       base.k          = this.k;
       base.sweepCount = this.sweepCount;
       base.startAngle = this.startAngle;
@@ -318,25 +334,11 @@ export class CanvasShape {
     ctx.shadowColor = color;
     ctx.shadowBlur  = this.isSelected ? 22 : 9;
     ctx.beginPath();
-    // LEGACY: disabled 2026-04-21 — non-sweeper switch cases removed; only 'sweeper' is live.
-    // To re-enable: restore the 'circle' | 'triangle' | 'rectangle' cases below.
-    /*
-    switch (this.type) {
-      case 'circle':
-        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-        break;
-      case 'triangle':
-        this.pathTriangle(ctx);
-        break;
-      case 'rectangle':
-        ctx.rect(
-          this.x - this.size, this.y - this.size * 0.6,
-          this.size * 2,      this.size * 1.2,
-        );
-        break;
-    }
-    */
-    {
+    // LEGACY (still quarantined): 'triangle' | 'rectangle' outline cases.
+    if (this.type === 'circle') {
+      // Discrete probe: the closed perimeter the playhead sweeps.
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    } else {
       // Sweeper: draw all N arms evenly spaced around the pivot
       const armSpacing = (Math.PI * 2) / this.sweepCount;
       for (let arm = 0; arm < this.sweepCount; arm++) {
@@ -349,25 +351,20 @@ export class CanvasShape {
     }
     ctx.stroke();
 
-    // Static pre-computed tick dots — faint background showing the full sweep pattern
-    if (this.type === 'sweeper' && this.sweepTicks.length > 0) {
+    // Static pre-computed tick dots — faint background showing the full pattern.
+    // Both probe kinds store each cluster's canvas centroid in (c.x, c.y), so
+    // this renderer is geometry-agnostic: sweeper dots sit along the ray, circle
+    // dots sit at the actual perimeter↔orbit crossing points.
+    if (this.sweepTicks.length > 0) {
       ctx.save();
       ctx.shadowBlur = 0;
-      const TICKS      = this.ticks;
-      const step       = (Math.PI * 2) / TICKS;
-      const armSpacing = (Math.PI * 2) / this.sweepCount;
-      for (let arm = 0; arm < this.sweepCount; arm++) {
-        const armOffset = arm * armSpacing;
-        const armTicks  = this.sweepTicks[arm] ?? [];
+      const armTicks0 = this.sweepTicks[0] ?? [];
+      for (let arm = 0; arm < this.sweepTicks.length; arm++) {
+        const armTicks = this.sweepTicks[arm] ?? armTicks0;
         for (let i = 0; i < armTicks.length; i++) {
-          const angle = (this.startAngle + armOffset + i * step) % (Math.PI * 2);
-          const cos   = Math.cos(angle);
-          const sin   = Math.sin(angle);
           for (const c of armTicks[i]) {
-            const tx = this.x + cos * c.distance;
-            const ty = this.y + sin * c.distance;
             ctx.beginPath();
-            ctx.arc(tx, ty, 2, 0, Math.PI * 2);
+            ctx.arc(c.x, c.y, 2, 0, Math.PI * 2);
             ctx.fillStyle = hexRgba(this.sweepColor, Math.min(c.gain * 0.35, 0.28));
             ctx.fill();
           }
@@ -375,6 +372,10 @@ export class CanvasShape {
       }
       ctx.restore();
     }
+
+    // Circle playhead is shown by the bright perimeter dot (drawPlayhead) plus
+    // the expanding-ring pulse on each crossing (drawAnimations) — no clock-hand
+    // arm. (Removed 2026-06-07: the centre→perimeter line was visual noise.)
 
     // Live radar blips at current arm position — opacity varies with density
     if (this.type === 'sweeper') {
@@ -399,51 +400,55 @@ export class CanvasShape {
   }
 
   /** Draws the travelling playhead dot on this shape's perimeter. */
-  drawPlayhead(_ctx: CanvasRenderingContext2D): void {
+  drawPlayhead(ctx: CanvasRenderingContext2D): void {
     // Sweepers: the rotating line IS the playhead — no separate dot.
     if (this.type === 'sweeper') return;
-    // LEGACY: disabled 2026-04-21 — non-sweeper playhead dot, kept for future revival.
-    // To re-enable: un-comment this block and re-add non-sweeper ShapeTypes.
-    /*
-    const pos = this.getPlayheadPosition();
-    _ctx.save();
-    _ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
-    _ctx.shadowBlur  = 14;
-    _ctx.fillStyle   = '#FFFFFF';
-    _ctx.beginPath();
-    _ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
-    _ctx.fill();
-    _ctx.shadowBlur  = 0;
-    _ctx.fillStyle   = '#FFFDE7';
-    _ctx.beginPath();
-    _ctx.arc(pos.x, pos.y, 1.5, 0, Math.PI * 2);
-    _ctx.fill();
-    _ctx.restore();
-    */
+    // Discrete circle: bright dot riding the perimeter at the current angle.
+    // LEGACY (still quarantined): triangle/rectangle used getPlayheadPosition()
+    // with rayToEdge; the circle case is a direct perimeter parametrisation.
+    const px = this.x + this.size * Math.cos(this.playheadAngle);
+    const py = this.y + this.size * Math.sin(this.playheadAngle);
+    ctx.save();
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
+    ctx.shadowBlur  = 14;
+    ctx.fillStyle   = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(px, py, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur  = 0;
+    ctx.fillStyle   = '#FFFDE7';
+    ctx.beginPath();
+    ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
-  /** Draws all live expanding-ring trigger animations. */
-  drawAnimations(_ctx: CanvasRenderingContext2D): void {
-    // LEGACY: disabled 2026-04-21 — non-sweeper trigger-ring animations (fired on orbital
-    // intersection crossings). Sweepers do not use per-hit triggerAt/stepAnimations.
-    // To re-enable: un-comment this block.
-    /*
+  /**
+   * Draws all live expanding-ring trigger animations — the circle's original
+   * playhead pulse. Revived 2026-06-07: now fired by main.ts when the playhead
+   * enters a tick that holds a crossing (a rhythm hit), so each ring blooms at
+   * the crossing point in time with the audio. Drawn in the probe's accent
+   * colour so the pulse shares the circle's colour identity (the white position
+   * dot is the only element that stays uncoloured). Empty for sweepers (they
+   * never push activeAnimations).
+   */
+  drawAnimations(ctx: CanvasRenderingContext2D): void {
     if (this.activeAnimations.length === 0) return;
-    _ctx.save();
+    const color = this.accentColor;
+    ctx.save();
     for (const anim of this.activeAnimations) {
       const t      = anim.frame / anim.maxFrames;
       const radius = 5 + t * 18;
-      _ctx.globalAlpha  = (1 - t) * 0.80;
-      _ctx.strokeStyle  = '#F25C54';
-      _ctx.lineWidth    = 2.5 * (1 - t * 0.5);
-      _ctx.shadowColor  = '#F25C54';
-      _ctx.shadowBlur   = 12 * (1 - t);
-      _ctx.beginPath();
-      _ctx.arc(anim.x, anim.y, radius, 0, Math.PI * 2);
-      _ctx.stroke();
+      ctx.globalAlpha  = (1 - t) * 0.80;
+      ctx.strokeStyle  = color;
+      ctx.lineWidth    = 2.5 * (1 - t * 0.5);
+      ctx.shadowColor  = color;
+      ctx.shadowBlur   = 12 * (1 - t);
+      ctx.beginPath();
+      ctx.arc(anim.x, anim.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
     }
-    _ctx.restore();
-    */
+    ctx.restore();
   }
 
   // LEGACY: disabled 2026-04-21 — non-sweeper shape support, kept for future revival.
@@ -481,21 +486,11 @@ export class CanvasShape {
   // ── Hit-testing ───────────────────────────────────────────────────────────
 
   containsPoint(px: number, py: number): boolean {
-    // LEGACY: disabled 2026-04-21 — non-sweeper hit-testing (circle/triangle/rectangle).
-    // To re-enable: un-comment this block and restore those ShapeTypes.
-    /*
-    switch (this.type) {
-      case 'circle':
-        return Math.hypot(px - this.x, py - this.y) <= Math.max(this.size, 15);
-      case 'triangle':
-        return this.pointInTriangle({ x: px, y: py });
-      case 'rectangle': {
-        const hw = this.size, hh = this.size * 0.6;
-        return px >= this.x - hw && px <= this.x + hw
-            && py >= this.y - hh && py <= this.y + hh;
-      }
+    // Discrete circle: selectable anywhere inside the disc (min 15px target).
+    // LEGACY (still quarantined): triangle barycentric + rectangle AABB cases.
+    if (this.type === 'circle') {
+      return Math.hypot(px - this.x, py - this.y) <= Math.max(this.size, 15);
     }
-    */
     // Sweeper: selectable within 30px of origin OR within 8px of the rotating ray.
     if (Math.hypot(px - this.x, py - this.y) <= 30) return true;
     const ex = this.x + this.size * Math.cos(this.playheadAngle);
@@ -520,20 +515,12 @@ export class CanvasShape {
 
   // ── Orbital line intersection ──────────────────────────────────────────────
 
-  getIntersections(_line: { p1: Point; p2: Point }): Point[] {
-    // LEGACY: disabled 2026-04-21 — non-sweeper orbital-line intersection math.
-    // To re-enable: un-comment this block, restore segmentIntersect +
-    // getLineCircleIntersections imports, and the non-sweeper ShapeTypes.
-    /*
-    switch (this.type) {
-      case 'circle':
-        return getLineCircleIntersections(_line.p1, _line.p2, this.x, this.y, this.size);
-      case 'triangle':
-        return this.edgeIntersections(_line, this.triangleEdges());
-      case 'rectangle':
-        return this.edgeIntersections(_line, this.rectEdges());
+  getIntersections(line: { p1: Point; p2: Point }): Point[] {
+    // Discrete circle: where an orbital link-line crosses the perimeter.
+    // LEGACY (still quarantined): triangle/rectangle used edgeIntersections().
+    if (this.type === 'circle') {
+      return getLineCircleIntersections(line.p1, line.p2, this.x, this.y, this.size);
     }
-    */
     return []; // sweeper uses computeSweepClusters() instead
   }
 
@@ -664,23 +651,19 @@ export class CanvasShape {
     return [];
   }
 
-  /** Spawn a new expanding-ring animation at a specific canvas point. */
-  triggerAt(_x: number, _y: number): void {
-    // LEGACY: disabled 2026-04-21 — non-sweeper expanding-ring animation.
-    // To re-enable: un-comment this block.
-    /*
-    this.activeAnimations.push({ x: _x, y: _y, frame: 0, maxFrames: 18 });
-    */
+  /**
+   * Spawn a new expanding-ring animation at a specific canvas point.
+   * Revived 2026-06-07 for the discrete circle's crossing pulse — main.ts calls
+   * this with each crossing's (x, y) as the playhead enters an occupied tick.
+   */
+  triggerAt(x: number, y: number): void {
+    this.activeAnimations.push({ x, y, frame: 0, maxFrames: 18 });
   }
 
   /** Advance + prune all active trigger animations. Call once per rAF frame. */
   stepAnimations(): void {
-    // LEGACY: disabled 2026-04-21 — non-sweeper animation advancement.
-    // To re-enable: un-comment this block.
-    /*
     for (const anim of this.activeAnimations) anim.frame++;
     this.activeAnimations = this.activeAnimations.filter(a => a.frame < a.maxFrames);
-    */
   }
 
   // LEGACY: disabled 2026-04-21 — non-sweeper playhead-position helpers.
@@ -832,6 +815,64 @@ export class CanvasShape {
     );
   }
 
+  /**
+   * Discrete-probe analogue of rebuildSweepTicks (circle only).
+   *
+   * Where a sweeper casts a ray outward and clusters hits by distance, a
+   * discrete probe owns a CLOSED PERIMETER: each orbital link-line crosses it
+   * at up to two points. We bin those crossings by their polar angle (so the
+   * angular playhead reaches them at the matching tick) into the SAME
+   * `sweepTicks[arm][tick][slot]` structure the sweeper pipeline consumes —
+   * `arm` is always 0 (one playhead). Empty ticks → silence → rhythm.
+   *
+   * Per-cluster `distance` is the crossing's distance to the SUN (not to the
+   * shape centre, which on a circle is the constant radius and carries no
+   * information), so `data.distance-to-sun` drives a pitch that varies as the
+   * circle moves. `freq`/`gain` are filled for the base `toStrudelCode()`
+   * fallback (gain-gated rhythm); the node-graph path reads distance/collision.
+   *
+   * Call when: shape spawned, moved, resized, or linkLines rebuilt.
+   */
+  bakeDiscreteTicks(
+    linkLines: { p1: Point; p2: Point }[],
+    sun:       Point,
+    maxR:      number,
+  ): void {
+    this.sweepMaxR  = maxR;
+    this.sweepCount = 1;
+    const TICKS = this.ticks;
+    const step  = (Math.PI * 2) / TICKS;
+    const denom = maxR > 0 ? maxR : 1;
+    const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+    const bins: SweepCluster[][] = Array.from({ length: TICKS }, () => []);
+    for (const line of linkLines) {
+      for (const pt of this.getIntersections(line)) {
+        const raw   = Math.atan2(pt.y - this.y, pt.x - this.x);
+        const theta = raw < 0 ? raw + Math.PI * 2 : raw;
+        // Tick i is the angular bin whose centre (startAngle + i*step) is
+        // nearest theta — mirrors the sweeper tick→angle mapping so visual
+        // playhead and audio tick stay aligned.
+        let i = Math.round((theta - this.startAngle) / step);
+        i = ((i % TICKS) + TICKS) % TICKS;
+        const distToSun = Math.hypot(pt.x - sun.x, pt.y - sun.y);
+        bins[i].push({
+          distance:      distToSun,
+          density:       1,
+          x:             pt.x,
+          y:             pt.y,
+          freq:          this.freqLow + clamp01(distToSun / denom) * (this.freqHigh - this.freqLow),
+          gain:          0.7,
+          angleVariance: 0,
+        });
+      }
+    }
+    // Nearest-sun crossing first, so slot k maps to a stable pitch ordering.
+    for (const bin of bins) bin.sort((a, b) => a.distance - b.distance);
+    this.sweepTicks        = [bins];
+    this.intersectionCount = bins.reduce((n, b) => n + b.length, 0);
+  }
+
   // ── Rhythm string + Strudel code generation ──────────────────────────────
 
   /**
@@ -926,10 +967,11 @@ export class CanvasShape {
     const endMarker   = `// @shape-end-${this.id}`;
     const deg         = (this.startAngle * 180 / Math.PI).toFixed(1);
     const armLabel    = this.sweepCount > 1 ? `, arms=${this.sweepCount}` : '';
+    const typeLabel   = this.type === 'circle' ? 'Circle' : 'Sweeper';
     // instrument is a Generator selection key (e.g. 'sig1'); resolve to the
     // Strudel oscillator so the baked code emits a valid `s("sine")`.
     const osc         = resolveOscillator(this.instrument);
-    const comment     = `// [Sweeper ${this.id}: k=${this.k}${armLabel}, s="${osc}", 12o'clock=${deg}°]`;
+    const comment     = `// [${typeLabel} ${this.id}: k=${this.k}${armLabel}, s="${osc}", 12o'clock=${deg}°]`;
 
     // Formats a value array into 8-per-line chunks for textarea readability.
     // Strudel mini-notation treats all whitespace (including \n) as separators.

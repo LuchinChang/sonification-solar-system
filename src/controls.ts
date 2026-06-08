@@ -3,14 +3,14 @@
 // All UI event handlers: mouse, keyboard, knobs, shape management,
 // and playback toggle.
 
-import { CanvasShape, resetNextId, type ShapeType } from './shapes';
+import { CanvasShape, PROBE_PALETTE_SIZE, resetNextId, type ShapeType } from './shapes';
 import { calculateGeocentricLines, calculateEllipticalLines, calculateCardioidLines, calculateMoonHexagonLines, SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS, clamp } from './engine';
 import { PATTERNS, computeAuScale, renderPatternThumbnail, type PlanetaryPattern } from './patterns';
 import type { AppState } from './state';
 import {
   MIN_SAMPLES, MAX_SAMPLES, MIN_CPM, MAX_CPM,
-  // LEGACY: MIN_SHAPE_SIZE only used by the non-sweeper wheel-resize branch.
-  // MIN_SHAPE_SIZE,
+  // MIN_SHAPE_SIZE drives wheel-to-resize for discrete circle probes.
+  MIN_SHAPE_SIZE,
   MAX_SHAPE_SIZE,
   KNOB_SENSITIVITY, CPM_SENSITIVITY, DRAG_THRESHOLD,
   sunPos, sweeperMaxR,
@@ -95,16 +95,45 @@ export function calculateLines(state: AppState, canvas: HTMLCanvasElement): void
     );
   }
   state.fullLinkLines = state.linkLines;
-  rebuildAllCaches(state);
+  rebuildAllCaches(state, canvas);
 }
 
 // ── Shape management ─────────────────────────────────────────────────────────
 
-export function rebuildAllCaches(state: AppState): void {
+/**
+ * Re-bake a single probe's per-tick data after geometry changes, dispatching on
+ * shape type: a sweeper re-casts its ray ticks; a discrete circle re-bins its
+ * perimeter↔orbit crossings by angle (distance measured to the Sun = canvas
+ * centre). Both write the same sweepTicks[arm][tick][slot] structure the
+ * node-editor pipeline consumes.
+ */
+export function bakeShapeTicks(s: CanvasShape, state: AppState, canvas: HTMLCanvasElement): void {
+  if (s.type === 'sweeper') {
+    s.rebuildSweepTicks(state.linkLines, sweeperMaxR(s, state));
+  } else if (s.type === 'circle') {
+    s.bakeDiscreteTicks(state.linkLines, sunPos(canvas), state.orbitalMaxRadius);
+  }
+}
+
+export function rebuildAllCaches(state: AppState, canvas: HTMLCanvasElement): void {
   for (const s of state.shapes) {
     s.rebuildIntersectionCache(state.linkLines);
-    if (s.type === 'sweeper') s.rebuildSweepTicks(state.linkLines, sweeperMaxR(s, state));
+    bakeShapeTicks(s, state, canvas);
   }
+}
+
+/**
+ * Pick the lowest palette colour index not currently used by any live probe, so
+ * no two probes on the canvas share a colour. Frees up colours after a probe is
+ * deleted (the next spawn reclaims the gap). Once all palette slots are taken
+ * (>8 concurrent probes) a repeat is unavoidable — fall back to the count.
+ */
+function nextColorIndex(state: AppState): number {
+  const used = new Set(state.shapes.map(sh => sh.colorIndex));
+  for (let i = 0; i < PROBE_PALETTE_SIZE; i++) {
+    if (!used.has(i)) return i;
+  }
+  return state.shapes.length % PROBE_PALETTE_SIZE;
 }
 
 export function spawnShape(
@@ -113,18 +142,30 @@ export function spawnShape(
   type: ShapeType,
   tour: TourController,
 ): void {
-  const { x, y } = sunPos(dom.canvas);
-  const size = type === 'sweeper' ? MAX_SHAPE_SIZE : undefined;
-  const s = new CanvasShape(x, y, type, size);
-  if (type === 'sweeper') {
-    // Auto-offset startAngle and assign distinct colour for each new sweeper
+  const sun = sunPos(dom.canvas);
+  let s: CanvasShape;
+  if (type === 'circle') {
+    // Discrete probe. Spawn CENTRED on the Sun — a clean ring whose orbital
+    // crossings drive a morphing rhythm. A centred circle has a constant
+    // perimeter→Sun distance, so its Distance→Pitch default is a single note
+    // tuned by the radius (resize to retune); dragging it off-centre revives
+    // melodic variation. Multiple circles fan by RADIUS into concentric rings
+    // so they stay distinct and individually clickable.
+    const n      = state.shapes.filter(sh => sh.type === 'circle').length;
+    const radius = Math.min(150 + n * 60, MAX_SHAPE_SIZE);
+    s = new CanvasShape(sun.x, sun.y, type, radius);
+  } else {
+    s = new CanvasShape(sun.x, sun.y, type, MAX_SHAPE_SIZE);
+    // Auto-offset startAngle so each new sweeper's arm starts at a distinct angle.
     const existing = state.shapes.filter(sh => sh.type === 'sweeper');
     s.startAngle = (3 * Math.PI / 2 + existing.length * Math.PI / 4) % (Math.PI * 2);
-    s.colorIndex = existing.length;
   }
+  // Distinct colour per probe, shared across types (circle + sweeper draw from
+  // one palette) so a circle and a sweeper never collide on the same hue.
+  s.colorIndex = nextColorIndex(state);
   state.shapes.push(s);
   s.rebuildIntersectionCache(state.linkLines);
-  if (s.type === 'sweeper') s.rebuildSweepTicks(state.linkLines, sweeperMaxR(s, state));
+  bakeShapeTicks(s, state, dom.canvas);
   setActiveShape(state, s);
   updateTelemetry(dom, state);
   if (state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value, false);
@@ -189,7 +230,7 @@ export function finishDrawAnimation(state: AppState, dom: DomElements, tour: Tou
   state.drawAnimProgress = 1;
   state.drawLineCount = state.fullLinkLines.length;
   state.linkLines = state.fullLinkLines;
-  rebuildAllCaches(state);
+  rebuildAllCaches(state, dom.canvas);
 
   dom.captionEl.classList.remove('visible');
   dom.captionEl.classList.add('hidden');
@@ -235,7 +276,7 @@ function regenerateCardioidLines(state: AppState, dom: DomElements): void {
   state.currentOuterR = pattern.cardioid.radius;
   state.orbitalMaxRadius = pattern.cardioid.radius * 1.05;
 
-  rebuildAllCaches(state);
+  rebuildAllCaches(state, dom.canvas);
 
   patchHeader(dom.telemetryTextarea, pattern.name, state.shapes.length, state.sampleRate, state.cpm);
   const hasSweeper = rebuildSweeperPatterns(dom.telemetryTextarea, state.shapes, pattern.name, state.sampleRate, state.cpm);
@@ -422,7 +463,9 @@ function startPlayback(state: AppState, dom: DomElements): void {
     // resume from the same position without jumping.
     const t = getAudioTime();
     for (const s of state.shapes) {
-      if (s.type === 'sweeper') s.sweepAudioRefTime = t;
+      // All probes (sweeper + circle) ride the AudioContext clock for arm/
+      // playhead phase, so anchor every one to this start moment.
+      s.sweepAudioRefTime = t;
     }
     state.strudelRepl.evaluate(dom.telemetryTextarea.value)
       .then(() => setEvalStatus(dom.evalStatusEl, 'ok'))
@@ -445,7 +488,7 @@ function pausePlayback(state: AppState): void {
   if (acTime > 0) {
     const cycleS = 60 / state.cpm;
     for (const s of state.shapes) {
-      if (s.type === 'sweeper' && s.sweepAudioRefTime > 0) {
+      if (s.sweepAudioRefTime > 0) {
         s.sweepPhaseAtRef = (s.sweepPhaseAtRef +
           (acTime - s.sweepAudioRefTime) / cycleS) % 1;
       }
@@ -602,7 +645,7 @@ function restoreFromSnapshot(state: AppState, dom: DomElements, snap: ConfigSnap
   for (const cfg of snap.shapes) {
     const s = CanvasShape.fromConfig(cfg);
     s.rebuildIntersectionCache(state.linkLines);
-    if (s.type === 'sweeper') s.rebuildSweepTicks(state.linkLines, sweeperMaxR(s, state));
+    bakeShapeTicks(s, state, dom.canvas);
     state.shapes.push(s);
     if (s.id > maxId) maxId = s.id;
   }
@@ -760,6 +803,11 @@ export function setupEventHandlers(
     state.shapeDragTarget.x   = e.clientX + state.shapeDragOffset.x;
     state.shapeDragTarget.y   = e.clientY + state.shapeDragOffset.y;
     state.shapeDragTarget.rebuildIntersectionCache(state.linkLines);
+    // Discrete circles re-bin their crossings as they move — this is the
+    // "drag → rhythm morphs" curiosity payoff. (Sweepers ray-cast per frame.)
+    if (state.shapeDragTarget.type === 'circle') {
+      bakeShapeTicks(state.shapeDragTarget, state, dom.canvas);
+    }
   });
 
   // Global mouseup
@@ -787,6 +835,10 @@ export function setupEventHandlers(
     if (state.didDragShape) {
       state.didDragShape = false;
       patchAllRhythms(dom.telemetryTextarea, state.shapes, state.currentPattern.name, state.sampleRate, state.cpm);
+      // A moved probe's baked ticks changed → regenerate its block and re-eval
+      // so the audio follows the new geometry (circle rhythm morphs on drag).
+      const hasProbe = rebuildSweeperPatterns(dom.telemetryTextarea, state.shapes, state.currentPattern.name, state.sampleRate, state.cpm);
+      if (hasProbe && state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value);
       return;
     }
 
@@ -816,19 +868,18 @@ export function setupEventHandlers(
       const hasSweeper = rebuildSweeperPatterns(dom.telemetryTextarea, state.shapes, state.currentPattern.name, state.sampleRate, state.cpm);
       if (hasSweeper && state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value);
     } else if (state.activeShape !== null) {
-      // Sweeper-only: wheel rotates the 12 o'clock start angle by 1°.
-      // LEGACY: disabled 2026-04-21 — non-sweeper wheel-to-resize branch
-      // (clamped size + rhythm re-patch). To re-enable: restore the else
-      // branch and non-sweeper ShapeTypes.
-      /*
-      if (state.activeShape.type !== 'sweeper') {
-        state.activeShape.size = clamp(state.activeShape.size + (up ? +2 : -2), MIN_SHAPE_SIZE, MAX_SHAPE_SIZE);
+      if (state.activeShape.type === 'circle') {
+        // Discrete circle: wheel resizes the radius, re-bins crossings, and
+        // re-emits the baked block — the rhythm morphs as the perimeter sweeps
+        // across more/fewer orbits. (Triangle/rectangle resize stays quarantined.)
+        state.activeShape.size = clamp(state.activeShape.size + (up ? +6 : -6), MIN_SHAPE_SIZE, MAX_SHAPE_SIZE);
         state.activeShape.rebuildIntersectionCache(state.linkLines);
-        patchRhythm(dom.telemetryTextarea, state.activeShape);
-        patchHeader(dom.telemetryTextarea, state.currentPattern.name, state.shapes.length, state.sampleRate, state.cpm);
-      } else {
-      */
-      if (state.activeShape.type === 'sweeper') {
+        bakeShapeTicks(state.activeShape, state, dom.canvas);
+        drawScene(dom.ctx, state);
+        updateTelemetry(dom, state);
+        if (state.audioInitialized) playLiveCode(state.strudelRepl, dom.telemetryTextarea.value);
+      } else if (state.activeShape.type === 'sweeper') {
+        // Sweeper: wheel rotates the 12 o'clock start angle by 1°.
         const step  = Math.PI / 180;
         const delta = up ? -step : step;
         state.activeShape.startAngle = ((state.activeShape.startAngle + delta) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
@@ -840,24 +891,17 @@ export function setupEventHandlers(
     }
   }, { passive: false });
 
-  // Dock — click-to-spawn.
-  // Unit 3 will strip legacy shape tiles from the dock entirely. For now we
-  // ignore clicks from any non-'sweeper' tile so legacy tiles are a no-op
-  // (no runtime errors). ShapeType is narrowed to 'sweeper' in shapes.ts.
+  // Dock — click-to-spawn probe cards. Each .shape-tile declares `data-shape`;
+  // we spawn the matching probe type. The card selector was revived 2026-06-07
+  // (Sonic Foundry section). Only the two live probes have cards; the N hotkey
+  // still spawns a sweeper. Triangle/rectangle remain quarantined and are ignored.
   document.querySelectorAll<HTMLButtonElement>('.shape-tile').forEach(tile => {
     tile.addEventListener('click', () => {
       const requested = tile.dataset['shape'] ?? 'sweeper';
-      // LEGACY: previously passed requested value cast as ShapeType (allowing
-      // 'circle' | 'triangle' | 'rectangle'). Now we short-circuit to a no-op
-      // for any non-sweeper tile.
-      if (requested !== 'sweeper') return;
-      spawnShape(state, dom, 'sweeper' as ShapeType, tour);
+      if (requested === 'circle')       spawnShape(state, dom, 'circle', tour);
+      else if (requested === 'sweeper') spawnShape(state, dom, 'sweeper', tour);
+      // else: quarantined shape type — no-op.
     });
-  });
-
-  // Minimal dock sweeper-spawn affordance (Unit 3): click + N hotkey
-  document.querySelectorAll<HTMLButtonElement>('.sweeper-spawn-btn').forEach(btn => {
-    btn.addEventListener('click', () => spawnShape(state, dom, 'sweeper' as ShapeType, tour));
   });
 
   // Save / load config snapshot — drag-drop, buttons, file input
@@ -980,16 +1024,16 @@ export function setupEventHandlers(
         }
         break;
       case 'e': {
-        // E toggle: close if open-for-same / no-active-sweeper, else (re)open
-        // for the active sweeper. openEditor itself no-ops back to closed when
-        // called with the id it's already showing.
+        // E toggle: close if open-for-same / no-active-probe, else (re)open for
+        // the active probe (sweeper OR discrete circle). openEditor itself
+        // no-ops back to closed when called with the id it's already showing.
         const active = state.activeShape;
-        const sweeperId = active !== null && active.type === 'sweeper' ? active.id : null;
-        if (sweeperId === null || sweeperId === currentSweeperId()) {
+        const probeId = active !== null ? active.id : null;
+        if (probeId === null || probeId === currentSweeperId()) {
           if (isEditorOpen()) closeEditor();
         } else {
           e.preventDefault();
-          openEditor(sweeperId);
+          openEditor(probeId);
           tour.notify('editor-opened');
         }
         break;
@@ -1010,7 +1054,7 @@ function anchorSweepPhase(state: AppState): void {
   if (acTime <= 0) return;
   const cycleS_old = 60 / state.cpm;
   for (const s of state.shapes) {
-    if (s.type === 'sweeper' && s.sweepAudioRefTime > 0) {
+    if (s.sweepAudioRefTime > 0) {
       s.sweepPhaseAtRef  = (s.sweepPhaseAtRef +
         (acTime - s.sweepAudioRefTime) / cycleS_old) % 1;
       s.sweepAudioRefTime = acTime;

@@ -104,7 +104,12 @@ export function patchAllRhythms(
   patchHeader(textarea, patternName, shapes.length, sampleRate, cpm);
 }
 
-/** After linkLines change, re-emit Strudel blocks for sweeper shapes. */
+/**
+ * After geometry changes, re-emit the baked Strudel block for every PROBE
+ * (sweeper + discrete circle). Both bake their audio from sweepTicks via
+ * toStrudelCode(), so both must be regenerated when their ticks change
+ * (sample rate, resize, move). Returns true if any probe block was rewritten.
+ */
 export function rebuildSweeperPatterns(
   textarea: HTMLTextAreaElement,
   shapes: CanvasShape[],
@@ -112,14 +117,14 @@ export function rebuildSweeperPatterns(
   sampleRate: number,
   cpm: number,
 ): boolean {
-  let hasSweeper = false;
+  let hasProbe = false;
   for (const s of shapes) {
-    if (s.type === 'sweeper') {
+    if (s.type === 'sweeper' || s.type === 'circle') {
       patchShapeBlock(textarea, s, shapes, patternName, sampleRate, cpm);
-      hasSweeper = true;
+      hasProbe = true;
     }
   }
-  return hasSweeper;
+  return hasProbe;
 }
 
 // ── Full regeneration (add/delete) ───────────────────────────────────────────

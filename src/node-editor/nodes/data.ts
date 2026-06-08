@@ -123,6 +123,37 @@ export const angleVarianceDef: NodeDefinition = {
   },
 };
 
+// ── Discrete-probe sensors ───────────────────────────────────────────────────
+
+/**
+ * Per-tick, per-slot COLLISION flag — the defining signal of a discrete probe.
+ *
+ * Returns 1 when this (tick, slot) holds a perimeter↔orbit crossing (baked by
+ * `bakeDiscreteTicks`), else 0. Downstream `sound.rhythm` thresholds the baked
+ * 0/1 stack into a Strudel `.struct("1 ~ ~ 1 …")` mask, so moving / resizing
+ * the circle re-shapes the rhythm. Discrete-only (`appliesTo: ['circle']`) —
+ * a sweeper's ray model has no perimeter-crossing concept.
+ */
+export const collisionDef: NodeDefinition = {
+  type:  'data.collision',
+  side:  'data',
+  label: 'Collision',
+  appliesTo: ['circle'],
+  outputs: [{
+    id: 'gate', label: 'gate', kind: 'number', continuous: false,
+    min: 0, max: 1, unit: '0/1',
+    description: 'Binary crossing flag at this tick/slot: 1 when the perimeter crosses an orbital line here, else 0. Feed into Rhythm.',
+  }],
+  codegen: () => '',
+  perTickValue(shape, arm, tick, slot) {
+    const armTicks = shape.sweepTicks[arm];
+    if (!armTicks) return 0;
+    const group = armTicks[tick];
+    if (!group) return 0;
+    return group[slot] ? 1 : 0;
+  },
+};
+
 // ── Registration ─────────────────────────────────────────────────────────────
 
 /**
@@ -136,4 +167,5 @@ export function registerDataNodes(): void {
   registerNodeDef(clusterCountDef);
   registerNodeDef(distanceToSunDef);
   registerNodeDef(angleVarianceDef);
+  registerNodeDef(collisionDef);
 }

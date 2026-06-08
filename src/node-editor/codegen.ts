@@ -136,7 +136,14 @@ function buildVoiceForArmSlot(
     },
   };
 
-  const ordered  = topoFilter(graph, soundNodes);
+  // Topological order resolves data dependencies; a secondary stable sort by
+  // `tailOrder` (default 0) then pins structure-restructuring fragments last.
+  // `sound.rhythm`'s `.struct(...)` MUST chain after `.freq()`/`.note()` own
+  // the timeline (Step-0 spike). Reordering sound fragments is safe: each one
+  // reads its own cached data stack, never another sound node's output.
+  const ordered  = topoFilter(graph, soundNodes)
+    .slice()
+    .sort((a, b) => (getNodeDef(a.type)?.tailOrder ?? 0) - (getNodeDef(b.type)?.tailOrder ?? 0));
   const fragments: string[] = [];
   for (const node of ordered) {
     const def = getNodeDef(node.type);
@@ -183,7 +190,8 @@ function assembleBlock(shape: CanvasShape, voices: string[]): string {
   const endMarker   = `// @shape-end-${shape.id}`;
   const deg         = (shape.startAngle * 180 / Math.PI).toFixed(1);
   const armLabel    = shape.sweepCount > 1 ? `, arms=${shape.sweepCount}` : '';
-  const comment     = `// [Sweeper ${shape.id}: k=${shape.k}${armLabel}, s="${resolveOscillator(shape.instrument)}", 12o'clock=${deg}°]`;
+  const typeLabel   = shape.type === 'circle' ? 'Circle' : 'Sweeper';
+  const comment     = `// [${typeLabel} ${shape.id}: k=${shape.k}${armLabel}, s="${resolveOscillator(shape.instrument)}", 12o'clock=${deg}°]`;
 
   // voices[0] + .stack(voices[1]) + .stack(voices[2]) + … + .p((id).toString())
   const head = voices[0] ?? `s("${resolveOscillator(shape.instrument)}").gain(0)`;

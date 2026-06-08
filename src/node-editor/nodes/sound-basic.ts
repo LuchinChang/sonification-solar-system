@@ -342,6 +342,42 @@ export const soundGainDef: NodeDefinition = {
   },
 };
 
+// ── 5. sound.rhythm (discrete probes) ────────────────────────────────────────
+//
+// First-class rhythm for discrete probes. Reads a 0/1 collision stack and
+// bakes a Strudel `.struct("1 ~ ~ 1 …")` mask, restructuring the voice so it
+// only fires where the perimeter crosses an orbital line. `tailOrder: 100`
+// pins this fragment LAST in the voice so `.note()`/`.freq()` own the timeline
+// first — the Step-0 spike proved struct-first leaks the gate into hap values.
+// Discrete-only (`appliesTo: ['circle']`): sweepers have no crossing concept.
+
+export const soundRhythmDef: NodeDefinition = {
+  type:  'sound.rhythm',
+  side:  'sound',
+  label: 'Rhythm',
+  appliesTo: ['circle'],
+  tailOrder: 100,
+  inputs: [{
+    id: 'gate', label: 'gate', kind: 'number',
+    min: 0, max: 1, unit: '0/1',
+    description: 'Binary crossing stack (from Collision). 1 fires the voice at that tick; 0 is a rest.',
+  }],
+  defaultParams: {},
+
+  codegen(ctx, _params, inbound) {
+    const edge = inbound.find(e => e.to.portId === 'gate');
+    if (!edge) return '';                       // unwired → no structuring fragment
+    const stack = ctx.resolveInboundStack(getCodegenNodeId(inbound), 'gate');
+    if (!stack || stack.length === 0) return '';
+    const tokens = stack.map(v => (v >= 0.5 ? '1' : '~'));
+    const rows: string[] = [];
+    for (let i = 0; i < tokens.length; i += 8) {
+      rows.push(tokens.slice(i, i + 8).join(' '));
+    }
+    return `.struct(\`${rows.join('\n    ')}\`)`;
+  },
+};
+
 // ── Helper: pull the node id back from an inbound edge list ─────────────────
 //
 // The `codegen` signature receives `inbound: Edge[]` but not the node's id.
@@ -359,6 +395,7 @@ export function registerSoundBasicNodes(): void {
   registerNodeDef(soundFrequencyDef);
   registerNodeDef(soundLpfDef);
   registerNodeDef(soundGainDef);
+  registerNodeDef(soundRhythmDef);
 }
 
 registerSoundBasicNodes();

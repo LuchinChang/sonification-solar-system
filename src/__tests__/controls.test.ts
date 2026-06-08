@@ -6,14 +6,27 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CanvasShape } from '../shapes';
-import { createInitialState } from '../state';
+import { createInitialState, sunPos } from '../state';
 import {
   setActiveShape,
   deleteActiveShape,
   rebuildAllCaches,
+  spawnShape,
   editorShouldConsumeDeleteKey,
 } from '../controls';
 import type { DomElements } from '../dom';
+import type { TourController } from '../tour';
+
+/** No-op tour controller — spawnShape only calls tour.notify for sweepers. */
+function stubTour(): TourController {
+  return {
+    start: vi.fn(),
+    end: vi.fn(),
+    notify: vi.fn(),
+    get isActive() { return false; },
+    get currentStep() { return 0; },
+  };
+}
 
 // Minimal DOM mock for controls that don't need full DOM
 function mockDom(): DomElements {
@@ -164,9 +177,106 @@ describe('rebuildAllCaches', () => {
     state.shapes.push(sw);
     state.orbitalMaxRadius = 300;
 
-    rebuildAllCaches(state);
+    const canvas = { width: 800, height: 600 } as HTMLCanvasElement;
+    rebuildAllCaches(state, canvas);
     // Sweeper should have sweep ticks computed
     expect(sw.sweepTicks).toBeDefined();
+  });
+
+  it('bakes discrete ticks for circle probes', () => {
+    const state = createInitialState();
+    state.linkLines = [
+      { p1: { x: 200, y: 300 }, p2: { x: 600, y: 300 } },
+    ];
+    const circle = new CanvasShape(400, 300, 'circle', 120);
+    state.shapes.push(circle);
+    state.orbitalMaxRadius = 400;
+
+    const canvas = { width: 800, height: 600 } as HTMLCanvasElement;
+    rebuildAllCaches(state, canvas);
+    // The horizontal line through the circle centre crosses the perimeter
+    // twice → two crossings binned into the discrete tick structure.
+    expect(circle.sweepTicks.length).toBe(1);          // one playhead (arm 0)
+    expect(circle.intersectionCount).toBe(2);
+  });
+});
+
+describe('spawnShape — circle centring + radius fan', () => {
+  it('spawns the first circle centred on the Sun at the base radius', () => {
+    const state = createInitialState();
+    const dom   = mockDom();
+    const sun   = sunPos(dom.canvas);
+
+    spawnShape(state, dom, 'circle', stubTour());
+
+    const c = state.shapes.at(-1)!;
+    expect(c.type).toBe('circle');
+    expect(c.x).toBe(sun.x);   // centred on the Sun (no offset)
+    expect(c.y).toBe(sun.y);
+    expect(c.size).toBe(150);  // base radius
+  });
+
+  it('fans successive circles into larger concentric rings (same centre)', () => {
+    const state = createInitialState();
+    const dom   = mockDom();
+    const sun   = sunPos(dom.canvas);
+
+    spawnShape(state, dom, 'circle', stubTour());
+    spawnShape(state, dom, 'circle', stubTour());
+    spawnShape(state, dom, 'circle', stubTour());
+
+    const circles = state.shapes.filter(s => s.type === 'circle');
+    expect(circles).toHaveLength(3);
+    // All share the Sun's centre…
+    for (const c of circles) {
+      expect(c.x).toBe(sun.x);
+      expect(c.y).toBe(sun.y);
+    }
+    // …but each is a strictly larger ring (150, 210, 270).
+    expect(circles.map(c => c.size)).toEqual([150, 210, 270]);
+  });
+});
+
+describe('spawnShape — distinct probe colours', () => {
+  it('gives a circle and a sweeper different colorIndex (no shared hue)', () => {
+    // Regression: circle used shapes.length and sweeper used sweeper-count, so
+    // spawning circle-then-sweeper produced colorIndex 0 for BOTH (both teal).
+    const state = createInitialState();
+    const dom   = mockDom();
+
+    spawnShape(state, dom, 'circle', stubTour());
+    spawnShape(state, dom, 'sweeper', stubTour());
+
+    const [circle, sweeper] = state.shapes;
+    expect(circle.colorIndex).not.toBe(sweeper.colorIndex);
+    expect(circle.accentColor).not.toBe(sweeper.accentColor);
+  });
+
+  it('keeps every live probe on a unique colour', () => {
+    const state = createInitialState();
+    const dom   = mockDom();
+    for (let i = 0; i < 5; i++) {
+      spawnShape(state, dom, i % 2 === 0 ? 'circle' : 'sweeper', stubTour());
+    }
+    const indices = state.shapes.map(s => s.colorIndex);
+    expect(new Set(indices).size).toBe(indices.length);   // all distinct
+  });
+
+  it('reclaims a freed colour after a probe is deleted', () => {
+    const state = createInitialState();
+    const dom   = mockDom();
+    spawnShape(state, dom, 'circle', stubTour());   // colorIndex 0
+    spawnShape(state, dom, 'circle', stubTour());   // colorIndex 1
+    spawnShape(state, dom, 'circle', stubTour());   // colorIndex 2
+
+    // Delete the middle probe (frees colorIndex 1).
+    const middle = state.shapes.find(s => s.colorIndex === 1)!;
+    setActiveShape(state, middle);
+    deleteActiveShape(state, dom);
+
+    // The next spawn reclaims the lowest free slot (1), not a new index 3.
+    spawnShape(state, dom, 'sweeper', stubTour());
+    expect(state.shapes.at(-1)!.colorIndex).toBe(1);
   });
 });
 

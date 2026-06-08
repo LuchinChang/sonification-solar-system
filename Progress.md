@@ -1,5 +1,99 @@
 # Progress & lessons-learned
 
+## 2026-06-07c — Dock redesign + distinct probe colours
+
+UI pass: revived the old card-style probe selector ("Sonic Foundry" cards for
+Sweeper + Circle), moved play/pause out of the dock into the top-left
+`#top-chrome` cluster (leftmost, 34px, gap before Save/Load/Theme), and reduced
+the dock to one vertical separator (`.section-sep` between cards and knobs;
+removed the inner Sample|CPM divider). The card CSS (`.shape-tile`) was still
+present in `style.css` from before the Unit-3 streamline, so only markup needed
+reviving.
+
+**Bug fixed — two probes could share a colour.** `spawnShape` assigned
+`colorIndex` per-type inconsistently: a circle used `state.shapes.length`, a
+sweeper used the sweeper-only count. So spawning a circle then a sweeper gave
+**both `colorIndex 0` → both teal**. Replaced with `nextColorIndex(state)`: the
+lowest palette slot not used by any live probe (shared across types), which also
+reclaims a freed colour after a deletion. Guarantees distinct colours for ≤8
+concurrent probes.
+
+**Circle ring colour now matches the probe.** `drawAnimations` hardcoded coral
+`#F25C54`; it now uses `this.accentColor` so the crossing pulse shares the
+circle's colour identity. The position **dot stays white** (a high-contrast
+marker that would otherwise blend into its own same-colour perimeter) — a
+deliberate exception captured in [CONTEXT.md](CONTEXT.md) under "Probe colour".
+
+## 2026-06-07b — Circle centred on the Sun + original ring pulse revived
+
+Two refinements to the shipped circle probe.
+
+**Spawn centred (reverses the offset decision).** The circle now spawns at the
+Sun (`new CanvasShape(sun.x, sun.y, 'circle', radius)`), radius-fanned
+(`min(150 + n·60, MAX_SHAPE_SIZE)`) so multiple circles form concentric rings.
+The original revival spawned *offset* because a centred circle has a constant
+perimeter→Sun distance (flat pitch). We chose **rhythm-first**: at centre the
+seeded Distance→Pitch is a single drone tuned by the radius (resize to retune)
+while planetary motion drives the rhythm; dragging off-centre revives melodic
+variation. `density`/`angleVariance` are baked constant, so distance is the only
+varying pitch source — hence the drone, not a bug.
+
+**Original expanding-ring pulse revived.** Removed the revival-era clock-hand arm
+from `draw()`; un-quarantined `drawAnimations`/`triggerAt`/`stepAnimations` (coral
+`#F25C54` rings, 18-frame fade). The old trigger path (`checkAndFireCollisions`)
+is still quarantined, so `main.ts` now fires rings itself: when the playhead
+*enters* a tick that holds a crossing, `triggerAt(c.x, c.y)` blooms a ring at the
+crossing point. `drawAnimations(ctx)` was already being called in `renderer.ts`,
+so only the body needed un-commenting — no new draw site.
+
+**The one subtlety a future debugger will trip on — floor vs round.**
+`bakeDiscreteTicks` bins crossings with `round((θ−startAngle)/step)` (nearest tick
+*centre*), but Strudel plays step *i* over the interval `[i/TICKS, (i+1)/TICKS)`.
+So the ring-trigger detector uses **`floor`** of the phase, not `round`: entering
+that interval is the audible-hit instant, keeping the visual pulse locked to the
+sound. It reads `playheadAngle` directly (not `prevPlayheadAngle`) so it's correct
+under both the AC-clock and `stepPlayhead` fallback paths. Edge-triggered via a new
+`lastRingTick` field. Stepping lives inside the `isPlaying && dt>0` guard, so pause
+is a clean freeze-frame (dot + rings halt, resume continues the fade).
+
+## 2026-06-07 — Discrete probes (circle) revived via the node editor
+
+Brought back the **circle** as a discrete geometric probe, integrated into the
+node-editor pipeline rather than by un-commenting the quarantined audio model
+(see [ADR 0001](docs/adr/0001-discrete-probes-via-node-editor.md) and
+[CONTEXT.md](CONTEXT.md)). The circle reuses `_toSweeperCode` + `sweepTicks` +
+`perTickValue`; the only new geometry is `bakeDiscreteTicks` (crossings binned by
+angle into `sweepTicks[0][tick][slot]`, distance measured to the **Sun**, since
+distance-to-centre on a circle is the constant radius). New nodes:
+`data.collision` + `sound.rhythm`.
+
+**Strudel `.struct()` ordering gotcha (validated by a headless spike).** A
+rhythm is a `.struct("1 ~ ~ 1 …")` mask. `queryArc` showed that
+`note(...).struct(gate)` and rest-baked `note("c3 ~ ~ e3")` produce *identical*
+events — struct samples the value pattern at the gate's true positions. **But
+order matters:** `struct(gate).note(values)` (struct first) leaks the gate into
+the hap value (`{value:1, note:"c3"}`); only value-first stays clean (`"c3"`).
+So `sound.rhythm` carries `tailOrder: 100` and the codegen voice-builder
+stable-sorts sound fragments so `.struct()` always chains *after* `.note()`/
+`.freq()`. Reordering sound fragments is safe — each reads its own cached data
+stack, never another sound node's output.
+
+**Two bugs only live testing caught** (unit tests passed throughout):
+1. The `E` hotkey opened the editor only for `type === 'sweeper'`, so circles
+   couldn't be edited via keyboard — broadened to any probe.
+2. The circle dock button reused the `.sweeper-spawn-btn` style class, which is
+   also the sweeper spawn handler's selector → one click spawned a circle *and*
+   a sweeper. Fixed by skipping `data-shape` buttons in the sweeper handler.
+
+**Lesson.** When a new feature can be expressed through an existing universal
+interface (`perTickValue → SweepStack`), do that instead of building a parallel
+pipeline — the whole sound stack, ping-pong, and ordering logic come for free.
+And always dogfood UI wiring: the spawn/hotkey bugs were invisible to the type
+checker and the unit suite.
+
+Dev-server `base` is now conditional (`command === 'build' ? '/sonification-solar-system/' : '/'`)
+so the preview proxy doesn't 302 on `/`.
+
 ## 2026-06-06b — Scallop loops via jittered strobe (NOT dense plotting)
 
 To match Hartmut's reference more closely (woven "scallop" loops on the hexagon

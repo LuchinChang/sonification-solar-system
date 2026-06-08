@@ -20,6 +20,7 @@
 
 import { addNode } from './graph';
 import { listNodeDefs } from './registry';
+import type { ShapeType } from '../shapes';
 import type { NodeDefinition, NodeGraph, NodeSide } from './types';
 
 // ── Side → column mapping ────────────────────────────────────────────────────
@@ -127,6 +128,18 @@ export interface ToolboxCallbacks {
   onGraphChanged: () => void;
   /** Test seam: lets tests assert drops without a real addNode. */
   addNodeFn?:     typeof addNode;
+  /**
+   * The probe type currently being edited, used to filter `appliesTo`-restricted
+   * node defs (e.g. discrete-only Collision / Rhythm). Undefined / null while no
+   * probe is open → restricted nodes are hidden.
+   */
+  probeType?:     () => ShapeType | null;
+}
+
+/** True if `def` may be offered while editing a probe of `type`. */
+export function defAppliesToProbe(def: NodeDefinition, type: ShapeType | null): boolean {
+  if (def.appliesTo === undefined) return true;       // unrestricted → every probe
+  return type !== null && def.appliesTo.includes(type);
 }
 
 /**
@@ -161,7 +174,10 @@ export function refreshToolbox(host: ToolboxHost, cb: ToolboxCallbacks): void {
 const TOOLBOX_SIDES: ReadonlySet<NodeSide> = new Set<NodeSide>(['data', 'sound']);
 
 function renderChips(drawer: HTMLElement, host: ToolboxHost, cb: ToolboxCallbacks): void {
-  const defs = listNodeDefs().filter(d => TOOLBOX_SIDES.has(d.side));
+  const probeType = cb.probeType?.() ?? null;
+  const defs = listNodeDefs()
+    .filter(d => TOOLBOX_SIDES.has(d.side))
+    .filter(d => defAppliesToProbe(d, probeType));
   if (defs.length === 0) {
     const empty = document.createElement('span');
     empty.className = 'ne-toolbox-empty';
