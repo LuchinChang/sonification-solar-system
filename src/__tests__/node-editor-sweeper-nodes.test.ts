@@ -35,7 +35,7 @@ describe('sweeper-self node registrations', () => {
   }> = [
     { type: 'sweeper.cluster-count', side: 'sweeper', defaultParams: { k: 3 },                     inputName: 'k',        inputKind: 'number' },
     { type: 'sweeper.fineness',      side: 'sweeper', defaultParams: { steps: 120 },               inputName: 'steps',    inputKind: 'number' },
-    { type: 'sweeper.generator',     side: 'sweeper', defaultParams: { waveform: 'sine' },         inputName: 'waveform', inputKind: 'any' },
+    { type: 'sweeper.generator',     side: 'sweeper', defaultParams: { waveform: 'sig1' },         inputName: 'waveform', inputKind: 'any' },
     { type: 'sweeper.length',        side: 'sweeper', defaultParams: { radius: MAX_SHAPE_SIZE },   inputName: 'radius',   inputKind: 'number' },
   ];
 

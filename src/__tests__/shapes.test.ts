@@ -51,9 +51,11 @@ describe('CanvasShape constructor', () => {
   });
   */
 
-  it('sweeper defaults to sine instrument', () => {
+  it('sweeper defaults to Signature Waveform 1 (sig1)', () => {
     const s = new CanvasShape(0, 0, 'sweeper');
-    expect(s.instrument).toBe('sine');
+    // 'sig1' is a Generator selection key (placeholder that resolves to sine
+    // at codegen), not a raw oscillator name.
+    expect(s.instrument).toBe('sig1');
   });
 
   it('playheadAngle starts at 3π/2 (12 o\'clock)', () => {
@@ -65,6 +67,29 @@ describe('CanvasShape constructor', () => {
     const s = new CanvasShape(0, 0, 'sweeper');
     expect(s.cachedIntersections).toHaveLength(0);
     expect(s.activeAnimations).toHaveLength(0);
+  });
+});
+
+// ── toStrudelCode instrument resolution ───────────────────────────────────────
+//
+// The default bake path (toStrudelCode → _toSweeperCode) runs on every spawn and
+// feeds the live editor / initial audio. It must resolve Generator selection
+// keys to real Strudel oscillators — a placeholder Signature Waveform like 'sig1'
+// must emit s("sine"), never s("sig1") (which Strudel can't play).
+
+describe('toStrudelCode instrument resolution', () => {
+  it('resolves a placeholder Signature Waveform key (sig1) to s("sine")', () => {
+    const s = new CanvasShape(0, 0, 'sweeper');
+    s.instrument = 'sig1';
+    const code = s.toStrudelCode();
+    expect(code).toContain('s("sine")');
+    expect(code).not.toContain('sig1');
+  });
+
+  it('passes a real oscillator key through unchanged', () => {
+    const s = new CanvasShape(0, 0, 'sweeper');
+    s.instrument = 'triangle';
+    expect(s.toStrudelCode()).toContain('s("triangle")');
   });
 });
 
