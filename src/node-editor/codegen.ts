@@ -31,6 +31,7 @@
 // `.note(…)` leakage when a cable is swapped between chips.
 
 import type { CanvasShape } from '../shapes';
+import { resolveOscillator } from '../generator-options';
 import { getNodeDef } from './registry';
 import type { CodegenCtx, Node, NodeGraph, SweepStack } from './types';
 
@@ -163,7 +164,10 @@ function buildVoiceForArmSlot(
   // the first baked fragment (`freq("…")`) owns the structure, modifiers
   // chain, and the synth voice is selected last. Mirror that shape here.
   const body = fragments.join('');
-  const instrument = shape.instrument;
+  // shape.instrument holds a Generator selection key (e.g. 'sig1'); resolve it
+  // to the actual Strudel oscillator so placeholder Signature Waveforms emit a
+  // valid `s("sine")` rather than `s("sig1")`.
+  const instrument = resolveOscillator(shape.instrument);
   // Every wired chip was skipped (all orphans in this (arm, slot) voice) —
   // emit a muted voice so the user isn't greeted by a drone when they
   // intentionally disconnect everything.
@@ -179,10 +183,10 @@ function assembleBlock(shape: CanvasShape, voices: string[]): string {
   const endMarker   = `// @shape-end-${shape.id}`;
   const deg         = (shape.startAngle * 180 / Math.PI).toFixed(1);
   const armLabel    = shape.sweepCount > 1 ? `, arms=${shape.sweepCount}` : '';
-  const comment     = `// [Sweeper ${shape.id}: k=${shape.k}${armLabel}, s="${shape.instrument}", 12o'clock=${deg}°]`;
+  const comment     = `// [Sweeper ${shape.id}: k=${shape.k}${armLabel}, s="${resolveOscillator(shape.instrument)}", 12o'clock=${deg}°]`;
 
   // voices[0] + .stack(voices[1]) + .stack(voices[2]) + … + .p((id).toString())
-  const head = voices[0] ?? `s("${shape.instrument}").gain(0)`;
+  const head = voices[0] ?? `s("${resolveOscillator(shape.instrument)}").gain(0)`;
   const rest = voices.slice(1).map(v => `.stack(\n  ${v}\n)`).join('');
   const pat  = `${head}${rest}\n  .p((${shape.id}).toString())`;
 

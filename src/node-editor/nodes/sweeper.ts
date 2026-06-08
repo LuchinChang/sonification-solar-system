@@ -19,6 +19,7 @@ import type { CanvasShape } from '../../shapes';
 import { registerNodeDef } from '../registry';
 import type { Node } from '../types';
 import { currentSweeperId } from '../panel';
+import { GENERATOR_OPTIONS, DEFAULT_GENERATOR_KEY } from '../../generator-options';
 
 // ── Sweeper resolver ─────────────────────────────────────────────────────────
 //
@@ -121,24 +122,6 @@ function buildSliderRow(opts: {
   return { row, slider, readout };
 }
 
-// ── Typed param views ────────────────────────────────────────────────────────
-
-const WAVEFORMS = ['sine', 'sawtooth', 'square', 'triangle'] as const;
-type Waveform = typeof WAVEFORMS[number];
-
-// User-facing names for each waveform. The label is decoupled from the value:
-// the option's `value` stays the raw Strudel oscillator (so `s("sine")` still
-// reaches Strudel via codegen), while only the displayed text reads "Signature
-// Waveform N". PLACEHOLDER — these alias raw oscillators today; the plan is to
-// swap in bespoke synthesis behind each Signature Waveform later, leaving the
-// user-facing identity unchanged.
-const WAVEFORM_LABELS: Record<Waveform, string> = {
-  sine:     'Signature Waveform 1',
-  sawtooth: 'Signature Waveform 2',
-  square:   'Signature Waveform 3',
-  triangle: 'Signature Waveform 4',
-};
-
 // ── Node registrations ───────────────────────────────────────────────────────
 
 registerNodeDef({
@@ -206,10 +189,14 @@ registerNodeDef({
   label: 'Generator',
   inputs: [{ id: 'waveform', label: 'waveform', kind: 'any' }],
   outputs: [],
-  defaultParams: { waveform: 'sine' satisfies Waveform as Waveform },
+  defaultParams: { waveform: DEFAULT_GENERATOR_KEY },
   codegen: () => '',
   ui(node: Node, onChange: (patch: Partial<Node>) => void): HTMLElement {
-    const current = String(node.params.waveform ?? 'sine');
+    // `instrument` stores the selection KEY (e.g. 'sig1', 'sine'), not the raw
+    // oscillator — codegen resolves it via resolveOscillator(). This lets the
+    // placeholder Signature Waveforms and the real oscillators coexist in the
+    // list (several map to sine) while the <select> still round-trips correctly.
+    const current = String(node.params.waveform ?? DEFAULT_GENERATOR_KEY);
     const root = containerEl();
 
     const row = document.createElement('div');
@@ -221,18 +208,18 @@ registerNodeDef({
     select.style.flex       = '1';
     select.style.fontFamily = UI_FONT_MONO;
     select.style.fontSize   = '11px';
-    for (const w of WAVEFORMS) {
-      const opt = document.createElement('option');
-      opt.value       = w;
-      opt.textContent = WAVEFORM_LABELS[w];
-      if (w === current) opt.selected = true;
-      select.append(opt);
+    for (const opt of GENERATOR_OPTIONS) {
+      const el = document.createElement('option');
+      el.value       = opt.key;
+      el.textContent = opt.label;
+      if (opt.key === current) el.selected = true;
+      select.append(el);
     }
 
     select.addEventListener('change', () => {
-      const next: Waveform = (WAVEFORMS as readonly string[]).includes(select.value)
-        ? select.value as Waveform
-        : 'sine';
+      const next = GENERATOR_OPTIONS.some(o => o.key === select.value)
+        ? select.value
+        : DEFAULT_GENERATOR_KEY;
       const sweeper = activeSweeper();
       if (sweeper) sweeper.instrument = next;
       onChange({ params: { ...node.params, waveform: next } });
