@@ -126,6 +126,19 @@ function buildSliderRow(opts: {
 const WAVEFORMS = ['sine', 'sawtooth', 'square', 'triangle'] as const;
 type Waveform = typeof WAVEFORMS[number];
 
+// User-facing names for each waveform. The label is decoupled from the value:
+// the option's `value` stays the raw Strudel oscillator (so `s("sine")` still
+// reaches Strudel via codegen), while only the displayed text reads "Signature
+// Waveform N". PLACEHOLDER — these alias raw oscillators today; the plan is to
+// swap in bespoke synthesis behind each Signature Waveform later, leaving the
+// user-facing identity unchanged.
+const WAVEFORM_LABELS: Record<Waveform, string> = {
+  sine:     'Signature Waveform 1',
+  sawtooth: 'Signature Waveform 2',
+  square:   'Signature Waveform 3',
+  triangle: 'Signature Waveform 4',
+};
+
 // ── Node registrations ───────────────────────────────────────────────────────
 
 registerNodeDef({
@@ -211,7 +224,7 @@ registerNodeDef({
     for (const w of WAVEFORMS) {
       const opt = document.createElement('option');
       opt.value       = w;
-      opt.textContent = w;
+      opt.textContent = WAVEFORM_LABELS[w];
       if (w === current) opt.selected = true;
       select.append(opt);
     }
