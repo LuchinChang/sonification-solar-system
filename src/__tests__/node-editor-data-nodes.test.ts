@@ -44,13 +44,14 @@ beforeEach(() => {
 // ── Registration ─────────────────────────────────────────────────────────────
 
 describe('data-node registration', () => {
-  it('registers all four data-side defs', () => {
+  it('registers all data-side defs (incl. discrete collision)', () => {
     const data = listNodeDefs('data');
     const types = data.map(d => d.type).sort();
     expect(types).toEqual([
       'data.angle-variance',
       'data.cluster-count',
       'data.cluster-tolerance',
+      'data.collision',
       'data.distance-to-sun',
     ]);
   });

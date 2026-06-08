@@ -20,7 +20,7 @@
 // never during drag/drop.
 
 import type { NodeGraphSnapshot } from '../config-snapshot';
-import type { CanvasShape } from '../shapes';
+import type { CanvasShape, ShapeType } from '../shapes';
 import { CABLE_REFLOW_EVENT, initCables } from './cables';
 import { compileGraphToStrudel } from './codegen';
 import { addEdge, addNode, createGraph, graphFromSnapshot, removeNode } from './graph';
@@ -105,8 +105,8 @@ export function openEditor(sweeperId: number): void {
   ensureMounted();
   if (refs === null || resolveSweeper === null) return;
   const sweeper = resolveSweeper(sweeperId);
-  if (!sweeper || sweeper.type !== 'sweeper') {
-    console.warn('[node-editor] openEditor: id is not a sweeper', sweeperId);
+  if (!sweeper) {
+    console.warn('[node-editor] openEditor: id does not resolve to a probe', sweeperId);
     return;
   }
 
@@ -126,13 +126,14 @@ export function openEditor(sweeperId: number): void {
     hydrated.sweeperId = sweeperId;
     activeGraph = hydrated;
   } else {
-    activeGraph = seedDefaultGraph(sweeperId);
+    activeGraph = seedDefaultGraph(sweeperId, sweeper.type);
   }
 
   const color = sweeper.sweepColor;
   refs.swatch.style.color           = color;
   refs.swatch.style.backgroundColor = color;
-  refs.sweeperNumEl.textContent     = `Sweeper #${sweeper.id}`;
+  const probeLabel = sweeper.type === 'circle' ? 'Circle' : 'Sweeper';
+  refs.sweeperNumEl.textContent     = `${probeLabel} #${sweeper.id}`;
 
   // Re-render chip list in case new NodeDefinitions registered since last open.
   refreshToolbox(toolboxHost(refs), toolboxCallbacks());
@@ -569,8 +570,21 @@ function toolboxHost(r: EditorRefs): { root: HTMLElement; leftCol: HTMLElement; 
   return { root: r.root, leftCol: r.canvas, center: r.canvas, rightCol: r.canvas };
 }
 
-function toolboxCallbacks(): { getGraph: () => NodeGraph | null; onGraphChanged: () => void } {
-  return { getGraph: () => activeGraph, onGraphChanged: emitGraphChanged };
+function toolboxCallbacks(): {
+  getGraph: () => NodeGraph | null;
+  onGraphChanged: () => void;
+  probeType: () => ShapeType | null;
+} {
+  return {
+    getGraph: () => activeGraph,
+    onGraphChanged: emitGraphChanged,
+    // Lets the toolbox filter `appliesTo`-restricted nodes (e.g. discrete-only
+    // Collision / Rhythm) to the probe currently being edited.
+    probeType: () =>
+      activeSweeperId !== null && resolveSweeper !== null
+        ? resolveSweeper(activeSweeperId)?.type ?? null
+        : null,
+  };
 }
 
 // ── Graph-change notification ────────────────────────────────────────────────
@@ -628,33 +642,32 @@ export function isEditorOpen(): boolean {
 
 // ── Default-graph seeding ────────────────────────────────────────────────────
 //
-// First-open default wiring:
-//   data.distance-to-sun ──▶ sound.frequency (exp 20..4400 Hz)
-//   data.cluster-count   ──▶ sound.gain      (per-slot presence → voice phasing)
+// First-open default wiring, branched by probe type so each probe sounds
+// musical out of the box (and demonstrates its own character):
+//   sweeper → data.distance-to-sun ▶ sound.frequency (exp contour)
+//             data.cluster-count   ▶ sound.gain
+//   circle  → data.collision       ▶ sound.rhythm    (.struct rhythm)
+//             data.distance-to-sun ▶ sound.pitch     (crossing→note)
 
-function seedDefaultGraph(sweeperId: number): NodeGraph {
+// Shared 2×2 grid coordinates. COL_LEFT = 264 leaves room for the sweeper
+// sidebar that floats over the canvas's leftmost band.
+const SEED_COL_LEFT   = 264;
+const SEED_COL_RIGHT  = 480;   // 264 + 180 (node width) + 36 (gap)
+const SEED_ROW_TOP    = 48;
+const SEED_ROW_BOTTOM = 186;   // 48 + 90 (node height) + 48 (gap)
+
+function seedDefaultGraph(sweeperId: number, probeType: ShapeType = 'sweeper'): NodeGraph {
+  return probeType === 'circle'
+    ? seedDiscreteGraph(sweeperId)
+    : seedSweeperGraph(sweeperId);
+}
+
+function seedSweeperGraph(sweeperId: number): NodeGraph {
   const g = createGraph(sweeperId);
-  // Default behaviour users see on first open:
-  //   data.distance-to-sun  → sound.frequency (exp 20..4400 Hz)
-  //   data.cluster-count    → sound.gain      (quadratic 0..1)
-  //
-  // Layout is an explicit 2×2 grid — data chips on the left column, their
-  // paired sound chips directly to the right. Coordinates are multiples of
-  // GRID_SNAP_PX (24) and fit the DEFAULT_NODE_{WIDTH,HEIGHT} rhythm so
-  // the cables stay horizontal and obvious.
-  //
-  // COL_LEFT = 264 leaves enough space for the ~240px sweeper-controls
-  // sidebar that floats over the canvas's leftmost band. Without this
-  // offset the data chips would be occluded on first open.
-  const COL_LEFT   = 264;
-  const COL_RIGHT  = 480;   // 264 + 180 (node width) + 36 (gap)
-  const ROW_TOP    = 48;
-  const ROW_BOTTOM = 186;   // 48 + 90 (node height) + 48 (gap)
-
-  const dist = addNode(g, { type: 'data.distance-to-sun', side: 'data',  x: COL_LEFT,  y: ROW_TOP });
-  const freq = addNode(g, { type: 'sound.frequency',      side: 'sound', x: COL_RIGHT, y: ROW_TOP });
-  const cnt  = addNode(g, { type: 'data.cluster-count',   side: 'data',  x: COL_LEFT,  y: ROW_BOTTOM });
-  const gain = addNode(g, { type: 'sound.gain',           side: 'sound', x: COL_RIGHT, y: ROW_BOTTOM });
+  const dist = addNode(g, { type: 'data.distance-to-sun', side: 'data',  x: SEED_COL_LEFT,  y: SEED_ROW_TOP });
+  const freq = addNode(g, { type: 'sound.frequency',      side: 'sound', x: SEED_COL_RIGHT, y: SEED_ROW_TOP });
+  const cnt  = addNode(g, { type: 'data.cluster-count',   side: 'data',  x: SEED_COL_LEFT,  y: SEED_ROW_BOTTOM });
+  const gain = addNode(g, { type: 'sound.gain',           side: 'sound', x: SEED_COL_RIGHT, y: SEED_ROW_BOTTOM });
 
   addEdge(g, {
     from: { nodeId: dist.id, portId: 'distance', dir: 'out' },
@@ -664,11 +677,34 @@ function seedDefaultGraph(sweeperId: number): NodeGraph {
     from: { nodeId: cnt.id,  portId: 'count',    dir: 'out' },
     to:   { nodeId: gain.id, portId: 'amp',      dir: 'in' },
   });
+  return g;
+}
 
+/**
+ * Discrete probe default: a morphing RHYTHM (Collision → Rhythm) whose pitch
+ * follows each crossing's distance to the Sun (Distance → Pitch). Moving or
+ * resizing the circle re-shapes both — the curiosity payoff of bringing
+ * discrete probes back.
+ */
+function seedDiscreteGraph(sweeperId: number): NodeGraph {
+  const g = createGraph(sweeperId);
+  const coll = addNode(g, { type: 'data.collision',      side: 'data',  x: SEED_COL_LEFT,  y: SEED_ROW_TOP });
+  const rhy  = addNode(g, { type: 'sound.rhythm',        side: 'sound', x: SEED_COL_RIGHT, y: SEED_ROW_TOP });
+  const dist = addNode(g, { type: 'data.distance-to-sun', side: 'data',  x: SEED_COL_LEFT,  y: SEED_ROW_BOTTOM });
+  const pit  = addNode(g, { type: 'sound.pitch',          side: 'sound', x: SEED_COL_RIGHT, y: SEED_ROW_BOTTOM });
+
+  addEdge(g, {
+    from: { nodeId: coll.id, portId: 'gate', dir: 'out' },
+    to:   { nodeId: rhy.id,  portId: 'gate', dir: 'in' },
+  });
+  addEdge(g, {
+    from: { nodeId: dist.id, portId: 'distance', dir: 'out' },
+    to:   { nodeId: pit.id,  portId: 'note',     dir: 'in' },
+  });
   return g;
 }
 
 /** Test-only: expose the default-graph seeder so the test file can drive it. */
-export function _seedDefaultGraphForTests(sweeperId: number): NodeGraph {
-  return seedDefaultGraph(sweeperId);
+export function _seedDefaultGraphForTests(sweeperId: number, probeType: ShapeType = 'sweeper'): NodeGraph {
+  return seedDefaultGraph(sweeperId, probeType);
 }

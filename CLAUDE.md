@@ -10,7 +10,7 @@ Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-desig
 
 ### Commands
 - `npm run dev` — Vite dev server on port 5173
-- `npm test` — Vitest single run (24 suites, 266 tests pass, 4 skipped; some skipped tests require `jsdom` — install if needed)
+- `npm test` — Vitest single run (25 suites, 287 tests pass, 2 skipped; some skipped tests require `jsdom` — install if needed)
 - `npm run test:watch` — Vitest in watch mode
 - `npm run build` — TypeScript compile (`tsc`) then Vite bundle
 - `npm run deploy` — gh-pages deploy of `dist/`
@@ -38,13 +38,13 @@ Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-desig
 
 ### Test the features yourself before telling me you are done
 
-1. Run `npm test` to verify all 24 test suites pass. A local pre-commit hook (`.git/hooks/pre-commit`) also runs `tsc --noEmit` + `vitest run` and blocks the commit on failure — but it's local-only (not version-controlled), so run the tests yourself rather than relying on it.
+1. Run `npm test` to verify all 25 test suites pass. A local pre-commit hook (`.git/hooks/pre-commit`) also runs `tsc --noEmit` + `vitest run` and blocks the commit on failure — but it's local-only (not version-controlled), so run the tests yourself rather than relying on it.
 
 #### E2E tests
 
 2. Test the newly added features yourself first (using either Chrome extension or preview, you should click and see if there is sound, etc)
 
-3. Only the sweeper shape is active (circle/triangle/rectangle were disabled 2026-04-21 and kept as LEGACY comments). Spawn a sweeper — no sound should play before pressing play or Cmd+Enter. Then test every sound parameter in the node editor and verify audio responds correctly.
+3. Two probe types are active: the **sweeper** and the **circle** (a discrete probe revived 2026-06-07 — see [CONTEXT.md](CONTEXT.md) and ADR 0001). Triangle/rectangle remain disabled as LEGACY comments. Spawn either probe — no sound should play before pressing play or Cmd+Enter. Then test every sound parameter in the node editor and verify audio responds correctly. For the circle, confirm the seeded Collision→Rhythm + Distance→Pitch graph plays a morphing rhythm, and that moving/resizing it changes the rhythm.
 
 ### Maintain Progress.md
 

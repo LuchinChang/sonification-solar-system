@@ -1,8 +1,10 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 
-export default defineConfig({
-  base: '/sonification-solar-system/',
+// `base` is only the gh-pages sub-path for production builds; the dev server
+// (and Claude preview proxy) serves from root so `/` doesn't 302-redirect.
+export default defineConfig(({ command }) => ({
+  base: command === 'build' ? '/sonification-solar-system/' : '/',
   test: {
     include: ['src/__tests__/**/*.test.ts'],
     globals: true,
@@ -14,4 +16,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

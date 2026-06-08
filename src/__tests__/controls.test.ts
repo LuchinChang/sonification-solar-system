@@ -164,9 +164,27 @@ describe('rebuildAllCaches', () => {
     state.shapes.push(sw);
     state.orbitalMaxRadius = 300;
 
-    rebuildAllCaches(state);
+    const canvas = { width: 800, height: 600 } as HTMLCanvasElement;
+    rebuildAllCaches(state, canvas);
     // Sweeper should have sweep ticks computed
     expect(sw.sweepTicks).toBeDefined();
+  });
+
+  it('bakes discrete ticks for circle probes', () => {
+    const state = createInitialState();
+    state.linkLines = [
+      { p1: { x: 200, y: 300 }, p2: { x: 600, y: 300 } },
+    ];
+    const circle = new CanvasShape(400, 300, 'circle', 120);
+    state.shapes.push(circle);
+    state.orbitalMaxRadius = 400;
+
+    const canvas = { width: 800, height: 600 } as HTMLCanvasElement;
+    rebuildAllCaches(state, canvas);
+    // The horizontal line through the circle centre crosses the perimeter
+    // twice → two crossings binned into the discrete tick structure.
+    expect(circle.sweepTicks.length).toBe(1);          // one playhead (arm 0)
+    expect(circle.intersectionCount).toBe(2);
   });
 });
 

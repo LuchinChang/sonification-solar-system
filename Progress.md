@@ -1,5 +1,43 @@
 # Progress & lessons-learned
 
+## 2026-06-07 — Discrete probes (circle) revived via the node editor
+
+Brought back the **circle** as a discrete geometric probe, integrated into the
+node-editor pipeline rather than by un-commenting the quarantined audio model
+(see [ADR 0001](docs/adr/0001-discrete-probes-via-node-editor.md) and
+[CONTEXT.md](CONTEXT.md)). The circle reuses `_toSweeperCode` + `sweepTicks` +
+`perTickValue`; the only new geometry is `bakeDiscreteTicks` (crossings binned by
+angle into `sweepTicks[0][tick][slot]`, distance measured to the **Sun**, since
+distance-to-centre on a circle is the constant radius). New nodes:
+`data.collision` + `sound.rhythm`.
+
+**Strudel `.struct()` ordering gotcha (validated by a headless spike).** A
+rhythm is a `.struct("1 ~ ~ 1 …")` mask. `queryArc` showed that
+`note(...).struct(gate)` and rest-baked `note("c3 ~ ~ e3")` produce *identical*
+events — struct samples the value pattern at the gate's true positions. **But
+order matters:** `struct(gate).note(values)` (struct first) leaks the gate into
+the hap value (`{value:1, note:"c3"}`); only value-first stays clean (`"c3"`).
+So `sound.rhythm` carries `tailOrder: 100` and the codegen voice-builder
+stable-sorts sound fragments so `.struct()` always chains *after* `.note()`/
+`.freq()`. Reordering sound fragments is safe — each reads its own cached data
+stack, never another sound node's output.
+
+**Two bugs only live testing caught** (unit tests passed throughout):
+1. The `E` hotkey opened the editor only for `type === 'sweeper'`, so circles
+   couldn't be edited via keyboard — broadened to any probe.
+2. The circle dock button reused the `.sweeper-spawn-btn` style class, which is
+   also the sweeper spawn handler's selector → one click spawned a circle *and*
+   a sweeper. Fixed by skipping `data-shape` buttons in the sweeper handler.
+
+**Lesson.** When a new feature can be expressed through an existing universal
+interface (`perTickValue → SweepStack`), do that instead of building a parallel
+pipeline — the whole sound stack, ping-pong, and ordering logic come for free.
+And always dogfood UI wiring: the spawn/hotkey bugs were invisible to the type
+checker and the unit suite.
+
+Dev-server `base` is now conditional (`command === 'build' ? '/sonification-solar-system/' : '/'`)
+so the preview proxy doesn't 302 on `/`.
+
 ## 2026-06-06b — Scallop loops via jittered strobe (NOT dense plotting)
 
 To match Hartmut's reference more closely (woven "scallop" loops on the hexagon

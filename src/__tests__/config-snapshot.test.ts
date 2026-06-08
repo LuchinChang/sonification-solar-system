@@ -12,13 +12,13 @@ import {
 describe('ConfigSnapshot round-trip', () => {
   beforeEach(() => resetNextId(0));
 
-  // LEGACY: non-sweeper round-trip coverage (circle/triangle/rectangle).
-  // Tests are kept as `it.skip` rather than deleted, so re-enabling them is
-  // a one-line edit (remove .skip) when the ShapeType union is widened again.
-  it.skip('circle survives round-trip (quarantined in Unit 1)', () => {
-    // @ts-expect-error — ShapeType narrowed to 'sweeper' in Unit 1
+  // Circle was revived as a discrete geometric probe (2026-06-07). Triangle /
+  // rectangle remain quarantined as `it.skip` until their ShapeType returns.
+  it('circle survives round-trip (discrete probe)', () => {
     const original = new CanvasShape(100, 200, 'circle', 80);
     original.instrument = 'sine';
+    original.k = 4;
+    original.ticks = 120;
     const cfg = original.toConfig();
     const restored = CanvasShape.fromConfig(cfg);
     expect(restored.toConfig()).toEqual(cfg);
@@ -91,19 +91,17 @@ describe('ConfigSnapshot round-trip', () => {
     const restored = CanvasShape.fromConfig(original.toConfig());
     expect(restored.id).toBe(savedId);
   });
-  // LEGACY: sweeper-field-omission check assumed a non-sweeper shape existed.
-  // Every shape is a sweeper today; kept as .skip for future revival.
-  it.skip('sweeper-only fields are omitted for non-sweeper shapes (quarantined in Unit 1)', () => {
-    // @ts-expect-error — ShapeType narrowed to 'sweeper' in Unit 1
+  // Circle is now a probe too, so it carries the same baked-pattern fields as
+  // a sweeper (the old "omitted for non-sweeper shapes" guarantee no longer
+  // holds — every live shape type is a probe).
+  it('circle persists the shared probe fields', () => {
     const circle = new CanvasShape(0, 0, 'circle', 60);
     const cfg = circle.toConfig();
-    expect(cfg.k).toBeUndefined();
-    expect(cfg.sweepCount).toBeUndefined();
-    expect(cfg.startAngle).toBeUndefined();
-    expect(cfg.ticks).toBeUndefined();
-    expect(cfg.freqLow).toBeUndefined();
-    expect(cfg.freqHigh).toBeUndefined();
-    expect(cfg.colorIndex).toBeUndefined();
+    expect(cfg.k).toBeDefined();
+    expect(cfg.ticks).toBeDefined();
+    expect(cfg.freqLow).toBeDefined();
+    expect(cfg.freqHigh).toBeDefined();
+    expect(cfg.colorIndex).toBeDefined();
   });
 });
 

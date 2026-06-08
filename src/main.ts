@@ -15,7 +15,7 @@ import { createTourController } from './tour';
 import { updateTelemetry, patchShapeBlock, replaceShapeBlock } from './telemetry';
 import {
   setupEventHandlers, calculateLines,
-  finishDrawAnimation, updateCaption,
+  finishDrawAnimation, updateCaption, bakeShapeTicks,
 } from './controls';
 import {
   initNodeEditor, openEditor, registerDataNodes, initSidebar,
@@ -53,7 +53,9 @@ setSweeperResolver(id => state.shapes.find(s => s.id === id && s.type === 'sweep
 // must be rebuilt and the canvas repainted immediately. Mirrors the
 // startAngle wheel handler in controls.ts:648.
 setSweeperGeometryRefresh(sweeper => {
-  sweeper.rebuildSweepTicks(state.linkLines, sweeperMaxR(sweeper, state));
+  // Type-aware: sweepers re-cast their ray ticks; circles re-bin their
+  // perimeter↔orbit crossings. bakeShapeTicks dispatches on shape.type.
+  bakeShapeTicks(sweeper, state, dom.canvas);
   drawScene(dom.ctx, state);
   updateTelemetry(dom, state);
 });
@@ -68,7 +70,8 @@ if (sidebarHost !== null) {
 }
 
 initNodeEditor({
-  resolveSweeper: id => state.shapes.find(s => s.id === id && s.type === 'sweeper') ?? null,
+  // Any probe (sweeper or discrete circle) can open the node editor.
+  resolveSweeper: id => state.shapes.find(s => s.id === id) ?? null,
   // Unit 14 — DEFERRED commit. The panel hands us the freshly-compiled sweeper
   // block on closeEditor(); we splice it into the live textarea via the
   // canonical surgical-patch helper. Re-eval happens on Ctrl+Enter / Play.
@@ -95,7 +98,8 @@ dom.canvas.addEventListener('click', e => {
   if (e.shiftKey) return;
   for (let i = state.shapes.length - 1; i >= 0; i--) {
     const s = state.shapes[i];
-    if (s.type === 'sweeper' && s.containsPoint(e.clientX, e.clientY)) {
+    // Any probe opens the editor on click (sweeper or discrete circle).
+    if (s.containsPoint(e.clientX, e.clientY)) {
       openEditor(s.id);
       tour.notify('editor-opened');
       return;
@@ -154,7 +158,11 @@ function animate(now: number): void {
         console.debug('[audio] AC clock fallback:', e);
         shape.stepPlayhead(dt, state.cpm);
       }
-      shape.computeSweepClusters(state.linkLines, sweeperMaxR(shape, state));
+      // Live radar blips are a sweeper-only affordance (ray-cast clusters).
+      // Circles read their pre-baked discrete ticks; no per-frame recompute.
+      if (shape.type === 'sweeper') {
+        shape.computeSweepClusters(state.linkLines, sweeperMaxR(shape, state));
+      }
       // LEGACY: disabled 2026-04-21 — non-sweeper rAF branch (stepPlayhead +
       // checkAndFireCollisions + triggerAt + stepAnimations + telem flash).
       // Sweepers do not produce angle-crossing events; they use cluster signals.

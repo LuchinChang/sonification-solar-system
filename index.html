@@ -126,6 +126,24 @@
             </button>
           </div>
 
+          <!-- LEFT: create (circle probe spawn — solid perimeter + playhead dot) -->
+          <div class="knob-container">
+            <button
+              id="circle-spawn-btn"
+              class="sweeper-spawn-btn shape-tile"
+              data-shape="circle"
+              aria-label="Spawn circle probe"
+              title="Spawn circle probe"
+            >
+              <svg class="sweeper-icon-svg" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <circle cx="16" cy="16" r="10" stroke="currentColor" stroke-width="1.5"/>
+                <line   x1="16" y1="16" x2="16" y2="6" stroke="currentColor" stroke-width="1"/>
+                <circle cx="16" cy="6" r="2.5" fill="currentColor"/>
+                <circle cx="16" cy="16" r="1.5" fill="currentColor"/>
+              </svg>
+            </button>
+          </div>
+
           <!-- CENTER: tune (knob cluster) -->
           <div class="knob-cluster">
             <div class="knob-container">
