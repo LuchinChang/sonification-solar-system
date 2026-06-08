@@ -162,6 +162,24 @@ function animate(now: number): void {
       // Circles read their pre-baked discrete ticks; no per-frame recompute.
       if (shape.type === 'sweeper') {
         shape.computeSweepClusters(state.linkLines, sweeperMaxR(shape, state));
+      } else if (shape.type === 'circle') {
+        // Discrete circle: pulse the original expanding ring at each crossing as
+        // the playhead enters its tick — visually echoing the audible rhythm.
+        // Use floor() of the phase (not the round() the bake uses for binning):
+        // Strudel plays step i over the interval [i/TICKS, (i+1)/TICKS), so the
+        // moment the dot enters that interval is the audible hit instant. Reading
+        // playheadAngle directly keeps this correct under both the AC-clock and
+        // the stepPlayhead fallback paths.
+        const TICKS = shape.ticks;
+        const step  = (Math.PI * 2) / TICKS;
+        let tick = Math.floor((shape.playheadAngle - shape.startAngle) / step);
+        tick = ((tick % TICKS) + TICKS) % TICKS;
+        if (tick !== shape.lastRingTick) {
+          shape.lastRingTick = tick;
+          const slots = shape.sweepTicks[0]?.[tick] ?? [];
+          for (const c of slots) shape.triggerAt(c.x, c.y);
+        }
+        shape.stepAnimations();
       }
       // LEGACY: disabled 2026-04-21 — non-sweeper rAF branch (stepPlayhead +
       // checkAndFireCollisions + triggerAt + stepAnimations + telem flash).

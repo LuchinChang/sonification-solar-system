@@ -70,5 +70,5 @@ For a discrete probe, the `.struct("1 ~ ~ 1 …")` mask derived from per-tick cr
 ## Flagged ambiguities
 
 - "shape" was used to mean both *any live probe* and *the quarantined geometry family* — resolved: **Probe** is the live concept; "shape" is the broader, looser word.
-- "distance" on a circle is ambiguous: distance-from-centre is the constant radius (useless), distance-to-**Sun** is the musical signal — the **Distance-to-Sun** data node always means the latter.
+- "distance" on a circle is ambiguous: distance-from-centre is the constant radius, distance-to-**Sun** is the musical signal — the **Distance-to-Sun** data node always means the latter. A circle now spawns **centred on the Sun**, where every crossing is exactly `radius` from the Sun, so the seeded Distance→Pitch is intentionally a single **radius-tunable drone** (resize to retune); dragging the ring off-centre revives per-crossing pitch variation. Multiple circles fan by **radius** into concentric rings.
 - "collision" historically meant the old playhead-crossing audio trigger (removed); it now means a **Crossing** datum feeding the **Rhythm** node. See [ADR 0001](docs/adr/0001-discrete-probes-via-node-editor.md).

@@ -119,6 +119,7 @@ describe('ShapeConfig property coverage', () => {
     'prevPlayheadAngle',
     'cachedIntersections',
     'activeAnimations',
+    'lastRingTick',
     'intersectionCount',
     'sweepClusters',
     'sweepTicks',

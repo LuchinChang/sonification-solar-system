@@ -131,13 +131,15 @@ export function spawnShape(
   const sun = sunPos(dom.canvas);
   let s: CanvasShape;
   if (type === 'circle') {
-    // Discrete probe. A circle centred on the Sun has a constant perimeter→Sun
-    // distance (degenerate pitch), so spawn it OFFSET — partway out, fanned by
-    // index — where its perimeter spans varied distances and crosses orbits.
-    const n   = state.shapes.filter(sh => sh.type === 'circle').length;
-    const off = Math.max(state.orbitalMaxRadius * 0.45, 160);
-    const ang = -Math.PI / 2 + n * (Math.PI / 5);
-    s = new CanvasShape(sun.x + Math.cos(ang) * off, sun.y + Math.sin(ang) * off, type, 150);
+    // Discrete probe. Spawn CENTRED on the Sun — a clean ring whose orbital
+    // crossings drive a morphing rhythm. A centred circle has a constant
+    // perimeter→Sun distance, so its Distance→Pitch default is a single note
+    // tuned by the radius (resize to retune); dragging it off-centre revives
+    // melodic variation. Multiple circles fan by RADIUS into concentric rings
+    // so they stay distinct and individually clickable.
+    const n      = state.shapes.filter(sh => sh.type === 'circle').length;
+    const radius = Math.min(150 + n * 60, MAX_SHAPE_SIZE);
+    s = new CanvasShape(sun.x, sun.y, type, radius);
     s.colorIndex = state.shapes.length;
   } else {
     s = new CanvasShape(sun.x, sun.y, type, MAX_SHAPE_SIZE);

@@ -147,6 +147,31 @@ describe('compileGraphToStrudel — discrete circle', () => {
   });
 });
 
+// ── Playhead ring pulse (revived original animation) ──────────────────────────
+
+describe('crossing ring animation', () => {
+  it('triggerAt spawns one expanding ring at the given crossing point', () => {
+    const c = makeCircle();
+    expect(c.activeAnimations).toHaveLength(0);
+    c.triggerAt(250, 0);
+    expect(c.activeAnimations).toHaveLength(1);
+    expect(c.activeAnimations[0]).toMatchObject({ x: 250, y: 0, frame: 0, maxFrames: 18 });
+  });
+
+  it('stepAnimations advances frames and prunes the ring after maxFrames', () => {
+    const c = makeCircle();
+    c.triggerAt(150, 0);
+    const max = c.activeAnimations[0].maxFrames;
+    // One step short of expiry: still alive, frames advanced.
+    for (let i = 0; i < max - 1; i++) c.stepAnimations();
+    expect(c.activeAnimations).toHaveLength(1);
+    expect(c.activeAnimations[0].frame).toBe(max - 1);
+    // The final step pushes frame to maxFrames → pruned.
+    c.stepAnimations();
+    expect(c.activeAnimations).toHaveLength(0);
+  });
+});
+
 // ── Palette filtering: sweepers never see the discrete nodes ──────────────────
 
 describe('discrete-only palette', () => {

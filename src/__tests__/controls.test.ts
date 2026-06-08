@@ -6,14 +6,27 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CanvasShape } from '../shapes';
-import { createInitialState } from '../state';
+import { createInitialState, sunPos } from '../state';
 import {
   setActiveShape,
   deleteActiveShape,
   rebuildAllCaches,
+  spawnShape,
   editorShouldConsumeDeleteKey,
 } from '../controls';
 import type { DomElements } from '../dom';
+import type { TourController } from '../tour';
+
+/** No-op tour controller — spawnShape only calls tour.notify for sweepers. */
+function stubTour(): TourController {
+  return {
+    start: vi.fn(),
+    end: vi.fn(),
+    notify: vi.fn(),
+    get isActive() { return false; },
+    get currentStep() { return 0; },
+  };
+}
 
 // Minimal DOM mock for controls that don't need full DOM
 function mockDom(): DomElements {
@@ -185,6 +198,42 @@ describe('rebuildAllCaches', () => {
     // twice → two crossings binned into the discrete tick structure.
     expect(circle.sweepTicks.length).toBe(1);          // one playhead (arm 0)
     expect(circle.intersectionCount).toBe(2);
+  });
+});
+
+describe('spawnShape — circle centring + radius fan', () => {
+  it('spawns the first circle centred on the Sun at the base radius', () => {
+    const state = createInitialState();
+    const dom   = mockDom();
+    const sun   = sunPos(dom.canvas);
+
+    spawnShape(state, dom, 'circle', stubTour());
+
+    const c = state.shapes.at(-1)!;
+    expect(c.type).toBe('circle');
+    expect(c.x).toBe(sun.x);   // centred on the Sun (no offset)
+    expect(c.y).toBe(sun.y);
+    expect(c.size).toBe(150);  // base radius
+  });
+
+  it('fans successive circles into larger concentric rings (same centre)', () => {
+    const state = createInitialState();
+    const dom   = mockDom();
+    const sun   = sunPos(dom.canvas);
+
+    spawnShape(state, dom, 'circle', stubTour());
+    spawnShape(state, dom, 'circle', stubTour());
+    spawnShape(state, dom, 'circle', stubTour());
+
+    const circles = state.shapes.filter(s => s.type === 'circle');
+    expect(circles).toHaveLength(3);
+    // All share the Sun's centre…
+    for (const c of circles) {
+      expect(c.x).toBe(sun.x);
+      expect(c.y).toBe(sun.y);
+    }
+    // …but each is a strictly larger ring (150, 210, 270).
+    expect(circles.map(c => c.size)).toEqual([150, 210, 270]);
   });
 });
 

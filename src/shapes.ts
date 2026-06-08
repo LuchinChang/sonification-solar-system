@@ -201,6 +201,8 @@ export class CanvasShape {
   cachedIntersections: CachedIntersection[];
   /** Live trigger animations (glowing rings). Pruned each frame. */
   activeAnimations: TriggerAnimation[];
+  /** Last tick the playhead fired a crossing ring for; edge-triggers the pulse. */
+  lastRingTick: number;
   /** Intersection count — kept up-to-date by rebuildIntersectionCache(). */
   intersectionCount: number;
   /** Live clusters recomputed every frame (sweeper only). Flat across all arms. */
@@ -246,6 +248,7 @@ export class CanvasShape {
     this.prevPlayheadAngle   = 3 * Math.PI / 2;
     this.cachedIntersections = [];
     this.activeAnimations    = [];
+    this.lastRingTick        = -1;
     this.intersectionCount   = 0;
     this.k                   = 4;
     this.sweepCount          = 1;
@@ -362,21 +365,9 @@ export class CanvasShape {
       ctx.restore();
     }
 
-    // Circle playhead: a clock-hand from centre to the perimeter point the
-    // angular playhead currently points at (drawPlayhead() adds the bright dot).
-    if (this.type === 'circle') {
-      ctx.save();
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 0.55;
-      ctx.beginPath();
-      ctx.moveTo(this.x, this.y);
-      ctx.lineTo(
-        this.x + this.size * Math.cos(this.playheadAngle),
-        this.y + this.size * Math.sin(this.playheadAngle),
-      );
-      ctx.stroke();
-      ctx.restore();
-    }
+    // Circle playhead is shown by the bright perimeter dot (drawPlayhead) plus
+    // the expanding-ring pulse on each crossing (drawAnimations) — no clock-hand
+    // arm. (Removed 2026-06-07: the centre→perimeter line was visual noise.)
 
     // Live radar blips at current arm position — opacity varies with density
     if (this.type === 'sweeper') {
@@ -424,28 +415,29 @@ export class CanvasShape {
     ctx.restore();
   }
 
-  /** Draws all live expanding-ring trigger animations. */
-  drawAnimations(_ctx: CanvasRenderingContext2D): void {
-    // LEGACY: disabled 2026-04-21 — non-sweeper trigger-ring animations (fired on orbital
-    // intersection crossings). Sweepers do not use per-hit triggerAt/stepAnimations.
-    // To re-enable: un-comment this block.
-    /*
+  /**
+   * Draws all live expanding-ring trigger animations — the circle's original
+   * playhead pulse. Revived 2026-06-07: now fired by main.ts when the playhead
+   * enters a tick that holds a crossing (a rhythm hit), so each coral ring
+   * blooms at the crossing point in time with the audio. Empty for sweepers
+   * (they never push activeAnimations).
+   */
+  drawAnimations(ctx: CanvasRenderingContext2D): void {
     if (this.activeAnimations.length === 0) return;
-    _ctx.save();
+    ctx.save();
     for (const anim of this.activeAnimations) {
       const t      = anim.frame / anim.maxFrames;
       const radius = 5 + t * 18;
-      _ctx.globalAlpha  = (1 - t) * 0.80;
-      _ctx.strokeStyle  = '#F25C54';
-      _ctx.lineWidth    = 2.5 * (1 - t * 0.5);
-      _ctx.shadowColor  = '#F25C54';
-      _ctx.shadowBlur   = 12 * (1 - t);
-      _ctx.beginPath();
-      _ctx.arc(anim.x, anim.y, radius, 0, Math.PI * 2);
-      _ctx.stroke();
+      ctx.globalAlpha  = (1 - t) * 0.80;
+      ctx.strokeStyle  = '#F25C54';
+      ctx.lineWidth    = 2.5 * (1 - t * 0.5);
+      ctx.shadowColor  = '#F25C54';
+      ctx.shadowBlur   = 12 * (1 - t);
+      ctx.beginPath();
+      ctx.arc(anim.x, anim.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
     }
-    _ctx.restore();
-    */
+    ctx.restore();
   }
 
   // LEGACY: disabled 2026-04-21 — non-sweeper shape support, kept for future revival.
@@ -648,23 +640,19 @@ export class CanvasShape {
     return [];
   }
 
-  /** Spawn a new expanding-ring animation at a specific canvas point. */
-  triggerAt(_x: number, _y: number): void {
-    // LEGACY: disabled 2026-04-21 — non-sweeper expanding-ring animation.
-    // To re-enable: un-comment this block.
-    /*
-    this.activeAnimations.push({ x: _x, y: _y, frame: 0, maxFrames: 18 });
-    */
+  /**
+   * Spawn a new expanding-ring animation at a specific canvas point.
+   * Revived 2026-06-07 for the discrete circle's crossing pulse — main.ts calls
+   * this with each crossing's (x, y) as the playhead enters an occupied tick.
+   */
+  triggerAt(x: number, y: number): void {
+    this.activeAnimations.push({ x, y, frame: 0, maxFrames: 18 });
   }
 
   /** Advance + prune all active trigger animations. Call once per rAF frame. */
   stepAnimations(): void {
-    // LEGACY: disabled 2026-04-21 — non-sweeper animation advancement.
-    // To re-enable: un-comment this block.
-    /*
     for (const anim of this.activeAnimations) anim.frame++;
     this.activeAnimations = this.activeAnimations.filter(a => a.frame < a.maxFrames);
-    */
   }
 
   // LEGACY: disabled 2026-04-21 — non-sweeper playhead-position helpers.

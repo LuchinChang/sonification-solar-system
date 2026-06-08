@@ -1,5 +1,37 @@
 # Progress & lessons-learned
 
+## 2026-06-07b — Circle centred on the Sun + original ring pulse revived
+
+Two refinements to the shipped circle probe.
+
+**Spawn centred (reverses the offset decision).** The circle now spawns at the
+Sun (`new CanvasShape(sun.x, sun.y, 'circle', radius)`), radius-fanned
+(`min(150 + n·60, MAX_SHAPE_SIZE)`) so multiple circles form concentric rings.
+The original revival spawned *offset* because a centred circle has a constant
+perimeter→Sun distance (flat pitch). We chose **rhythm-first**: at centre the
+seeded Distance→Pitch is a single drone tuned by the radius (resize to retune)
+while planetary motion drives the rhythm; dragging off-centre revives melodic
+variation. `density`/`angleVariance` are baked constant, so distance is the only
+varying pitch source — hence the drone, not a bug.
+
+**Original expanding-ring pulse revived.** Removed the revival-era clock-hand arm
+from `draw()`; un-quarantined `drawAnimations`/`triggerAt`/`stepAnimations` (coral
+`#F25C54` rings, 18-frame fade). The old trigger path (`checkAndFireCollisions`)
+is still quarantined, so `main.ts` now fires rings itself: when the playhead
+*enters* a tick that holds a crossing, `triggerAt(c.x, c.y)` blooms a ring at the
+crossing point. `drawAnimations(ctx)` was already being called in `renderer.ts`,
+so only the body needed un-commenting — no new draw site.
+
+**The one subtlety a future debugger will trip on — floor vs round.**
+`bakeDiscreteTicks` bins crossings with `round((θ−startAngle)/step)` (nearest tick
+*centre*), but Strudel plays step *i* over the interval `[i/TICKS, (i+1)/TICKS)`.
+So the ring-trigger detector uses **`floor`** of the phase, not `round`: entering
+that interval is the audible-hit instant, keeping the visual pulse locked to the
+sound. It reads `playheadAngle` directly (not `prevPlayheadAngle`) so it's correct
+under both the AC-clock and `stepPlayhead` fallback paths. Edge-triggered via a new
+`lastRingTick` field. Stepping lives inside the `isPlaying && dt>0` guard, so pause
+is a clean freeze-frame (dot + rings halt, resume continues the fade).
+
 ## 2026-06-07 — Discrete probes (circle) revived via the node editor
 
 Brought back the **circle** as a discrete geometric probe, integrated into the
