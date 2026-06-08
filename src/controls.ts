@@ -3,7 +3,7 @@
 // All UI event handlers: mouse, keyboard, knobs, shape management,
 // and playback toggle.
 
-import { CanvasShape, resetNextId, type ShapeType } from './shapes';
+import { CanvasShape, PROBE_PALETTE_SIZE, resetNextId, type ShapeType } from './shapes';
 import { calculateGeocentricLines, calculateEllipticalLines, calculateCardioidLines, calculateMoonHexagonLines, SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS, clamp } from './engine';
 import { PATTERNS, computeAuScale, renderPatternThumbnail, type PlanetaryPattern } from './patterns';
 import type { AppState } from './state';
@@ -122,6 +122,20 @@ export function rebuildAllCaches(state: AppState, canvas: HTMLCanvasElement): vo
   }
 }
 
+/**
+ * Pick the lowest palette colour index not currently used by any live probe, so
+ * no two probes on the canvas share a colour. Frees up colours after a probe is
+ * deleted (the next spawn reclaims the gap). Once all palette slots are taken
+ * (>8 concurrent probes) a repeat is unavoidable — fall back to the count.
+ */
+function nextColorIndex(state: AppState): number {
+  const used = new Set(state.shapes.map(sh => sh.colorIndex));
+  for (let i = 0; i < PROBE_PALETTE_SIZE; i++) {
+    if (!used.has(i)) return i;
+  }
+  return state.shapes.length % PROBE_PALETTE_SIZE;
+}
+
 export function spawnShape(
   state: AppState,
   dom: DomElements,
@@ -140,14 +154,15 @@ export function spawnShape(
     const n      = state.shapes.filter(sh => sh.type === 'circle').length;
     const radius = Math.min(150 + n * 60, MAX_SHAPE_SIZE);
     s = new CanvasShape(sun.x, sun.y, type, radius);
-    s.colorIndex = state.shapes.length;
   } else {
     s = new CanvasShape(sun.x, sun.y, type, MAX_SHAPE_SIZE);
-    // Auto-offset startAngle and assign distinct colour for each new sweeper
+    // Auto-offset startAngle so each new sweeper's arm starts at a distinct angle.
     const existing = state.shapes.filter(sh => sh.type === 'sweeper');
     s.startAngle = (3 * Math.PI / 2 + existing.length * Math.PI / 4) % (Math.PI * 2);
-    s.colorIndex = existing.length;
   }
+  // Distinct colour per probe, shared across types (circle + sweeper draw from
+  // one palette) so a circle and a sweeper never collide on the same hue.
+  s.colorIndex = nextColorIndex(state);
   state.shapes.push(s);
   s.rebuildIntersectionCache(state.linkLines);
   bakeShapeTicks(s, state, dom.canvas);
@@ -876,9 +891,10 @@ export function setupEventHandlers(
     }
   }, { passive: false });
 
-  // Dock — click-to-spawn shape tiles. Each tile declares `data-shape`; we
-  // spawn the matching probe type. Circle was revived as a discrete probe
-  // (2026-06-07); triangle/rectangle remain quarantined and are ignored.
+  // Dock — click-to-spawn probe cards. Each .shape-tile declares `data-shape`;
+  // we spawn the matching probe type. The card selector was revived 2026-06-07
+  // (Sonic Foundry section). Only the two live probes have cards; the N hotkey
+  // still spawns a sweeper. Triangle/rectangle remain quarantined and are ignored.
   document.querySelectorAll<HTMLButtonElement>('.shape-tile').forEach(tile => {
     tile.addEventListener('click', () => {
       const requested = tile.dataset['shape'] ?? 'sweeper';
@@ -886,15 +902,6 @@ export function setupEventHandlers(
       else if (requested === 'sweeper') spawnShape(state, dom, 'sweeper', tour);
       // else: quarantined shape type — no-op.
     });
-  });
-
-  // Minimal dock sweeper-spawn affordance (Unit 3): click + N hotkey.
-  // The circle-spawn button reuses the `.sweeper-spawn-btn` style class but
-  // declares `data-shape` and is owned by the `.shape-tile` handler above —
-  // skip it here so one click doesn't spawn both a circle AND a sweeper.
-  document.querySelectorAll<HTMLButtonElement>('.sweeper-spawn-btn').forEach(btn => {
-    if (btn.dataset['shape']) return;
-    btn.addEventListener('click', () => spawnShape(state, dom, 'sweeper' as ShapeType, tour));
   });
 
   // Save / load config snapshot — drag-drop, buttons, file input

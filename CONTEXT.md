@@ -25,6 +25,9 @@ _Avoid_: "shape probe", "polygon".
 The moving read position of a probe — a rotating ray for a sweeper, an angular dot traversing the perimeter for a circle. One full revolution = one Strudel cycle.
 _Avoid_: "cursor", "needle".
 
+**Probe colour**:
+Every live probe is assigned a distinct accent colour from a fixed palette, so no two probes on the canvas share a colour (you identify a probe by its colour). The probe's outline, tick-dots, the sweeper's arm, and the circle's crossing-pulse rings are all drawn in that colour. The circle's position **dot** is the one exception — it stays white for contrast against its own colored perimeter.
+
 ### The field
 
 **Link Line** (or **Orbital Line**):

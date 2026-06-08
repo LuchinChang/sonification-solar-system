@@ -237,6 +237,49 @@ describe('spawnShape — circle centring + radius fan', () => {
   });
 });
 
+describe('spawnShape — distinct probe colours', () => {
+  it('gives a circle and a sweeper different colorIndex (no shared hue)', () => {
+    // Regression: circle used shapes.length and sweeper used sweeper-count, so
+    // spawning circle-then-sweeper produced colorIndex 0 for BOTH (both teal).
+    const state = createInitialState();
+    const dom   = mockDom();
+
+    spawnShape(state, dom, 'circle', stubTour());
+    spawnShape(state, dom, 'sweeper', stubTour());
+
+    const [circle, sweeper] = state.shapes;
+    expect(circle.colorIndex).not.toBe(sweeper.colorIndex);
+    expect(circle.accentColor).not.toBe(sweeper.accentColor);
+  });
+
+  it('keeps every live probe on a unique colour', () => {
+    const state = createInitialState();
+    const dom   = mockDom();
+    for (let i = 0; i < 5; i++) {
+      spawnShape(state, dom, i % 2 === 0 ? 'circle' : 'sweeper', stubTour());
+    }
+    const indices = state.shapes.map(s => s.colorIndex);
+    expect(new Set(indices).size).toBe(indices.length);   // all distinct
+  });
+
+  it('reclaims a freed colour after a probe is deleted', () => {
+    const state = createInitialState();
+    const dom   = mockDom();
+    spawnShape(state, dom, 'circle', stubTour());   // colorIndex 0
+    spawnShape(state, dom, 'circle', stubTour());   // colorIndex 1
+    spawnShape(state, dom, 'circle', stubTour());   // colorIndex 2
+
+    // Delete the middle probe (frees colorIndex 1).
+    const middle = state.shapes.find(s => s.colorIndex === 1)!;
+    setActiveShape(state, middle);
+    deleteActiveShape(state, dom);
+
+    // The next spawn reclaims the lowest free slot (1), not a new index 3.
+    spawnShape(state, dom, 'sweeper', stubTour());
+    expect(state.shapes.at(-1)!.colorIndex).toBe(1);
+  });
+});
+
 // ── Unit 5: Selection / delete reconciliation ──────────────────────────────
 //
 // When the node editor is open AND has a selected cable, Backspace must go

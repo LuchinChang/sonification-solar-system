@@ -648,17 +648,8 @@ body.ui-hidden #foundry-panel {
   gap: var(--dock-cluster-gap);
   position: relative;
 }
-.knob-cluster::after {
-  content: "";
-  position: absolute;
-  top: 18%;
-  bottom: 18%;
-  left: 50%;
-  width: 1px;
-  background: linear-gradient(to bottom, transparent, var(--glass-border), transparent);
-  transform: translateX(-0.5px);
-  pointer-events: none;
-}
+/* The inner Sample|CPM divider was removed (2026-06-07): a single .section-sep
+   now groups the probe cards vs. the knobs, so the two knobs read as one group. */
 
 /* ══════════════════════════════════════════════════════════════
    SWEEPER SPAWN BUTTON — 64px circle with radial-arm icon.
@@ -765,6 +756,18 @@ body.ui-hidden #foundry-panel {
 #top-chrome > *:nth-child(2) { transition-delay: 60ms; }
 #top-chrome > *:nth-child(3) { transition-delay: 120ms; }
 #top-chrome > *:nth-child(4) { transition-delay: 180ms; }
+#top-chrome > *:nth-child(5) { transition-delay: 240ms; }
+
+/* Play/pause lives in the top-left cluster as the leftmost transport control.
+   Shrink it to 34px to match the file/view buttons, drop the dock-token margin,
+   and add a gap so it reads as separate from the Save/Load/Theme group. */
+#top-chrome .play-btn {
+  width: 34px;
+  height: 34px;
+  margin-top: 0;
+  margin-right: 10px;
+  font-size: 14px;
+}
 
 body.ui-hidden #top-chrome {
   pointer-events: none;

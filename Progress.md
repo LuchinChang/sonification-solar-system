@@ -1,5 +1,29 @@
 # Progress & lessons-learned
 
+## 2026-06-07c — Dock redesign + distinct probe colours
+
+UI pass: revived the old card-style probe selector ("Sonic Foundry" cards for
+Sweeper + Circle), moved play/pause out of the dock into the top-left
+`#top-chrome` cluster (leftmost, 34px, gap before Save/Load/Theme), and reduced
+the dock to one vertical separator (`.section-sep` between cards and knobs;
+removed the inner Sample|CPM divider). The card CSS (`.shape-tile`) was still
+present in `style.css` from before the Unit-3 streamline, so only markup needed
+reviving.
+
+**Bug fixed — two probes could share a colour.** `spawnShape` assigned
+`colorIndex` per-type inconsistently: a circle used `state.shapes.length`, a
+sweeper used the sweeper-only count. So spawning a circle then a sweeper gave
+**both `colorIndex 0` → both teal**. Replaced with `nextColorIndex(state)`: the
+lowest palette slot not used by any live probe (shared across types), which also
+reclaims a freed colour after a deletion. Guarantees distinct colours for ≤8
+concurrent probes.
+
+**Circle ring colour now matches the probe.** `drawAnimations` hardcoded coral
+`#F25C54`; it now uses `this.accentColor` so the crossing pulse shares the
+circle's colour identity. The position **dot stays white** (a high-contrast
+marker that would otherwise blend into its own same-colour perimeter) — a
+deliberate exception captured in [CONTEXT.md](CONTEXT.md) under "Probe colour".
+
 ## 2026-06-07b — Circle centred on the Sun + original ring pulse revived
 
 Two refinements to the shipped circle probe.

@@ -96,8 +96,10 @@ interface TriggerAnimation {
  *  Exported so the data-side `cluster-tolerance` node can read the live value
  *  it publishes onto globalThis.__sw_<id>_tol each frame. */
 export const SWEEP_CLUSTER_THRESHOLD = 2;
-/** Accent colour palette for sweeper shapes — each sweeper gets a distinct hue. */
+/** Accent colour palette for probes — each probe gets a distinct hue. */
 const SWEEP_PALETTE = ['#2DD4BF', '#C084FC', '#F472B6', '#60A5FA', '#FACC15', '#FB923C', '#34D399', '#A78BFA'];
+/** Number of distinct probe accent colours before the palette must repeat. */
+export const PROBE_PALETTE_SIZE = SWEEP_PALETTE.length;
 
 /** Convert a hex colour (#RRGGBB) to an rgba() string with the given alpha. */
 function hexRgba(hex: string, alpha: number): string {
@@ -418,20 +420,23 @@ export class CanvasShape {
   /**
    * Draws all live expanding-ring trigger animations — the circle's original
    * playhead pulse. Revived 2026-06-07: now fired by main.ts when the playhead
-   * enters a tick that holds a crossing (a rhythm hit), so each coral ring
-   * blooms at the crossing point in time with the audio. Empty for sweepers
-   * (they never push activeAnimations).
+   * enters a tick that holds a crossing (a rhythm hit), so each ring blooms at
+   * the crossing point in time with the audio. Drawn in the probe's accent
+   * colour so the pulse shares the circle's colour identity (the white position
+   * dot is the only element that stays uncoloured). Empty for sweepers (they
+   * never push activeAnimations).
    */
   drawAnimations(ctx: CanvasRenderingContext2D): void {
     if (this.activeAnimations.length === 0) return;
+    const color = this.accentColor;
     ctx.save();
     for (const anim of this.activeAnimations) {
       const t      = anim.frame / anim.maxFrames;
       const radius = 5 + t * 18;
       ctx.globalAlpha  = (1 - t) * 0.80;
-      ctx.strokeStyle  = '#F25C54';
+      ctx.strokeStyle  = color;
       ctx.lineWidth    = 2.5 * (1 - t * 0.5);
-      ctx.shadowColor  = '#F25C54';
+      ctx.shadowColor  = color;
       ctx.shadowBlur   = 12 * (1 - t);
       ctx.beginPath();
       ctx.arc(anim.x, anim.y, radius, 0, Math.PI * 2);
