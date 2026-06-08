@@ -251,9 +251,9 @@ body.ui-hidden #foundry-panel {
   background: linear-gradient(to right, transparent, var(--glass-border), transparent);
 }
 
-/* Keybindings "?" badge in the dock header (top-right of header) */
+/* Keyboard shortcuts "?" badge in the dock header (top-right of header) */
 .dock-header { position: relative; }
-.keybindings-btn {
+.keyboard-shortcuts-btn {
   position: absolute;
   top: -1px;
   right: 0;
@@ -275,8 +275,8 @@ body.ui-hidden #foundry-panel {
     color       var(--dur-base) var(--ease-out-quart),
     border-color var(--dur-base) var(--ease-out-quart);
 }
-.keybindings-btn:hover,
-.keybindings-btn:focus-visible {
+.keyboard-shortcuts-btn:hover,
+.keyboard-shortcuts-btn:focus-visible {
   opacity: 1;
   color: var(--accent-amber);
   border-color: var(--accent-amber);
@@ -825,12 +825,12 @@ body.ui-hidden #top-chrome > * {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   PERSISTENT KEYBINDINGS PANEL  (src/keybindings.ts)
+   PERSISTENT KEYBOARD SHORTCUTS PANEL  (src/keyboard-shortcuts.ts)
    Left-edge mirror of #telemetry-panel. Always present; collapses to a
-   40px peek-tab. Source of truth is the KEYBINDINGS array — this is docs
+   40px peek-tab. Source of truth is the KEYBOARD_SHORTCUTS array — this is docs
    only, the hotkey dispatch lives in src/controls.ts.
    ══════════════════════════════════════════════════════════════ */
-.shortcuts-panel {
+.keyboard-shortcuts-panel {
   position: fixed;
   left: 0;
   top: 80px;                 /* clear of #top-chrome (Save/Load/Theme) */
@@ -863,16 +863,16 @@ body.ui-hidden #top-chrome > * {
 }
 
 /* Only the 40px tab pokes out when collapsed. */
-.shortcuts-panel.collapsed {
+.keyboard-shortcuts-panel.collapsed {
   transform: translateX(calc(-100% + 40px));
 }
 
-.shortcuts-panel:hover {
+.keyboard-shortcuts-panel:hover {
   border-color: var(--glass-border-hover);
 }
 
 /* Peek-tab — vertical handle, always visible on the right edge. */
-.shortcuts-tab {
+.keyboard-shortcuts-tab {
   flex: 0 0 40px;
   display: flex;
   align-items: center;
@@ -885,13 +885,13 @@ body.ui-hidden #top-chrome > * {
   cursor: pointer;
   transition: color var(--dur-fast), background var(--dur-fast);
 }
-.shortcuts-tab:hover {
+.keyboard-shortcuts-tab:hover {
   color: var(--accent-amber);
   background: rgba(194, 118, 46, 0.06);
 }
 
 /* Content pane. */
-.shortcuts-inner {
+.keyboard-shortcuts-inner {
   width: 232px;
   overflow-y: auto;
   padding: 14px 16px 14px;
@@ -899,11 +899,11 @@ body.ui-hidden #top-chrome > * {
   opacity: 1;
   transition: opacity var(--dur-base) var(--ease-out-quart);
 }
-.shortcuts-panel.collapsed .shortcuts-inner {
+.keyboard-shortcuts-panel.collapsed .keyboard-shortcuts-inner {
   opacity: 0;
 }
 
-.shortcuts-header {
+.keyboard-shortcuts-header {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -911,25 +911,25 @@ body.ui-hidden #top-chrome > * {
   padding-bottom: 8px;
   border-bottom: 1px solid var(--glass-border);
 }
-.shortcuts-title {
+.keyboard-shortcuts-title {
   font-size: 10px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--accent-amber);
 }
-.shortcuts-sub {
+.keyboard-shortcuts-sub {
   font-size: 9px;
   color: var(--text-dim);
   letter-spacing: 0.08em;
 }
 
 /* Copper divider between sections. */
-.shortcuts-section + .shortcuts-section {
+.keyboard-shortcuts-section + .keyboard-shortcuts-section {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--glass-border);
 }
-.shortcuts-section-title {
+.keyboard-shortcuts-section-title {
   margin: 0 0 8px;
   font-size: 9px;
   font-weight: 600;
@@ -938,20 +938,20 @@ body.ui-hidden #top-chrome > * {
   color: var(--accent-copper);
 }
 
-.shortcuts-list {
+.keyboard-shortcuts-list {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 6px 14px;
   margin: 0;
 }
-.shortcuts-list dt {
+.keyboard-shortcuts-list dt {
   display: flex;
   gap: 4px;
   justify-content: flex-end;
   align-items: center;
 }
 /* Keycap with subtle depth + press-shadow. */
-.shortcuts-list kbd {
+.keyboard-shortcuts-list kbd {
   font-family: var(--font-mono);
   font-size: 9.5px;
   padding: 2px 6px;
@@ -965,11 +965,11 @@ body.ui-hidden #top-chrome > * {
   line-height: 1.2;
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
 }
-[data-theme="light"] .shortcuts-list kbd {
+[data-theme="light"] .keyboard-shortcuts-list kbd {
   background: rgba(92, 58, 33, 0.06);
   box-shadow: 0 1px 0 rgba(92, 58, 33, 0.18);
 }
-.shortcuts-list dd {
+.keyboard-shortcuts-list dd {
   color: var(--text-secondary);
   font-size: 11px;
   display: flex;
@@ -978,14 +978,14 @@ body.ui-hidden #top-chrome > * {
 }
 
 /* Dimmable section — dark until its editor is open (.section-active). */
-.shortcuts-section.dimmable {
+.keyboard-shortcuts-section.dimmable {
   opacity: 0.4;
   transition: opacity var(--dur-base) var(--ease-out-quart);
 }
-.shortcuts-section.dimmable.section-active {
+.keyboard-shortcuts-section.dimmable.section-active {
   opacity: 1;
 }
-.shortcuts-caption {
+.keyboard-shortcuts-caption {
   margin: 6px 0 0;
   font-size: 9px;
   font-style: italic;
@@ -995,19 +995,19 @@ body.ui-hidden #top-chrome > * {
 
 /* Staggered entrance — re-plays on every expand because the :not(.collapsed)
    match toggles, which restarts the animation. */
-.shortcuts-panel:not(.collapsed) .shortcuts-section:not(.dimmable) {
-  animation: shortcuts-row-in var(--dur-base) var(--ease-out-quart) both;
+.keyboard-shortcuts-panel:not(.collapsed) .keyboard-shortcuts-section:not(.dimmable) {
+  animation: keyboard-shortcuts-row-in var(--dur-base) var(--ease-out-quart) both;
 }
-.shortcuts-panel:not(.collapsed) .shortcuts-section:nth-of-type(1) { animation-delay: 30ms; }
-.shortcuts-panel:not(.collapsed) .shortcuts-section:nth-of-type(2) { animation-delay: 70ms; }
-.shortcuts-panel:not(.collapsed) .shortcuts-section:nth-of-type(3) { animation-delay: 110ms; }
-.shortcuts-panel:not(.collapsed) .shortcuts-section:nth-of-type(4) { animation-delay: 150ms; }
-@keyframes shortcuts-row-in {
+.keyboard-shortcuts-panel:not(.collapsed) .keyboard-shortcuts-section:nth-of-type(1) { animation-delay: 30ms; }
+.keyboard-shortcuts-panel:not(.collapsed) .keyboard-shortcuts-section:nth-of-type(2) { animation-delay: 70ms; }
+.keyboard-shortcuts-panel:not(.collapsed) .keyboard-shortcuts-section:nth-of-type(3) { animation-delay: 110ms; }
+.keyboard-shortcuts-panel:not(.collapsed) .keyboard-shortcuts-section:nth-of-type(4) { animation-delay: 150ms; }
+@keyframes keyboard-shortcuts-row-in {
   from { opacity: 0; transform: translateX(-8px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .shortcuts-panel:not(.collapsed) .shortcuts-section { animation: none; }
+  .keyboard-shortcuts-panel:not(.collapsed) .keyboard-shortcuts-section { animation: none; }
 }
 
 /* ══════════════════════════════════════════════════════════════

@@ -1,9 +1,9 @@
-// src/keybindings.ts
+// src/keyboard-shortcuts.ts
 //
-// Persistent, collapsible keybindings menu — the single source of truth for the
-// app's shortcut *documentation*. The keydown *dispatch* still lives in
+// Persistent, collapsible keyboard shortcuts menu — the single source of truth
+// for the app's shortcut *documentation*. The keydown *dispatch* still lives in
 // controls.ts (it's behaviour, not docs); this module only describes it, so the
-// two no longer drift the way the old hand-synced #keybindings-popover did.
+// two no longer drift the way the old hand-synced #keyboard-shortcuts-popover did.
 //
 // Form factor (see plan): a left-edge vertical panel mirroring the right-edge
 // telemetry panel. Default expanded on every load; collapses to a 40px peek-tab
@@ -12,15 +12,15 @@
 // The "Node Editor" section is dimmed while the editor is closed and brightened
 // when it opens — driven by setEditorActive(), called from node-editor/panel.ts.
 
-interface Keybinding {
+interface KeyboardShortcut {
   /** One <kbd> per entry, e.g. ['⌘', 'S']. */
   keys: string[];
   label: string;
 }
 
-interface KeySection {
+interface KeyboardShortcutSection {
   title: string;
-  bindings: Keybinding[];
+  bindings: KeyboardShortcut[];
   /** When true, the section renders dimmed until setEditorActive(true). */
   dimWhenEditorClosed?: boolean;
   /** Optional hint shown under a dimmable section. */
@@ -28,7 +28,7 @@ interface KeySection {
 }
 
 // Mirrors the verified inventory of every shortcut. Edit HERE to change the docs.
-export const KEYBINDINGS: KeySection[] = [
+export const KEYBOARD_SHORTCUTS: KeyboardShortcutSection[] = [
   {
     title: 'Global',
     bindings: [
@@ -71,8 +71,8 @@ export const KEYBINDINGS: KeySection[] = [
   },
 ];
 
-/** Public handle returned by initKeybindingsPanel(). */
-export interface KeybindingsPanel {
+/** Public handle returned by initKeyboardShortcutsPanel(). */
+export interface KeyboardShortcutsPanel {
   /** Expand ⇄ collapse the panel. */
   toggle(): void;
   /** Brighten (true) or dim (false) the Node Editor section. */
@@ -84,46 +84,43 @@ export interface KeybindingsPanel {
 let editorSectionEl: HTMLElement | null = null;
 
 /**
- * Build the panel DOM from KEYBINDINGS, mount it to <body>, and return controls.
+ * Build the panel DOM from KEYBOARD_SHORTCUTS, mount it to <body>, and return controls.
  * Idempotent-ish: intended to be called once during setup.
  */
-export function initKeybindingsPanel(): KeybindingsPanel {
+export function initKeyboardShortcutsPanel(): KeyboardShortcutsPanel {
   const panel = document.createElement('aside');
-  panel.id = 'shortcuts-panel';
-  panel.className = 'shortcuts-panel';
+  panel.id = 'keyboard-shortcuts-panel';
+  panel.className = 'keyboard-shortcuts-panel';
   panel.setAttribute('role', 'complementary');
   panel.setAttribute('aria-label', 'Keyboard shortcuts');
 
   // Content pane (rendered first so the tab ends up on the canvas-facing edge).
   const inner = document.createElement('div');
-  inner.className = 'shortcuts-inner';
+  inner.className = 'keyboard-shortcuts-inner';
 
   const header = document.createElement('header');
-  header.className = 'shortcuts-header';
+  header.className = 'keyboard-shortcuts-header';
   const title = document.createElement('span');
-  title.className = 'shortcuts-title';
-  title.textContent = 'Keybindings';
-  const sub = document.createElement('span');
-  sub.className = 'shortcuts-sub';
-  sub.textContent = 'press ? to toggle';
-  header.append(title, sub);
+  title.className = 'keyboard-shortcuts-title';
+  title.textContent = 'Keyboard Shortcuts';
+  header.append(title);
   inner.appendChild(header);
 
-  for (const section of KEYBINDINGS) {
+  for (const section of KEYBOARD_SHORTCUTS) {
     const sec = document.createElement('section');
-    sec.className = 'shortcuts-section';
+    sec.className = 'keyboard-shortcuts-section';
     if (section.dimWhenEditorClosed === true) {
       sec.classList.add('dimmable');
       editorSectionEl = sec;
     }
 
     const h = document.createElement('h3');
-    h.className = 'shortcuts-section-title';
+    h.className = 'keyboard-shortcuts-section-title';
     h.textContent = section.title;
     sec.appendChild(h);
 
     const dl = document.createElement('dl');
-    dl.className = 'shortcuts-list';
+    dl.className = 'keyboard-shortcuts-list';
     for (const binding of section.bindings) {
       const dt = document.createElement('dt');
       for (const key of binding.keys) {
@@ -139,7 +136,7 @@ export function initKeybindingsPanel(): KeybindingsPanel {
 
     if (section.caption !== undefined) {
       const cap = document.createElement('p');
-      cap.className = 'shortcuts-caption';
+      cap.className = 'keyboard-shortcuts-caption';
       cap.textContent = section.caption;
       sec.appendChild(cap);
     }
@@ -148,8 +145,8 @@ export function initKeybindingsPanel(): KeybindingsPanel {
 
   // Peek-tab — always visible on the canvas-facing (right) edge of the panel.
   const tab = document.createElement('button');
-  tab.id = 'shortcuts-tab';
-  tab.className = 'shortcuts-tab';
+  tab.id = 'keyboard-shortcuts-tab';
+  tab.className = 'keyboard-shortcuts-tab';
   tab.type = 'button';
   tab.title = 'Toggle keyboard shortcuts  [ ? ]';
   tab.setAttribute('aria-expanded', 'true');
