@@ -29,7 +29,7 @@ import {
 import { playLiveCode, syncStrudelCps, resumeAudioContext, suspendAudioContext, getAudioTime } from './audio';
 import { openEditor, closeEditor, isEditorOpen, currentSweeperId } from './node-editor';
 import { setTheme } from './theme';
-import { initKeybindingsPanel } from './keybindings';
+import { initKeyboardShortcutsPanel } from './keyboard-shortcuts';
 import { drawScene } from './renderer';
 import {
   type ConfigSnapshot,
@@ -942,12 +942,12 @@ export function setupEventHandlers(
     setTheme(state.currentTheme, dom.themeToggleBtn);
   });
 
-  // Persistent keybindings panel (src/keybindings.ts). Mounts the left-edge
-  // panel and exposes toggle(). The ? button in the dock header and the ? key
-  // (wired in the keydown handler below) both flip it expanded ⇄ collapsed.
-  const keybindings = initKeybindingsPanel();
-  document.getElementById('keybindings-btn')
-    ?.addEventListener('click', () => keybindings.toggle());
+  // Persistent keyboard shortcuts panel (src/keyboard-shortcuts.ts). Mounts the
+  // left-edge panel and exposes toggle(). The ? button in the dock header and the
+  // ? key (wired in the keydown handler below) both flip it expanded ⇄ collapsed.
+  const keyboardShortcuts = initKeyboardShortcutsPanel();
+  document.getElementById('keyboard-shortcuts-btn')
+    ?.addEventListener('click', () => keyboardShortcuts.toggle());
 
   // Keyboard shortcuts
   document.addEventListener('keydown', e => {
@@ -975,12 +975,12 @@ export function setupEventHandlers(
       return;
     }
 
-    // '?' toggles the persistent keybindings panel. e.key is already '?'
+    // '?' toggles the persistent keyboard shortcuts panel. e.key is already '?'
     // (Shift+/) so no modifier check is needed; gated above on text inputs so
     // typing ? in the live-code editor won't trigger it.
     if (e.key === '?') {
       e.preventDefault();
-      keybindings.toggle();
+      keyboardShortcuts.toggle();
       return;
     }
 

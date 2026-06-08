@@ -28,6 +28,15 @@ _Avoid_: "cursor", "needle".
 **Probe colour**:
 Every live probe is assigned a distinct accent colour from a fixed palette, so no two probes on the canvas share a colour (you identify a probe by its colour). The probe's outline, tick-dots, the sweeper's arm, and the circle's crossing-pulse rings are all drawn in that colour. The circle's position **dot** is the one exception — it stays white for contrast against its own colored perimeter.
 
+### Sound selection
+
+**Generator**:
+The node in the editor that selects a probe's sound — either a reserved **Signature Waveform** or one of the raw oscillators (Sine/Triangle/Square/Saw).
+
+**Signature Waveform**:
+A reserved, user-facing sound identity (Signature Waveform 1–4) chosen in the **Generator**, intended to host bespoke synthesis later.
+_Avoid_: "oscillator", "synth type" — a Signature Waveform is a named slot, distinct from the raw oscillators that also appear in the same dropdown.
+
 ### The field
 
 **Link Line** (or **Orbital Line**):
@@ -62,6 +71,7 @@ For a discrete probe, the `.struct("1 ~ ~ 1 …")` mask derived from per-tick cr
 - Both bake into **SweepTicks**, indexed by **Tick** × **Slot**.
 - A node-editor **Data node** turns SweepTicks into a **SweepStack**; a **Sound node** turns a SweepStack into Strudel (a pitch contour, a gain envelope, or a **Rhythm** mask).
 - A **Discrete Probe**'s default graph wires **Collision → Rhythm** and **Distance-to-Sun → Pitch**.
+- A **Probe** sounds with exactly one **Generator** selection: either a **Signature Waveform** (1–4) or a raw oscillator (Sine/Triangle/Square/Saw). The four Signature Waveforms are presently placeholders that all sound like `sine`; the raw oscillators keep their own sound. Each selection is stored as a stable **key** (`sig1…sig4`, `sine`, `triangle`, `square`, `sawtooth`) and resolved to a Strudel oscillator at codegen — so when real synthesis lands, only the resolution changes; keys, labels, and saved probes are unaffected.
 
 ## Example dialogue
 
@@ -70,8 +80,12 @@ For a discrete probe, the `.struct("1 ~ ~ 1 …")` mask derived from per-tick cr
 > **Dev:** "And a sweeper at the same tick?"
 > **Domain expert:** "Different model — a sweeper has no perimeter, so no crossings and no rests. It reads distance clusters along its ray and always sounds; quiet only when a cluster is far or sparse."
 
+> **Dev:** "If 'Signature Waveform 1' and 'Sine' both sound like sine, can't I just store `sine` for both?"
+> **Domain expert:** "No — they're different **Generator** selections. Store the *key* (`sig1` vs `sine`) so the dropdown remembers which the player picked and the placeholder can grow its own sound later; resolve the key to an oscillator only when generating Strudel."
+
 ## Flagged ambiguities
 
 - "shape" was used to mean both *any live probe* and *the quarantined geometry family* — resolved: **Probe** is the live concept; "shape" is the broader, looser word.
 - "distance" on a circle is ambiguous: distance-from-centre is the constant radius, distance-to-**Sun** is the musical signal — the **Distance-to-Sun** data node always means the latter. A circle now spawns **centred on the Sun**, where every crossing is exactly `radius` from the Sun, so the seeded Distance→Pitch is intentionally a single **radius-tunable drone** (resize to retune); dragging the ring off-centre revives per-crossing pitch variation. Multiple circles fan by **radius** into concentric rings.
 - "collision" historically meant the old playhead-crossing audio trigger (removed); it now means a **Crossing** datum feeding the **Rhythm** node. See [ADR 0001](docs/adr/0001-discrete-probes-via-node-editor.md).
+- "waveform" was used to mean both a **Signature Waveform** (a reserved identity) and a raw Strudel oscillator. Resolved: these are distinct **Generator** selections that coexist in one dropdown; the stored *key* is decoupled from the *oscillator* it currently resolves to, so several keys may map to `sine` today.

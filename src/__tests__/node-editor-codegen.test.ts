@@ -20,6 +20,7 @@ import {
 } from '../node-editor';
 import { _resetIdsForTests } from '../node-editor/graph';
 import { _resetRegistryForTests } from '../node-editor/registry';
+import { resolveOscillator } from '../generator-options';
 import type { NodeDefinition } from '../node-editor';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -131,8 +132,8 @@ describe('compileGraphToStrudel — wired sound chip', () => {
     // the leftmost creator). The `.s("<instrument>")` goes at the tail.
     expect(out).toContain('freq("150 150 150 150 150 150 150 150")');
 
-    // Voice ends with `.s("<instrument>")` and includes .p(id).
-    expect(out).toContain(`.s("${s.instrument}")`);
+    // Voice ends with `.s("<oscillator>")` (instrument key resolved) + .p(id).
+    expect(out).toContain(`.s("${resolveOscillator(s.instrument)}")`);
     expect(out).toContain(`.p((${s.id}).toString())`);
     expect(out).toContain(`// @shape-start-${s.id}`);
     expect(out).toContain(`// @shape-end-${s.id}`);
@@ -163,7 +164,7 @@ describe('compileGraphToStrudel — wired sound chip', () => {
     expect(out).not.toContain('freq(100)');
     expect(out).not.toContain('should-not-reach');
     // All voices should fall through to the silent-voice fallback.
-    expect(out).toContain(`s("${s.instrument}").gain(0)`);
+    expect(out).toContain(`s("${resolveOscillator(s.instrument)}").gain(0)`);
   });
 
   it('never emits signal(() => globalThis.__sw_…) — all values are baked', () => {
@@ -363,6 +364,22 @@ describe('compileGraphToStrudel — voice structure (Bug 1 regression)', () => {
     // Voice fragment: bare `s("square")`. Must not start with `.s`.
     expect(out).toContain(`s("square")`);
     expect(out).not.toMatch(/\n\s*\.s\("square"\)/);
+  });
+
+  it('resolves a placeholder Signature Waveform key to its oscillator', () => {
+    // 'sig1' is a placeholder identity that currently sounds like sine. Codegen
+    // must emit the resolved oscillator `s("sine")`, never the raw key.
+    registerNodeDef(makeDef({
+      type: 'sound.g', side: 'sound',
+      codegen: () => '.gain(0.5)',
+    }));
+    const s = makeSweeper();
+    s.instrument = 'sig1';
+    const g = createGraph(s.id);
+    addNode(g, { type: 'sound.g', side: 'sound', x: 0, y: 0 });
+    const out = compileGraphToStrudel(s.id, g, s);
+    expect(out).toContain(`.s("sine")`);
+    expect(out).not.toContain('sig1');
   });
 });
 

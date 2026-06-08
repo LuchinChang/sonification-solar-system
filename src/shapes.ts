@@ -7,6 +7,7 @@
 
 import type { Point } from './geometry';
 import { angleStdev, getLineCircleIntersections, getRaySegmentDist, pointToSegmentDist } from './geometry';
+import { resolveOscillator } from './generator-options';
 import type { ShapeConfig, NodeGraphSnapshot } from './config-snapshot';
 
 // ── Public types ──────────────────────────────────────────────────────────────
@@ -243,7 +244,12 @@ export class CanvasShape {
     this.y                   = y;
     this.type                = type;
     // LEGACY: previous default was `type === 'sweeper' ? 'sine' : 'bd'` to cover non-sweeper shapes.
-    this.instrument          = 'sine';  // sweeper-only: sine default
+    // Generator selection KEY, not a raw oscillator — both bake paths resolve it
+    // via resolveOscillator(). 'sig1' = Signature Waveform 1 (a placeholder that
+    // currently sounds like sine). Mirrors DEFAULT_GENERATOR_KEY in
+    // generator-options.ts (kept as a literal here to avoid coupling the
+    // constructor to that module's import).
+    this.instrument          = 'sig1';
     this.size                = size;
     this.isSelected          = false;
     this.playheadAngle       = 3 * Math.PI / 2;  // 12 o'clock, stays in [0, 2π)
@@ -962,7 +968,10 @@ export class CanvasShape {
     const deg         = (this.startAngle * 180 / Math.PI).toFixed(1);
     const armLabel    = this.sweepCount > 1 ? `, arms=${this.sweepCount}` : '';
     const typeLabel   = this.type === 'circle' ? 'Circle' : 'Sweeper';
-    const comment     = `// [${typeLabel} ${this.id}: k=${this.k}${armLabel}, s="${this.instrument}", 12o'clock=${deg}°]`;
+    // instrument is a Generator selection key (e.g. 'sig1'); resolve to the
+    // Strudel oscillator so the baked code emits a valid `s("sine")`.
+    const osc         = resolveOscillator(this.instrument);
+    const comment     = `// [${typeLabel} ${this.id}: k=${this.k}${armLabel}, s="${osc}", 12o'clock=${deg}°]`;
 
     // Formats a value array into 8-per-line chunks for textarea readability.
     // Strudel mini-notation treats all whitespace (including \n) as separators.
@@ -979,7 +988,7 @@ export class CanvasShape {
       if (armTicks.length === 0) {
         // fallback: silent tones for this arm
         for (let ki = 0; ki < this.k; ki++) {
-          allTones.push(`freq(440).gain(0).s("${this.instrument}")`);
+          allTones.push(`freq(440).gain(0).s("${osc}")`);
         }
         continue;
       }
@@ -992,12 +1001,12 @@ export class CanvasShape {
           const c = clusters[ki];
           return c ? c.gain.toFixed(3) : '0';
         });
-        allTones.push(`freq(\`${fmt(freqVals)}\`)\n  .gain(\`${fmt(gainVals)}\`)\n  .s("${this.instrument}")`);
+        allTones.push(`freq(\`${fmt(freqVals)}\`)\n  .gain(\`${fmt(gainVals)}\`)\n  .s("${osc}")`);
       }
     }
 
     if (allTones.length === 0) {
-      allTones.push(`freq(440).gain(0).s("${this.instrument}")`);
+      allTones.push(`freq(440).gain(0).s("${osc}")`);
     }
 
     // Stack all tones; use (id).toString() to avoid transpiler string conversion
