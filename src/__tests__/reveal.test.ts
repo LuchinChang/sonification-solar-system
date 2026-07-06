@@ -58,6 +58,11 @@ describe('revealLineFraction', () => {
     expect(revealLineFraction(0.5, 0)).toBe(0.5);
     expect(revealLineFraction(1.2, 0)).toBe(1);
   });
+
+  it('is total in the completion branch too: tFrac > 1 cannot overshoot', () => {
+    // Without the entry clamp this returned 1.8448 (u = 1.4, squared).
+    expect(revealLineFraction(1.2, 0.5)).toBe(1);
+  });
 });
 
 describe('planetDiscAlpha', () => {
@@ -79,5 +84,14 @@ describe('planetDiscAlpha', () => {
     const fadeEnd = gf + PLANET_FADE_FRACTION * (1 - gf);
     expect(planetDiscAlpha(fadeEnd, gf)).toBeCloseTo(0, 10);
     expect(planetDiscAlpha(fadeEnd + 0.05, gf)).toBeCloseTo(0, 10);
+  });
+
+  it('is total over degenerate guidedTimeFrac and out-of-range tFrac', () => {
+    // guidedTimeFrac >= 1: the whole timeline is guided phase → opaque.
+    // Without the guard, (1.2, 1) divided by zero and (2, 1.5) returned 6.
+    expect(planetDiscAlpha(1.2, 1)).toBe(1);
+    expect(planetDiscAlpha(2, 1.5)).toBe(1);
+    // guidedTimeFrac <= 0: no guided phase → discs never shown.
+    expect(planetDiscAlpha(0.5, 0)).toBe(0);
   });
 });

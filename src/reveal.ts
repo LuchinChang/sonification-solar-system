@@ -31,9 +31,15 @@ export function revealDurationMs(simYears: number): number {
  * Guided phase: linear crawl to GUIDED_LINE_FRACTION.
  * Completion phase: quadratic ease-in over the remaining lines (starts slow,
  * accelerates — the deliberate "then it speeds up" beat).
+ *
+ * Total over all inputs: tFrac is clamped to [0, 1] at entry, so the result
+ * is always in [0, 1] in BOTH branches (without the clamp, tFrac > 1 in the
+ * completion branch would overshoot 1). A degenerate guidedTimeFrac (<= 0 or
+ * >= 1) falls back to the linear identity curve.
  */
 export function revealLineFraction(tFrac: number, guidedTimeFrac: number): number {
-  if (guidedTimeFrac <= 0 || guidedTimeFrac >= 1) return Math.min(Math.max(tFrac, 0), 1);
+  tFrac = Math.min(Math.max(tFrac, 0), 1);
+  if (guidedTimeFrac <= 0 || guidedTimeFrac >= 1) return tFrac;
   if (tFrac <= guidedTimeFrac) {
     return (tFrac / guidedTimeFrac) * GUIDED_LINE_FRACTION;
   }
@@ -41,8 +47,21 @@ export function revealLineFraction(tFrac: number, guidedTimeFrac: number): numbe
   return GUIDED_LINE_FRACTION + (1 - GUIDED_LINE_FRACTION) * u * u;
 }
 
-/** Planet-disc opacity: 1 through the guided phase, fading out early in completion. */
+/**
+ * Planet-disc opacity: 1 through the guided phase, fading out early in
+ * completion.
+ *
+ * Total over all inputs: tFrac is clamped to [0, 1] at entry, and the result
+ * is always in [0, 1]. Degenerate guidedTimeFrac contract — guards the
+ * division by (1 - guidedTimeFrac):
+ *   guidedTimeFrac <= 0 → no guided phase at all → discs never shown (0).
+ *   guidedTimeFrac >= 1 → the whole (clamped) timeline sits inside the
+ *   guided phase → discs stay opaque (1).
+ */
 export function planetDiscAlpha(tFrac: number, guidedTimeFrac: number): number {
+  tFrac = Math.min(Math.max(tFrac, 0), 1);
+  if (guidedTimeFrac <= 0) return 0;
+  if (guidedTimeFrac >= 1) return 1;
   if (tFrac <= guidedTimeFrac) return 1;
   const u = (tFrac - guidedTimeFrac) / (1 - guidedTimeFrac);
   return Math.max(0, 1 - u / PLANET_FADE_FRACTION);
