@@ -122,6 +122,7 @@ export interface AppState {
   // Audio
   strudelRepl: StrudelRepl | null;
   audioInitialized: boolean;
+  muted: boolean;
 
   // Dust particles
   dustMotes: DustMote[];
@@ -191,6 +192,7 @@ export function createInitialState(): AppState {
     // Audio
     strudelRepl: null,
     audioInitialized: false,
+    muted: typeof localStorage !== 'undefined' && localStorage.getItem('sound-muted') === 'true',
 
     // Dust particles (deferred — populated by initDust())
     dustMotes: [],

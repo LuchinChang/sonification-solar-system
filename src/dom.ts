@@ -35,6 +35,8 @@ export interface DomElements {
 
   // Audio overlay
   audioOverlay: HTMLElement;
+  startMutedBtn: HTMLButtonElement;
+  muteToggleBtn: HTMLButtonElement;
 
   // Sync button
   syncAudioBtn: HTMLElement;
@@ -102,6 +104,8 @@ export function resolveDomElements(): DomElements {
     themeToggleBtn: getEl('theme-toggle') as HTMLButtonElement,
 
     audioOverlay: getEl('audio-overlay'),
+    startMutedBtn: getEl('start-muted-btn') as HTMLButtonElement,
+    muteToggleBtn: getEl('mute-toggle') as HTMLButtonElement,
 
     syncAudioBtn: getEl('sync-audio-btn'),
 

@@ -1129,6 +1129,46 @@ body.ui-hidden #top-chrome > * {
   white-space: nowrap;
 }
 
+/* Sound notice + two-choice start (2026-07-05 onboarding rework) */
+.sound-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 440px;
+  text-align: center;
+  margin-bottom: 28px;
+}
+.sound-notice-title {
+  font: 500 20px var(--font-mono);
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+.sound-notice-text {
+  font: 400 13px/1.6 var(--font-mono);
+  color: var(--text-secondary);
+}
+.sound-notice-text strong { color: var(--accent-amber); }
+.start-choices {
+  display: flex;
+  gap: 16px;
+}
+#start-muted-btn {
+  /* Secondary variant of #start-engine-btn — same glass, dimmer accent */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 28px;
+  border-radius: 14px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+#start-muted-btn:hover { border-color: var(--accent-copper); }
+
 /* ══════════════════════════════════════════════════════════════
    EVAL STATUS INDICATOR  (inside telemetry header)
    ══════════════════════════════════════════════════════════════ */

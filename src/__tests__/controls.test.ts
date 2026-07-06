@@ -67,6 +67,8 @@ function mockDom(): DomElements {
     playPauseBtn: el() as unknown as HTMLButtonElement,
     themeToggleBtn: el() as unknown as HTMLButtonElement,
     audioOverlay: el() as unknown as HTMLElement,
+    startMutedBtn: el() as unknown as HTMLButtonElement,
+    muteToggleBtn: el() as unknown as HTMLButtonElement,
     syncAudioBtn: el() as unknown as HTMLElement,
     tourEl: el() as unknown as HTMLElement,
     tourSpot: el() as unknown as HTMLElement,

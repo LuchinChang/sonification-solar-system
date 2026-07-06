@@ -26,9 +26,10 @@ import {
   patchAllRhythms, rebuildSweeperPatterns, updateTelemetry,
   setEvalStatus, toggleTelemetry,
 } from './telemetry';
-import { playLiveCode, syncStrudelCps, resumeAudioContext, suspendAudioContext, getAudioTime } from './audio';
+import { playLiveCode, syncStrudelCps, resumeAudioContext, suspendAudioContext, getAudioTime, setMuted } from './audio';
 import { openEditor, closeEditor, isEditorOpen, currentSweeperId } from './node-editor';
 import { setTheme } from './theme';
+import { saveMuted } from './mute';
 import { initKeyboardShortcutsPanel } from './keyboard-shortcuts';
 import { drawScene } from './renderer';
 import {
@@ -679,6 +680,42 @@ function handleConfigFile(state: AppState, dom: DomElements, file: File): void {
   reader.readAsText(file);
 }
 
+// ── Engine bootstrap (shared by both overlay buttons) ────────────────────────
+// Both entry paths initialize audio on the click gesture; "muted" only zeroes
+// the master gain, so un-muting later needs no new gesture.
+async function startEngine(state: AppState, dom: DomElements, muted: boolean): Promise<void> {
+  try {
+    const { initializeAudio } = await import('./audio');
+    const replInstance = await initializeAudio();
+    state.strudelRepl = replInstance;
+    replInstance.setCps(state.cpm / 60);
+    state.audioInitialized = true;
+    state.muted = muted;
+    setMuted(muted);
+    saveMuted(localStorage, muted);
+    updateMuteToggleVisual(state, dom);
+    dom.audioOverlay.classList.add('hidden');
+    updateTelemetry(dom, state);
+    playLiveCode(state.strudelRepl, dom.telemetryTextarea.value, false);
+    applyPattern(state, dom, PATTERNS[0]);
+  } catch (err) {
+    console.error('[audio] init failed:', err);
+  }
+}
+
+function toggleMute(state: AppState, dom: DomElements): void {
+  state.muted = !state.muted;
+  setMuted(state.muted);
+  saveMuted(localStorage, state.muted);
+  updateMuteToggleVisual(state, dom);
+}
+
+function updateMuteToggleVisual(state: AppState, dom: DomElements): void {
+  dom.muteToggleBtn.textContent = state.muted ? '\u{1F507}' : '\u{1F50A}';
+  dom.muteToggleBtn.setAttribute('aria-pressed', String(state.muted));
+  dom.muteToggleBtn.setAttribute('aria-label', state.muted ? 'Unmute sound' : 'Mute sound');
+}
+
 // ── Master event handler setup ───────────────────────────────────────────────
 
 export function setupEventHandlers(
@@ -689,22 +726,13 @@ export function setupEventHandlers(
   // Resize
   window.addEventListener('resize', () => handleResize(state, dom));
 
-  // Start engine button
-  dom.audioOverlay.querySelector('#start-engine-btn')?.addEventListener('click', async () => {
-    try {
-      const { initializeAudio } = await import('./audio');
-      const replInstance = await initializeAudio();
-      state.strudelRepl = replInstance;
-      replInstance.setCps(state.cpm / 60);
-      state.audioInitialized = true;
-      dom.audioOverlay.classList.add('hidden');
-      updateTelemetry(dom, state);
-      playLiveCode(state.strudelRepl, dom.telemetryTextarea.value, false);
-      applyPattern(state, dom, PATTERNS[0]);
-    } catch (err) {
-      console.error('[audio] init failed:', err);
-    }
-  });
+  // Start engine buttons — with sound, or muted
+  dom.audioOverlay.querySelector('#start-engine-btn')
+    ?.addEventListener('click', () => { void startEngine(state, dom, false); });
+  dom.startMutedBtn.addEventListener('click', () => { void startEngine(state, dom, true); });
+
+  // Persistent speaker toggle
+  dom.muteToggleBtn.addEventListener('click', () => toggleMute(state, dom));
 
   // Sample rate knob
   dom.sampleKnobEl.addEventListener('mousedown', e => {
@@ -991,6 +1019,9 @@ export function setupEventHandlers(
       case 'i':
         toggleTelemetry(dom);
         break;
+      case 'm':
+        if (state.audioInitialized) toggleMute(state, dom);
+        break;
       case ' ':
         e.preventDefault();
         if (state.drawAnimActive) {
@@ -1044,6 +1075,7 @@ export function setupEventHandlers(
   // Initial visuals
   updateSampleKnobVisual(state, dom);
   updateCpmKnobVisual(state, dom);
+  updateMuteToggleVisual(state, dom);
 }
 
 // ── Helper: anchor sweep phase before CPM change ─────────────────────────────
