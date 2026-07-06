@@ -4,8 +4,10 @@
 // Self-contained state machine with injected DOM elements.
 //
 // Unit 15: rewritten for the Max-MSP-style sweeper-editor overhaul.
-// The five steps walk a new user through: spawn sweeper → open editor →
-// connect a cable → hear it → done.
+// Task 6: tooltip lifted to a sibling of #intro-tour (z-index fix), added
+// Back/Next navigation, and a new step for the pattern picker (P hotkey).
+// The six steps walk a new user through: spawn sweeper → open editor →
+// connect a cable → hear it → open the pattern picker → done.
 
 import type { DomElements } from './dom';
 
@@ -15,7 +17,8 @@ export type TourAction =
   | 'sweeper-spawned'
   | 'editor-opened'
   | 'cable-connected'
-  | 'play-pressed';
+  | 'play-pressed'
+  | 'pattern-opened';
 
 interface TourStep {
   target: () => HTMLElement | null;
@@ -31,27 +34,32 @@ const TOUR_DONE_KEY = 'intro-tour-done';
 const tourSteps: TourStep[] = [
   { // 0 — Spawn a sweeper
     target: () => document.getElementById('foundry-shapes'),
-    text: 'Press <kbd>N</kbd> (or click the sweeper icon in the dock) to place a sweeper.',
+    text: 'Click the <strong>Sweeper</strong> card in the Sonic Foundry dock below (or press <kbd>N</kbd>) to place a sweeper probe at the Sun.',
     trigger: 'action',
   },
   { // 1 — Open the editor
     target: () => document.body,
-    text: 'Press <kbd>E</kbd> to open the sweeper\u2019s editor panel.',
+    text: 'Click the sweeper on the canvas (or press <kbd>E</kbd> while it\u2019s selected) to open its node editor.',
     trigger: 'action',
   },
   { // 2 — Connect a cable
     target: () => document.getElementById('node-editor-panel'),
-    text: 'Drag a cable from a data rule to a sound rule.',
+    text: 'Drag a cable from a <strong>data node</strong>\u2019s output port to a <strong>sound node</strong>\u2019s input port. The mapping commits when the editor closes.',
     trigger: 'action',
   },
   { // 3 — Hear it
     target: () => document.getElementById('play-pause-btn'),
-    text: 'Press <kbd>Space</kbd> (or Play) to hear the sound.',
+    text: 'Press <kbd>Space</kbd> (or the ▶ button in the top-left) to hear your mapping.',
     trigger: 'action',
   },
-  { // 4 — Done
+  { // 4 — Open the pattern picker
     target: () => document.body,
-    text: 'Done \u2014 explore more.',
+    text: 'Press <kbd>P</kbd> to open the pattern picker and choose your own pair of planets.',
+    trigger: 'action',
+  },
+  { // 5 — Done
+    target: () => document.getElementById('pattern-selector'),
+    text: 'Pick an inner and an outer planet, watch the preview in the middle, then confirm. The Solar System is yours — explore.',
     trigger: 'gotit',
   },
 ];
@@ -62,6 +70,8 @@ export interface TourController {
   start(): void;
   end(skipped?: boolean): void;
   notify(action: TourAction): void;
+  back(): void;
+  next(): void;
   readonly isActive: boolean;
   readonly currentStep: number;
 }
@@ -104,6 +114,9 @@ export function createTourController(dom: DomElements): TourController {
       dom.tourGotIt.classList.add('hidden');
     }
 
+    dom.tourBack.disabled = stepIdx === 0;
+    dom.tourNext.classList.toggle('hidden', step.trigger === 'gotit');
+
     // Position spotlight
     if (target && target !== document.body) {
       const rect = target.getBoundingClientRect();
@@ -116,7 +129,7 @@ export function createTourController(dom: DomElements): TourController {
 
       const liftTarget = target.closest('#foundry-panel, #telemetry-panel, #node-editor-panel') as HTMLElement ?? target;
       if (step.trigger === 'action' || step.trigger === 'gotit') {
-        liftTarget.style.zIndex = '96';
+        liftTarget.style.zIndex = '171';
         liftedEl = liftTarget;
       }
     } else {
@@ -143,6 +156,7 @@ export function createTourController(dom: DomElements): TourController {
   function end(skipped = false): void {
     active = false;
     dom.tourEl.classList.add('hidden');
+    dom.tourTooltip.classList.add('hidden');
     if (liftedEl) {
       liftedEl.style.zIndex = '';
       liftedEl = null;
@@ -156,6 +170,7 @@ export function createTourController(dom: DomElements): TourController {
     active = true;
     stepIdx = 0;
     dom.tourEl.classList.remove('hidden');
+    dom.tourTooltip.classList.remove('hidden');
     showStep();
   }
 
@@ -166,6 +181,18 @@ export function createTourController(dom: DomElements): TourController {
     else if (action === 'editor-opened'   && idx === 1) advance();
     else if (action === 'cable-connected' && idx === 2) advance();
     else if (action === 'play-pressed'    && idx === 3) advance();
+    else if (action === 'pattern-opened'  && idx === 4) advance();
+  }
+
+  function back(): void {
+    if (!active || stepIdx === 0) return;
+    stepIdx--;
+    showStep();
+  }
+
+  function next(): void {
+    if (!active) return;
+    advance();
   }
 
   // Wire up tour UI buttons
@@ -173,6 +200,8 @@ export function createTourController(dom: DomElements): TourController {
   dom.tourGotIt.addEventListener('click', () => {
     if (active) advance();
   });
+  dom.tourBack.addEventListener('click', back);
+  dom.tourNext.addEventListener('click', next);
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && active) {
       e.preventDefault();
@@ -184,6 +213,8 @@ export function createTourController(dom: DomElements): TourController {
     start,
     end,
     notify,
+    back,
+    next,
     get isActive() { return active; },
     get currentStep() { return stepIdx; },
   };

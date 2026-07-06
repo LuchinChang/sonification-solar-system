@@ -434,6 +434,16 @@ function showPatternSelector(state: AppState, dom: DomElements): void {
 // One button per planet per column. Right column entries not strictly outside
 // the picked inner planet's orbit are disabled.
 function renderPlanetColumns(state: AppState, dom: DomElements): void {
+  // Preserve focus across the re-render (buttons are recreated each time a
+  // selection changes, which would otherwise drop keyboard focus).
+  const focused = document.activeElement instanceof HTMLElement &&
+    document.activeElement.classList.contains('planet-option')
+    ? {
+        text: document.activeElement.textContent,
+        col: document.activeElement.closest('#pattern-inner-list') ? 'inner' : 'outer',
+      }
+    : null;
+
   dom.patternInnerListEl.innerHTML = '';
   dom.patternOuterListEl.innerHTML = '';
 
@@ -444,6 +454,8 @@ function renderPlanetColumns(state: AppState, dom: DomElements): void {
     innerBtn.textContent = planet;
     innerBtn.disabled = planet === PLANET_ORDER[PLANET_ORDER.length - 1]; // Neptune has no outer partner
     if (planet === pickerInner) innerBtn.classList.add('active');
+    innerBtn.setAttribute('role', 'radio');
+    innerBtn.setAttribute('aria-checked', String(planet === pickerInner));
     innerBtn.addEventListener('click', () => {
       pickerInner = planet;
       // Keep the pair valid: outer must orbit farther out than inner.
@@ -461,12 +473,21 @@ function renderPlanetColumns(state: AppState, dom: DomElements): void {
     outerBtn.textContent = planet;
     outerBtn.disabled = ELEMENTS[planet].a <= ELEMENTS[pickerInner].a;
     if (planet === pickerOuter) outerBtn.classList.add('active');
+    outerBtn.setAttribute('role', 'radio');
+    outerBtn.setAttribute('aria-checked', String(planet === pickerOuter));
     outerBtn.addEventListener('click', () => {
       pickerOuter = planet;
       renderPlanetColumns(state, dom);
       updatePreviewPane(state, dom);
     });
     dom.patternOuterListEl.appendChild(outerBtn);
+  }
+
+  if (focused) {
+    const list = focused.col === 'inner' ? dom.patternInnerListEl : dom.patternOuterListEl;
+    const match = Array.from(list.querySelectorAll<HTMLButtonElement>('.planet-option'))
+      .find(btn => btn.textContent === focused.text);
+    match?.focus();
   }
 }
 
@@ -1136,6 +1157,7 @@ export function setupEventHandlers(
         if (!state.audioInitialized) break;
         if (dom.patternSelectorEl.classList.contains('hidden')) {
           showPatternSelector(state, dom);
+          tour.notify('pattern-opened');
         } else {
           hidePatternSelector(dom);
         }

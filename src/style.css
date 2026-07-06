@@ -1461,7 +1461,7 @@ body.ui-hidden .config-btn {
 #intro-tour {
   position: fixed;
   inset: 0;
-  z-index: 95;
+  z-index: 170;
   /* Let clicks pass through to target elements underneath */
   pointer-events: none;
 }
@@ -1503,13 +1503,15 @@ body.ui-hidden .config-btn {
   100% { opacity: 0; transform: scale(1.08); }
 }
 
-/* Tooltip banner — fixed at top-center, never blocked by panels */
+/* Tooltip banner — fixed at top-center, never blocked by panels.
+   Sibling of #intro-tour (not nested inside it) so it can sit above any
+   lifted panel regardless of stacking-context order. */
 #intro-tooltip {
   position: fixed;
   top: 24px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 96;
+  z-index: 172;
   max-width: 420px;
   padding: 18px 28px 14px;
   background: var(--glass-bg);
@@ -1522,6 +1524,9 @@ body.ui-hidden .config-btn {
     0 1px 0 rgba(255, 200, 120, 0.05) inset;
   transition: opacity 0.3s var(--ease-out-quart);
   pointer-events: auto;
+}
+#intro-tooltip.hidden {
+  display: none;
 }
 
 .intro-step-counter {
@@ -1552,7 +1557,20 @@ body.ui-hidden .config-btn {
 .intro-actions {
   display: flex;
   justify-content: flex-start;
+  gap: 8px;
 }
+
+.intro-nav-btn {
+  padding: 5px 12px;
+  border-radius: 7px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  font: 400 11px var(--font-mono);
+  cursor: pointer;
+}
+.intro-nav-btn:hover:not(:disabled) { border-color: var(--accent-copper); }
+.intro-nav-btn:disabled { opacity: 0.35; cursor: default; }
 
 .intro-got-it {
   padding: 6px 16px;

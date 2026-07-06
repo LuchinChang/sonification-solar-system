@@ -92,6 +92,9 @@ function mockDomElements(): DomElements {
     tourText: el() as unknown as HTMLElement,
     tourGotIt: el() as unknown as HTMLElement,
     tourSkip: el() as unknown as HTMLElement,
+    tourTooltip: el() as unknown as HTMLElement,
+    tourBack: el() as unknown as HTMLButtonElement,
+    tourNext: el() as unknown as HTMLButtonElement,
     dropOverlay: el() as unknown as HTMLElement,
     saveConfigBtn: el() as unknown as HTMLElement,
     loadConfigBtn: el() as unknown as HTMLElement,
@@ -198,16 +201,71 @@ describe('TourController', () => {
     expect(tour.isActive).toBe(false);
   });
 
-  it('has exactly 5 steps (sweeper-only flow)', () => {
+  it('has 6 steps: spawn → editor → cable → play → pattern picker → done', () => {
     const tour = createTourController(dom);
     tour.start();
     tour.notify('sweeper-spawned');
     tour.notify('editor-opened');
     tour.notify('cable-connected');
     tour.notify('play-pressed');
-    // The fifth step is a 'gotit'; simulate its advance via the controller
-    // by walking currentStep to 4 — reaching 5 would end the tour.
-    expect(tour.currentStep).toBe(4);
+    tour.notify('pattern-opened');
+    expect(tour.currentStep).toBe(5);
     expect(tour.isActive).toBe(true);
+  });
+
+  it('pattern-opened advances from step 4 to step 5', () => {
+    const tour = createTourController(dom);
+    tour.start();
+    tour.notify('sweeper-spawned');
+    tour.notify('editor-opened');
+    tour.notify('cable-connected');
+    tour.notify('play-pressed');
+    expect(tour.currentStep).toBe(4);
+    tour.notify('pattern-opened');
+    expect(tour.currentStep).toBe(5);
+  });
+
+  it('back() re-shows the previous step without undoing anything', () => {
+    const tour = createTourController(dom);
+    tour.start();
+    tour.notify('sweeper-spawned');
+    tour.notify('editor-opened');
+    expect(tour.currentStep).toBe(2);
+    tour.back();
+    expect(tour.currentStep).toBe(1);
+    expect(tour.isActive).toBe(true);
+  });
+
+  it('back() at step 0 is a no-op', () => {
+    const tour = createTourController(dom);
+    tour.start();
+    tour.back();
+    expect(tour.currentStep).toBe(0);
+    expect(tour.isActive).toBe(true);
+  });
+
+  it('next() skips a step the user already performed', () => {
+    const tour = createTourController(dom);
+    tour.start();
+    tour.next();
+    expect(tour.currentStep).toBe(1);
+  });
+
+  it('next() on the final step ends the tour', () => {
+    const tour = createTourController(dom);
+    tour.start();
+    for (let i = 0; i < 5; i++) tour.next();
+    expect(tour.currentStep).toBe(5);
+    tour.next();
+    expect(tour.isActive).toBe(false);
+    expect(localStorage.getItem('intro-tour-done')).toBe('true');
+  });
+
+  it('an out-of-order action still advances only its own step', () => {
+    const tour = createTourController(dom);
+    tour.start();
+    tour.next(); // user skipped ahead past "spawn"
+    tour.notify('sweeper-spawned'); // late notify for step 0 — must not advance step 1
+    expect(tour.currentStep).toBe(1);
   });
 });

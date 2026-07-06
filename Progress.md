@@ -1,5 +1,49 @@
 # Progress & lessons-learned
 
+## 2026-07-05 — Tutorial redo: tooltip z-index fix, Back/Next, pattern-picker step
+
+**Root cause of "tooltip hidden behind node editor."** `#intro-tour` (the
+scrim+spotlight wrapper, z-index 95) contained `#intro-tooltip` as a DOM
+*child*. Sibling stacking contexts can't interleave: once `showStep()` lifted
+the node-editor panel to z-index 96 (to poke it above the scrim), the panel's
+new stacking context sat entirely above `#intro-tour` **including its
+descendant tooltip**, because a parent's z-index caps everything painted
+inside it. No z-index tweak inside `#intro-tour` could ever win against a
+sibling lifted higher — the fix had to change the DOM structure, not the
+numbers.
+
+**Fix.** Moved `#intro-tooltip` out of `#intro-tour` to be a body-level
+sibling in `index.html`. New layering: `#intro-tour` (scrim+spotlight) z-170 <
+lifted target z-171 < `#intro-tooltip` z-172. The tooltip was already
+`position: fixed` with its own placement (top/left/transform/max-width), so no
+layout changes were needed beyond the z-index bump and an explicit
+`#intro-tooltip.hidden { display: none; }` rule (it's no longer inheriting
+visibility from a hidden parent).
+
+**Also added:** Back/Next buttons (`#intro-back` / `#intro-next`, wired to new
+`tour.back()` / `tour.next()`) so users aren't locked into the forward-only
+action-driven flow; a 6th step for the pattern picker (`pattern-opened` action,
+fired from the `p` keydown case in `controls.ts` right after
+`showPatternSelector`); and accurate step copy matching the real UI (dock is
+labelled "Sonic Foundry", play button lives in the top-left `#top-chrome`
+cluster, P opens the three-pane picker). `back()` is pure navigation — it only
+calls `showStep()` again, it does not undo/replay any side effect, so stepping
+back past the cable-connect step does not reopen or re-close the editor.
+
+**Accessibility follow-up (from Task 5 review):** the two `.planet-column`
+containers no longer carry `role="listbox"`; that role moved to the inner
+`.planet-list` div as `role="radiogroup"` (each `.planet-option` button now
+has `role="radio"` + `aria-checked`). `renderPlanetColumns` also preserves
+keyboard focus across its full innerHTML-rebuild-on-click re-render (it did
+not before — clicking a planet button would drop focus back to the document
+body on every render).
+
+Verified in-browser: tooltip renders above an open node-editor panel and above
+the pattern selector; Back/Next navigate without side effects; Esc and "Got
+it" both end the tour and set `localStorage['intro-tour-done']`; no console
+errors. Test suite: 29 suites / 336 passed / 2 skipped (net +6 over the prior
+330 — one test replaced in place, six appended).
+
 ## 2026-06-07c — Dock redesign + distinct probe colours
 
 UI pass: revived the old card-style probe selector ("Sonic Foundry" cards for

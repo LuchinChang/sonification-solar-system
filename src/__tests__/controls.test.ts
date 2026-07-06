@@ -23,6 +23,8 @@ function stubTour(): TourController {
     start: vi.fn(),
     end: vi.fn(),
     notify: vi.fn(),
+    back: vi.fn(),
+    next: vi.fn(),
     get isActive() { return false; },
     get currentStep() { return 0; },
   };
@@ -76,6 +78,9 @@ function mockDom(): DomElements {
     tourText: el() as unknown as HTMLElement,
     tourGotIt: el() as unknown as HTMLElement,
     tourSkip: el() as unknown as HTMLElement,
+    tourTooltip: el() as unknown as HTMLElement,
+    tourBack: el() as unknown as HTMLButtonElement,
+    tourNext: el() as unknown as HTMLButtonElement,
     dropOverlay: el() as unknown as HTMLElement,
     saveConfigBtn: el() as unknown as HTMLElement,
     loadConfigBtn: el() as unknown as HTMLElement,

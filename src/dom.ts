@@ -48,6 +48,9 @@ export interface DomElements {
   tourText: HTMLElement;
   tourGotIt: HTMLElement;
   tourSkip: HTMLElement;
+  tourTooltip: HTMLElement;
+  tourBack: HTMLButtonElement;
+  tourNext: HTMLButtonElement;
 
   // Save / load config snapshot
   dropOverlay: HTMLElement;
@@ -121,6 +124,9 @@ export function resolveDomElements(): DomElements {
     tourText: getEl('intro-text'),
     tourGotIt: getEl('intro-got-it'),
     tourSkip: getEl('intro-skip'),
+    tourTooltip: getEl('intro-tooltip'),
+    tourBack: getEl('intro-back') as HTMLButtonElement,
+    tourNext: getEl('intro-next') as HTMLButtonElement,
 
     dropOverlay: getEl('drop-overlay'),
     saveConfigBtn: getEl('save-config-btn'),

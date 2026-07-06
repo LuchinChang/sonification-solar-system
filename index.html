@@ -48,9 +48,9 @@
       <div class="pattern-band">
         <h2 class="pattern-band-title">Choose a Planetary Pattern</h2>
         <div class="pattern-columns">
-          <div class="planet-column" role="listbox" aria-label="Inner planet">
+          <div class="planet-column">
             <h3 class="planet-column-title">Inner planet</h3>
-            <div id="pattern-inner-list" class="planet-list"></div>
+            <div id="pattern-inner-list" class="planet-list" role="radiogroup" aria-label="Inner planet"></div>
           </div>
           <div class="pattern-preview-pane">
             <canvas id="pattern-preview-canvas" width="280" height="280"></canvas>
@@ -61,9 +61,9 @@
             </button>
             <span class="pattern-confirm-hint">replaces the canvas and any placed probes</span>
           </div>
-          <div class="planet-column" role="listbox" aria-label="Outer planet">
+          <div class="planet-column">
             <h3 class="planet-column-title">Outer planet</h3>
-            <div id="pattern-outer-list" class="planet-list"></div>
+            <div id="pattern-outer-list" class="planet-list" role="radiogroup" aria-label="Outer planet"></div>
           </div>
         </div>
         <div class="pattern-specials">
@@ -80,18 +80,22 @@
     <!-- ══ Pattern-ready toast ══ -->
     <div id="pattern-toast" class="pattern-toast hidden"></div>
 
-    <!-- ══ Intro Tour overlay — first-time guided walkthrough ══ -->
+    <!-- ══ Intro Tour — first-time guided walkthrough.
+         Layering (siblings, so lifted panels can interleave):
+         #intro-tour (scrim+spotlight) z-170 < lifted target z-171 < #intro-tooltip z-172. ══ -->
     <div id="intro-tour" class="hidden" aria-label="Introduction tour">
       <div id="intro-scrim"></div>
       <div id="intro-spotlight"></div>
-      <div id="intro-tooltip">
-        <span id="intro-step-counter" class="intro-step-counter"></span>
-        <p id="intro-text" class="intro-text"></p>
-        <div id="intro-actions" class="intro-actions">
-          <button id="intro-got-it" class="intro-got-it hidden" type="button">Got it</button>
-        </div>
-        <button id="intro-skip" class="intro-skip" type="button">Skip tour</button>
+    </div>
+    <div id="intro-tooltip" class="hidden">
+      <span id="intro-step-counter" class="intro-step-counter"></span>
+      <p id="intro-text" class="intro-text"></p>
+      <div id="intro-actions" class="intro-actions">
+        <button id="intro-back" class="intro-nav-btn" type="button">&larr; Back</button>
+        <button id="intro-next" class="intro-nav-btn" type="button">Next &rarr;</button>
+        <button id="intro-got-it" class="intro-got-it hidden" type="button">Got it</button>
       </div>
+      <button id="intro-skip" class="intro-skip" type="button">Skip tour</button>
     </div>
 
     <!-- ══ Orbital canvas — driven entirely by main.ts ══ -->
