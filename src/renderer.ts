@@ -6,6 +6,7 @@
 
 import type { AppState, DustMote } from './state';
 import { DUST_COUNT, CANVAS_THEMES } from './state';
+import { planetDiscAlpha } from './reveal';
 
 // ── Dust particle system ─────────────────────────────────────────────────────
 
@@ -102,6 +103,47 @@ export function drawScene(ctx: CanvasRenderingContext2D, state: AppState): void 
     ctx.moveTo(line.p1.x, line.p1.y);
     ctx.lineTo(line.p2.x, line.p2.y);
     ctx.stroke();
+  }
+
+  // Reveal guided phase: draw the two planet bodies at the newest revealed
+  // line's endpoints, with a bright live chord between them — making the CAUSE
+  // of each link line visible. calculateEllipticalLines orders every line as
+  // p1 = planet1 (the pair's inner planet), p2 = planet2 (outer). Planet-pair
+  // patterns only: moon-hexagon lines are a polyline of Moon positions and the
+  // cardioid has no bodies at all.
+  const isPlanetPair =
+    (state.currentPattern.kind ?? 'planet') === 'planet' && !state.currentPattern.geocentric;
+  if (state.drawAnimActive && isPlanetPair && state.drawLineCount > 0) {
+    const alpha = planetDiscAlpha(state.drawAnimProgress, state.drawGuidedTimeFrac);
+    if (alpha > 0) {
+      const newest = state.linkLines[Math.min(state.drawLineCount, state.linkLines.length) - 1];
+      const isDark = state.currentTheme === 'dark';
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+
+      // Live chord — brighter than the settled lines behind it
+      ctx.strokeStyle = isDark ? 'rgba(255, 190, 100, 0.9)' : 'rgba(140, 80, 30, 0.9)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(newest.p1.x, newest.p1.y);
+      ctx.lineTo(newest.p2.x, newest.p2.y);
+      ctx.stroke();
+
+      const disc = (p: { x: number; y: number }, label: string) => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = isDark ? '#FFB870' : '#8C501E';
+        ctx.fill();
+        ctx.font = '500 11px "JetBrains Mono", monospace';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = isDark ? 'rgba(255, 220, 180, 0.95)' : 'rgba(70, 40, 15, 0.95)';
+        ctx.fillText(label, p.x + 10, p.y);
+      };
+      disc(newest.p1, state.currentPattern.planet1 ?? '');
+      disc(newest.p2, state.currentPattern.planet2 ?? '');
+      ctx.restore();
+    }
   }
 
   // Moon-hexagon: a dot at each Sun-Earth-View position, so the figure reads as

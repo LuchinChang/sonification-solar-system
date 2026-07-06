@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  GUIDED_PHASE_MS, GUIDED_LINE_FRACTION, MIN_REVEAL_MS,
+  GUIDED_PHASE_MS, GUIDED_LINE_FRACTION, MIN_REVEAL_MS, PLANET_FADE_FRACTION,
   revealDurationMs, revealLineFraction, planetDiscAlpha,
 } from '../reveal';
 
@@ -53,6 +53,11 @@ describe('revealLineFraction', () => {
     const secondHalf = revealLineFraction(1, gf) - revealLineFraction(mid, gf);
     expect(secondHalf).toBeGreaterThan(firstHalf);
   });
+
+  it('is total: clamps to [0, 1] for a degenerate guidedTimeFrac (<= 0)', () => {
+    expect(revealLineFraction(0.5, 0)).toBe(0.5);
+    expect(revealLineFraction(1.2, 0)).toBe(1);
+  });
 });
 
 describe('planetDiscAlpha', () => {
@@ -68,5 +73,11 @@ describe('planetDiscAlpha', () => {
     const justAfter = planetDiscAlpha(gf + 0.01, gf);
     expect(justAfter).toBeLessThan(1);
     expect(justAfter).toBeGreaterThan(0);
+  });
+
+  it('reaches exactly 0 at the fade-completion point and stays there', () => {
+    const fadeEnd = gf + PLANET_FADE_FRACTION * (1 - gf);
+    expect(planetDiscAlpha(fadeEnd, gf)).toBeCloseTo(0, 10);
+    expect(planetDiscAlpha(fadeEnd + 0.05, gf)).toBeCloseTo(0, 10);
   });
 });

@@ -103,6 +103,8 @@ export interface AppState {
   drawAnimDurationMs: number;
   drawAnimProgress: number;
   drawLineCount: number;
+  /** GUIDED_PHASE_MS / drawAnimDurationMs — precomputed for the render loop. */
+  drawGuidedTimeFrac: number;
   currentCaptionText: string;
   captionTimeoutId: ReturnType<typeof setTimeout> | null;
 
@@ -175,6 +177,7 @@ export function createInitialState(): AppState {
     drawAnimDurationMs: 0,
     drawAnimProgress: 0,
     drawLineCount: 0,
+    drawGuidedTimeFrac: 0,
     currentCaptionText: '',
     captionTimeoutId: null,
 

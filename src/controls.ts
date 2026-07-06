@@ -7,6 +7,7 @@ import { CanvasShape, PROBE_PALETTE_SIZE, resetNextId, type ShapeType } from './
 import { calculateGeocentricLines, calculateEllipticalLines, calculateCardioidLines, calculateMoonHexagonLines, SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS, clamp } from './engine';
 import { PATTERNS, computeAuScale, renderPatternThumbnail, type PlanetaryPattern } from './patterns';
 import type { AppState } from './state';
+import { revealDurationMs, GUIDED_PHASE_MS } from './reveal';
 import {
   MIN_SAMPLES, MAX_SAMPLES, MIN_CPM, MAX_CPM,
   // MIN_SHAPE_SIZE drives wheel-to-resize for discrete circle probes.
@@ -193,7 +194,8 @@ export function deleteActiveShape(state: AppState, dom: DomElements): void {
 function startDrawAnimation(state: AppState, dom: DomElements): void {
   state.drawAnimActive    = true;
   state.drawAnimStartTime = performance.now();
-  state.drawAnimDurationMs = Math.min(state.currentPattern.simYears * 1500, 25000);
+  state.drawAnimDurationMs = revealDurationMs(state.currentPattern.simYears);
+  state.drawGuidedTimeFrac = GUIDED_PHASE_MS / state.drawAnimDurationMs;
   state.drawAnimProgress  = 0;
   state.drawLineCount     = 0;
   state.currentCaptionText = '';
