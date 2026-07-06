@@ -33,6 +33,20 @@ describe('computeResonance', () => {
     expect(r.petals).toBe(7);
     expect(r.simYears).toBeCloseTo(15, 0);
   });
+
+  it('bounds the search by watchable duration — Mercury-Neptune runs one truthful Neptune orbit', () => {
+    const r = computeResonance(periodDays('Mercury'), periodDays('Neptune'));
+    expect(r.outerOrbits).toBe(1);
+    expect(r.simYears).toBeCloseTo(164.8, 0);
+    expect(r.petals).toBe(r.innerOrbits - 1);
+  });
+
+  it('computed Jupiter-Uranus lands on the curated answer (one Uranus orbit, 6 petals)', () => {
+    const r = computeResonance(periodDays('Jupiter'), periodDays('Uranus'));
+    expect(r.outerOrbits).toBe(1);
+    expect(r.petals).toBe(6);
+    expect(r.simYears).toBeCloseTo(84, 0);
+  });
 });
 
 describe('getPatternForPair', () => {

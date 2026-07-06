@@ -30,8 +30,10 @@ export interface PairResonance {
 
 /** Search cap: how many outer-planet orbits we're willing to wait for closure. */
 export const MAX_OUTER_ORBITS = 20;
-/** An m:k pair closer than this (relative error per outer orbit) is "closed". */
+/** An m:k pair closer than this (error in inner-orbit count per outer orbit) is "closed". */
 export const RESONANCE_TOLERANCE = 0.02;
+/** Prefer resonances watchable within this window; one outer orbit may exceed it. */
+export const MAX_SIM_YEARS = 100;
 
 /**
  * Find the smallest near-resonance m:k ≈ 1 : Pout/Pin. Takes the first m whose
@@ -40,16 +42,22 @@ export const RESONANCE_TOLERANCE = 0.02;
  */
 export function computeResonance(periodInnerDays: number, periodOuterDays: number): PairResonance {
   const ratio = periodOuterDays / periodInnerDays;
-  let best = { m: 1, k: Math.max(2, Math.round(ratio)), err: Infinity };
-  for (let m = 1; m <= MAX_OUTER_ORBITS; m++) {
+  const outerYears = periodOuterDays / 365.25;
+  // Bound the search by watchable duration: only consider cycle lengths that
+  // fit MAX_SIM_YEARS (always allowing a single outer orbit, which for the
+  // farthest planets legitimately exceeds it — Neptune pairs run ~165 sim-years).
+  const mMax = Math.max(1, Math.min(MAX_OUTER_ORBITS, Math.floor(MAX_SIM_YEARS / outerYears)));
+  let best: { m: number; k: number; err: number } | null = null;
+  for (let m = 1; m <= mMax; m++) {
     const k = Math.round(m * ratio);
     if (k <= m) continue;
     const err = Math.abs(m * ratio - k) / m;
     if (err < RESONANCE_TOLERANCE) { best = { m, k, err }; break; }
-    if (err < best.err) best = { m, k, err };
+    if (best === null || err < best.err) best = { m, k, err };
   }
-  const rawYears = (best.m * periodOuterDays) / 365.25;
-  const simYears = Math.round(Math.min(Math.max(rawYears, 1), 100) * 100) / 100;
+  // Degenerate ratio ≈ 1 fallback (unreachable for real planet pairs).
+  if (best === null) best = { m: 1, k: Math.max(2, Math.round(ratio)), err: 0 };
+  const simYears = Math.round(best.m * outerYears * 100) / 100;
   return { innerOrbits: best.k, outerOrbits: best.m, simYears, petals: best.k - best.m };
 }
 
