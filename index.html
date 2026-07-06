@@ -41,12 +41,34 @@
       <p class="signature">Solar System Sonification</p>
     </div>
 
-    <!-- ══ Pattern selector overlay — toggled with the P hotkey ══ -->
+    <!-- ══ Pattern selector — P hotkey. Three panes: inner-planet column |
+         live Preview | outer-planet column, plus a Special row for the two
+         non-pair patterns (Moon-Earth hexagon, Cardioid). ══ -->
     <div id="pattern-selector" class="hidden" role="dialog" aria-modal="true" aria-label="Choose a planetary pattern">
       <div class="pattern-band">
         <h2 class="pattern-band-title">Choose a Planetary Pattern</h2>
-        <div class="pattern-cards" id="pattern-cards">
-          <!-- Cards injected by controls.ts from PATTERNS array -->
+        <div class="pattern-columns">
+          <div class="planet-column" role="listbox" aria-label="Inner planet">
+            <h3 class="planet-column-title">Inner planet</h3>
+            <div id="pattern-inner-list" class="planet-list"></div>
+          </div>
+          <div class="pattern-preview-pane">
+            <canvas id="pattern-preview-canvas" width="280" height="280"></canvas>
+            <span id="pattern-preview-name" class="pattern-preview-name"></span>
+            <span id="pattern-preview-meta" class="pattern-preview-meta"></span>
+            <button id="pattern-confirm-btn" type="button" class="pattern-confirm-btn">
+              Explore this pattern
+            </button>
+            <span class="pattern-confirm-hint">replaces the canvas and any placed probes</span>
+          </div>
+          <div class="planet-column" role="listbox" aria-label="Outer planet">
+            <h3 class="planet-column-title">Outer planet</h3>
+            <div id="pattern-outer-list" class="planet-list"></div>
+          </div>
+        </div>
+        <div class="pattern-specials">
+          <h3 class="planet-column-title">Special patterns</h3>
+          <div id="pattern-cards" class="pattern-cards"></div>
         </div>
         <p class="pattern-band-hint">Press <kbd>P</kbd> to toggle &middot; <kbd>Esc</kbd> to cancel</p>
       </div>

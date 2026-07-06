@@ -58,6 +58,12 @@ export interface DomElements {
   // Pattern selector (P hotkey modal)
   patternSelectorEl: HTMLElement;
   patternCardsEl: HTMLElement;
+  patternInnerListEl: HTMLElement;
+  patternOuterListEl: HTMLElement;
+  patternPreviewCanvas: HTMLCanvasElement;
+  patternPreviewName: HTMLElement;
+  patternPreviewMeta: HTMLElement;
+  patternConfirmBtn: HTMLButtonElement;
 
   // Cardioid pattern controls (only meaningful while cardioid pattern is active).
   // N (point count) is taken from the existing sample-rate knob — only the
@@ -123,6 +129,12 @@ export function resolveDomElements(): DomElements {
 
     patternSelectorEl: getEl('pattern-selector'),
     patternCardsEl: getEl('pattern-cards'),
+    patternInnerListEl: getEl('pattern-inner-list'),
+    patternOuterListEl: getEl('pattern-outer-list'),
+    patternPreviewCanvas: getEl('pattern-preview-canvas') as HTMLCanvasElement,
+    patternPreviewName: getEl('pattern-preview-name'),
+    patternPreviewMeta: getEl('pattern-preview-meta'),
+    patternConfirmBtn: getEl('pattern-confirm-btn') as HTMLButtonElement,
 
     cardioidControlsEl: getEl('cardioid-controls'),
     cardioidNSliderMultiplier: getEl('cardioid-n-slider') as HTMLInputElement,

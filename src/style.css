@@ -1733,3 +1733,90 @@ body.ui-hidden .config-btn {
   text-align: center;
   letter-spacing: 0.3px;
 }
+
+/* Three-pane pair picker (2026-07-05 selector redesign) */
+.pattern-columns {
+  display: flex;
+  align-items: stretch;
+  gap: 24px;
+}
+.planet-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 110px;
+}
+.planet-column-title {
+  font: 500 10px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+}
+.planet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.planet-option {
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: var(--tile-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  font: 400 12px var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+}
+.planet-option:hover:not(:disabled) { border-color: var(--accent-copper); }
+.planet-option.active {
+  border-color: var(--accent-amber);
+  color: var(--accent-amber);
+}
+.planet-option:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.pattern-preview-pane {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+#pattern-preview-canvas {
+  width: 280px;
+  height: 280px;
+  border-radius: 14px;
+  background: var(--tile-bg);
+  border: 1px solid var(--glass-border);
+}
+.pattern-preview-name {
+  font: 500 14px var(--font-mono);
+  color: var(--text-primary);
+}
+.pattern-preview-meta {
+  font: 400 11px var(--font-mono);
+  color: var(--text-dim);
+}
+.pattern-confirm-btn {
+  margin-top: 4px;
+  padding: 10px 22px;
+  border-radius: 10px;
+  background: var(--glass-bg);
+  border: 1px solid var(--accent-amber);
+  color: var(--accent-amber);
+  font: 500 12px var(--font-mono);
+  cursor: pointer;
+}
+.pattern-confirm-btn:hover:not(:disabled) { box-shadow: 0 0 14px rgba(240, 160, 48, 0.35); }
+.pattern-confirm-btn:disabled { opacity: 0.4; cursor: default; }
+.pattern-confirm-hint {
+  font: 400 9px var(--font-mono);
+  color: var(--text-dim);
+}
+.pattern-specials {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--glass-border);
+  padding-top: 14px;
+}
