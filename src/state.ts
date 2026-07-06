@@ -8,6 +8,7 @@ import type { Point } from './geometry';
 import type { CanvasShape } from './shapes';
 import type { PlanetaryPattern } from './patterns';
 import { PATTERNS } from './patterns';
+import { loadMuted } from './mute';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -192,7 +193,7 @@ export function createInitialState(): AppState {
     // Audio
     strudelRepl: null,
     audioInitialized: false,
-    muted: typeof localStorage !== 'undefined' && localStorage.getItem('sound-muted') === 'true',
+    muted: typeof localStorage !== 'undefined' && loadMuted(localStorage),
 
     // Dust particles (deferred — populated by initDust())
     dustMotes: [],

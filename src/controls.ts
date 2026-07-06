@@ -704,6 +704,7 @@ async function startEngine(state: AppState, dom: DomElements, muted: boolean): P
 }
 
 function toggleMute(state: AppState, dom: DomElements): void {
+  if (!state.audioInitialized) return;
   state.muted = !state.muted;
   setMuted(state.muted);
   saveMuted(localStorage, state.muted);
