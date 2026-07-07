@@ -53,14 +53,33 @@ The pair member with the smaller orbit (shorter period) is the pattern's inner p
 _Avoid_: "inner planets" meaning the inner solar system (Mercury–Mars); the pair-relative sense is the canonical one here.
 
 **Preview**:
-The fast, looping, disposable drawing of a pattern shown inside the selector while browsing. A preview never touches the field or the user's probes.
-_Avoid_: calling the preview "the animation" — that word is reserved for the Reveal.
+The fast, disposable drawing of a pattern shown inside the selector while browsing: the figure draws once, then holds completed. Redrawn when the chosen pair changes. A preview never touches the field or the user's probes.
+_Avoid_: calling the preview "the animation" — that word is reserved for the Reveal. Historical: previews used to loop; they now draw once and hold.
+
+**Nodal Chord**:
+The simultaneous sounding of a pattern's dominant ring of Nodal Points — one sustained voice per symmetry lobe (the resonance difference |m−k| predicts the voice count), each pitched by the Fifths Mapping and breathing visually while it sounds.
+_Avoid_: "node chord", "the chord" without context once probes can also hold chords.
 
 **Reveal**:
 The one-time educational drawing of a newly applied pattern on the main canvas, in two phases: a slow **guided phase** where the planet bodies visibly stamp each link line, then an accelerated **completion phase** where the figure finishes and the planets recede.
 _Avoid_: "draw animation" (legacy name for the linear lines-only version).
 
+**Nodal Point**:
+A stationary point of the pattern figure — where consecutive link lines intersect and that intersection momentarily stops moving (a point on the envelope of the link-line family). Detected as a local maximum of **Nodality**. The visually bright "knots" of a pattern.
+_Avoid_: "node" — that word is reserved for node-editor graph nodes (data/sound nodes).
+
+**Nodality**:
+The stationarity measure of the running link-line intersection: closer to 1 the less the intersection point moved since the previous sample (`1/(1+Δ)`). Local maxima of nodality mark Nodal Points.
+
+**Fifths Mapping**:
+The continuous angle→pitch rule for Nodal Points: a point's polar angle around the Sun sets its pitch, stepping a perfect fifth per 30° of angle, wrapped into a single octave. Frequency is computed continuously from the angle — never snapped to the nearest semitone.
+_Avoid_: "circle of fifths quantization" — nothing is quantized; nearby angles differ by cents.
+
 ### Sound state
+
+**Held (probe)**:
+A sweeper frozen at its current playhead angle while all of that tick's voices sustain continuously through the probe's own effect chain — a chord frozen out of the rotation. Toggled per probe; other probes keep playing. Uses the probe's own baked pitch mapping (the Fifths Mapping is exclusive to Nodal Chords).
+_Avoid_: conflating with **Paused** (global, stops time) or **Muted** (silences everything).
 
 **Muted**:
 Sound output silenced while the engine keeps running — playheads move, patterns schedule, volume is zero. Reversible instantly at any time.
