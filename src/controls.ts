@@ -403,14 +403,14 @@ function thumbLineColor(state: AppState): string {
     : 'rgba(92, 58, 33, 0.35)';
 }
 
-function showPatternSelector(state: AppState, dom: DomElements): void {
+function showPatternSelector(state: AppState, dom: DomElements, tour: TourController): void {
   if (state.isPlaying) togglePlayback(state, dom);
 
   if (state.drawAnimActive) {
-    state.drawAnimActive = false;
-    dom.captionEl.classList.remove('visible');
-    dom.captionEl.classList.add('hidden');
-    if (state.captionTimeoutId) clearTimeout(state.captionTimeoutId);
+    // Complete — don't just abandon — an in-flight reveal: the field fills in,
+    // the non-fading "Press Space to skip" toast is replaced by the auto-fading
+    // "Pattern ready" one, and a first-run tour still gets scheduled.
+    finishDrawAnimation(state, dom, tour);
   }
 
   // Seed the pair picker from the active pattern when it is a planet pair.
@@ -425,7 +425,7 @@ function showPatternSelector(state: AppState, dom: DomElements): void {
   }
 
   renderPlanetColumns(state, dom);
-  renderSpecialRow(state, dom);
+  renderSpecialRow(state, dom, tour);
   updatePreviewPane(state, dom);
 
   dom.patternSelectorEl.classList.remove('hidden');
@@ -504,7 +504,7 @@ function updatePreviewPane(state: AppState, dom: DomElements): void {
 }
 
 // The two curated non-pair patterns keep the old thumbnail-card treatment.
-function renderSpecialRow(state: AppState, dom: DomElements): void {
+function renderSpecialRow(state: AppState, dom: DomElements, tour: TourController): void {
   dom.patternCardsEl.innerHTML = '';
   const specials = PATTERNS.filter(p => p.kind === 'moon-hexagon' || p.kind === 'cardioid');
   for (const pattern of specials) {
@@ -514,7 +514,7 @@ function renderSpecialRow(state: AppState, dom: DomElements): void {
     if (pattern.id === state.currentPattern.id) card.classList.add('active');
     card.dataset['pattern'] = pattern.id;
 
-    const thumb = renderPatternThumbnail(pattern, 90, thumbLineColor(state));
+    const thumb = renderPatternThumbnail(pattern, 120, thumbLineColor(state));
     thumb.className = 'pattern-thumb';
     card.appendChild(thumb);
 
@@ -526,6 +526,7 @@ function renderSpecialRow(state: AppState, dom: DomElements): void {
     card.appendChild(label);
 
     card.addEventListener('click', () => {
+      tour.notify('pattern-confirmed');
       hidePatternSelector(dom);
       if (pattern.id !== state.currentPattern.id) applyPattern(state, dom, pattern);
     });
@@ -789,6 +790,9 @@ async function startEngine(state: AppState, dom: DomElements, muted: boolean): P
     state.strudelRepl = replInstance;
     replInstance.setCps(state.cpm / 60);
     state.audioInitialized = true;
+    // The button choice IS the session's mute preference — it deliberately
+    // overwrites any persisted value; localStorage only drives the pre-init
+    // toggle icon and the next visit's overlay state.
     state.muted = muted;
     setMuted(muted);
     saveMuted(localStorage, muted);
@@ -885,9 +889,11 @@ export function setupEventHandlers(
     togglePlayback(state, dom);
   });
 
-  // Pattern selector — confirm the picked pair
+  // Pattern selector — confirm the picked pair. Confirming while the tour's
+  // final step is showing completes the tour (see tour.notify).
   dom.patternConfirmBtn.addEventListener('click', () => {
     const pattern = getPatternForPair(pickerInner, pickerOuter);
+    tour.notify('pattern-confirmed');
     hidePatternSelector(dom);
     if (pattern.id !== state.currentPattern.id) applyPattern(state, dom, pattern);
   });
@@ -1156,7 +1162,7 @@ export function setupEventHandlers(
         // active so swapping has no meaning.
         if (!state.audioInitialized) break;
         if (dom.patternSelectorEl.classList.contains('hidden')) {
-          showPatternSelector(state, dom);
+          showPatternSelector(state, dom, tour);
           tour.notify('pattern-opened');
         } else {
           hidePatternSelector(dom);

@@ -18,7 +18,8 @@ export type TourAction =
   | 'editor-opened'
   | 'cable-connected'
   | 'play-pressed'
-  | 'pattern-opened';
+  | 'pattern-opened'
+  | 'pattern-confirmed';
 
 interface TourStep {
   target: () => HTMLElement | null;
@@ -53,7 +54,7 @@ const tourSteps: TourStep[] = [
   },
   { // 3 — Hear it
     target: () => document.getElementById('play-pause-btn'),
-    text: 'Press <kbd>Space</kbd> (or the ▶ button in the top-left) to hear your mapping.',
+    text: 'Press <kbd>Space</kbd> (or the ▶ button in the top-left) to hear your mapping. Started muted? Press <kbd>M</kbd> to unmute.',
     trigger: 'action',
   },
   { // 4 — Open the pattern picker
@@ -175,7 +176,9 @@ export function createTourController(dom: DomElements): TourController {
   }
 
   function start(): void {
-    if (!shouldShow()) return;
+    // Re-entrant calls (e.g. finishDrawAnimation firing after a mid-tour
+    // pattern confirm) must not reset a tour already in progress.
+    if (active || !shouldShow()) return;
     active = true;
     stepIdx = 0;
     dom.tourEl.classList.remove('hidden');
@@ -191,6 +194,10 @@ export function createTourController(dom: DomElements): TourController {
     else if (action === 'cable-connected' && idx === 2) advance();
     else if (action === 'play-pressed'    && idx === 3) advance();
     else if (action === 'pattern-opened'  && idx === 4) advance();
+    // Confirming a pattern on the final step is following the tour's own
+    // instruction — complete the tour (writes TOUR_DONE_KEY) so the reveal's
+    // finishDrawAnimation → tour.start() doesn't restart it from step 0.
+    else if (action === 'pattern-confirmed' && idx === 5) end();
   }
 
   function back(): void {
@@ -213,6 +220,10 @@ export function createTourController(dom: DomElements): TourController {
   dom.tourNext.addEventListener('click', next);
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && active) {
+      // Esc while the pattern selector is open belongs to the selector —
+      // closing it must not also silently end (and permanently dismiss) the tour.
+      const selector = document.getElementById('pattern-selector');
+      if (selector && !selector.classList.contains('hidden')) return;
       e.preventDefault();
       end(true);
     }

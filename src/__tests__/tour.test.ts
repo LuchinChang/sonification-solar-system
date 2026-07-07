@@ -268,4 +268,35 @@ describe('TourController', () => {
     tour.notify('sweeper-spawned'); // late notify for step 0 — must not advance step 1
     expect(tour.currentStep).toBe(1);
   });
+
+  it('pattern-confirmed on the final step completes the tour', () => {
+    const tour = createTourController(dom);
+    tour.start();
+    for (let i = 0; i < 5; i++) tour.next(); // walk to the final step
+    expect(tour.currentStep).toBe(5);
+    tour.notify('pattern-confirmed');
+    expect(tour.isActive).toBe(false);
+    expect(localStorage.getItem('intro-tour-done')).toBe('true');
+  });
+
+  it('pattern-confirmed before the final step is a no-op', () => {
+    const tour = createTourController(dom);
+    tour.start();
+    tour.notify('pattern-confirmed');
+    expect(tour.currentStep).toBe(0);
+    expect(tour.isActive).toBe(true);
+  });
+
+  it('start() while active does not reset progress', () => {
+    // Regression: finishDrawAnimation fires tour.start() after every reveal —
+    // a reveal triggered mid-tour must not bounce the user back to step 0.
+    const tour = createTourController(dom);
+    tour.start();
+    tour.notify('sweeper-spawned');
+    tour.notify('editor-opened');
+    expect(tour.currentStep).toBe(2);
+    tour.start();
+    expect(tour.currentStep).toBe(2);
+    expect(tour.isActive).toBe(true);
+  });
 });
