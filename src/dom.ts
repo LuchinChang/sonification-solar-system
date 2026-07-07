@@ -68,6 +68,21 @@ export interface DomElements {
   patternPreviewMeta: HTMLElement;
   patternConfirmBtn: HTMLButtonElement;
 
+  // Timbre playground drawer (pattern selector; hidden until unlocked)
+  playgroundDrawer: HTMLElement;
+  pgOperator: HTMLSelectElement;
+  pgBalance: HTMLInputElement;
+  pgPhase: HTMLInputElement;
+  pgFmIndex: HTMLInputElement;
+  pgRatioMode: HTMLSelectElement;
+  pgFreeRatio: HTMLInputElement;
+  pgF0: HTMLInputElement;
+  pgWrap: HTMLInputElement;
+  pgRadiusMapping: HTMLSelectElement;
+  pgSustain: HTMLInputElement;
+  pgGain: HTMLInputElement;
+  pgCopyCode: HTMLButtonElement;
+
   // Cardioid pattern controls (only meaningful while cardioid pattern is active).
   // N (point count) is taken from the existing sample-rate knob — only the
   // multiplier (n) needs its own slider here.
@@ -141,6 +156,20 @@ export function resolveDomElements(): DomElements {
     patternPreviewName: getEl('pattern-preview-name'),
     patternPreviewMeta: getEl('pattern-preview-meta'),
     patternConfirmBtn: getEl('pattern-confirm-btn') as HTMLButtonElement,
+
+    playgroundDrawer: getEl('playground-drawer'),
+    pgOperator: getEl('pg-operator') as HTMLSelectElement,
+    pgBalance: getEl('pg-balance') as HTMLInputElement,
+    pgPhase: getEl('pg-phase') as HTMLInputElement,
+    pgFmIndex: getEl('pg-fm-index') as HTMLInputElement,
+    pgRatioMode: getEl('pg-ratio-mode') as HTMLSelectElement,
+    pgFreeRatio: getEl('pg-free-ratio') as HTMLInputElement,
+    pgF0: getEl('pg-f0') as HTMLInputElement,
+    pgWrap: getEl('pg-wrap') as HTMLInputElement,
+    pgRadiusMapping: getEl('pg-radius-mapping') as HTMLSelectElement,
+    pgSustain: getEl('pg-sustain') as HTMLInputElement,
+    pgGain: getEl('pg-gain') as HTMLInputElement,
+    pgCopyCode: getEl('pg-copy-code') as HTMLButtonElement,
 
     cardioidControlsEl: getEl('cardioid-controls'),
     cardioidNSliderMultiplier: getEl('cardioid-n-slider') as HTMLInputElement,
