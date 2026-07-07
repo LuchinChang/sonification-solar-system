@@ -492,3 +492,47 @@ describe('animations', () => {
   });
 });
 */
+
+// ── Sweeper Hold (CONTEXT.md: Held) ──────────────────────────────────────────
+
+describe('sweeper Hold (toHeldStrudelCode)', () => {
+  function heldSweeper(): CanvasShape {
+    const s = new CanvasShape(0, 0, 'sweeper');
+    // Inject a minimal baked tick table: 60 ticks × 1 arm × up to k slots.
+    const empty = Array.from({ length: 60 }, () => [] as unknown[]);
+    empty[0] = [
+      { x: 10, y: 0, freq: 220, gain: 0.5 },
+      { x: 20, y: 0, freq: 330, gain: 0.25 },
+    ];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    s.sweepTicks = [empty as any];
+    s.playheadAngle = s.startAngle; // playhead sits in tick 0
+    return s;
+  }
+
+  it('emits one sustained voice per slot of the current tick', () => {
+    const code = heldSweeper().toHeldStrudelCode();
+    expect(code).toContain('freq(220.0)');
+    expect(code).toContain('freq(330.0)');
+    expect(code).toContain('.sustain(1)');
+    expect(code).toContain('HELD');
+  });
+
+  it('keeps the shape block markers so replaceShapeBlock can swap it back', () => {
+    const s = heldSweeper();
+    const code = s.toHeldStrudelCode();
+    expect(code).toContain(`// @shape-start-${s.id}`);
+    expect(code).toContain(`// @shape-end-${s.id}`);
+    expect(code).toContain(`.p((${s.id}).toString())`);
+  });
+
+  it('emits a silent fallback when the current tick has no clusters', () => {
+    const s = heldSweeper();
+    s.playheadAngle = s.startAngle + Math.PI; // opposite side: empty tick
+    expect(s.toHeldStrudelCode()).toContain('gain(0)');
+  });
+
+  it('starts un-held', () => {
+    expect(new CanvasShape(0, 0, 'sweeper').held).toBe(false);
+  });
+});

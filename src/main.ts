@@ -137,7 +137,11 @@ function animate(now: number): void {
       // (sweepAudioRefTime / sweepPhaseAtRef live on each CanvasShape so
       // multiple sweepers can run independently).
       try {
-        if (state.audioInitialized && shape.sweepAudioRefTime > 0) {
+        if (shape.held) {
+          // Held (CONTEXT.md): arm frozen; Strudel plays the swapped-in
+          // sustained block. prevPlayheadAngle keeps pace so unhold is clean.
+          shape.prevPlayheadAngle = shape.playheadAngle;
+        } else if (state.audioInitialized && shape.sweepAudioRefTime > 0) {
           const cycleS  = 60 / state.cpm;
           const elapsed = getAudioContext().currentTime - shape.sweepAudioRefTime;
           let phase: number;
@@ -157,7 +161,7 @@ function animate(now: number): void {
         }
       } catch (e) {
         console.debug('[audio] AC clock fallback:', e);
-        shape.stepPlayhead(dt, state.cpm);
+        if (!shape.held) shape.stepPlayhead(dt, state.cpm);
       }
       // Live radar blips are a sweeper-only affordance (ray-cast clusters).
       // Circles read their pre-baked discrete ticks; no per-frame recompute.

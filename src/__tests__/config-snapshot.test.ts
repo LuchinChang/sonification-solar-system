@@ -132,6 +132,9 @@ describe('ShapeConfig property coverage', () => {
     'playbackMode',
     'sweepDirection',
     'sweepPingPongAccum',
+    // Held (CONTEXT.md) is a live performance gesture, not configuration —
+    // a restored snapshot always starts un-held.
+    'held',
   ]);
 
   it('every CanvasShape property is in ShapeConfig or DERIVED_PROPS', () => {

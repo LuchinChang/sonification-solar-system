@@ -33,7 +33,7 @@ import {
   // to this import and restore the call sites.
   // patchRhythm, patchShapeBlock,
   patchHeader,
-  patchAllRhythms, rebuildSweeperPatterns, updateTelemetry,
+  patchAllRhythms, rebuildSweeperPatterns, replaceShapeBlock, updateTelemetry,
   setEvalStatus, toggleTelemetry,
 } from './telemetry';
 import { playLiveCode, syncStrudelCps, resumeAudioContext, suspendAudioContext, getAudioTime, setMuted } from './audio';
@@ -194,6 +194,7 @@ export function deleteActiveShape(state: AppState, dom: DomElements): void {
   const idx = state.shapes.indexOf(state.activeShape);
   if (idx !== -1) state.shapes.splice(idx, 1);
   state.flashCooldowns.delete(state.activeShape.id);
+  heldBlocks.delete(state.activeShape.id); // deletion regenerates full code
   state.activeShape = null;
   updateTelemetry(dom, state);
 }
@@ -685,6 +686,39 @@ function evaluateAndFlash(state: AppState, dom: DomElements): void {
     document.body.classList.add('global-flash');
     setTimeout(() => document.body.classList.remove('global-flash'), 450);
   }
+}
+
+// ── Sweeper Hold (CONTEXT.md: Held) ──────────────────────────────────────────
+// Toggle per probe: freeze the arm and sustain the current tick's voices.
+// The original Strudel block (which may be a node-editor commit we cannot
+// regenerate) is saved verbatim and restored on unhold.
+const heldBlocks = new Map<number, string>();
+
+function toggleHold(state: AppState, dom: DomElements): void {
+  const s = state.activeShape;
+  if (s === null || s.type !== 'sweeper' || !state.audioInitialized) return;
+  if (!s.held) {
+    const regex = new RegExp(`// @shape-start-${s.id}[\\s\\S]*?// @shape-end-${s.id}`);
+    const m = regex.exec(dom.telemetryTextarea.value);
+    if (m === null) return; // no live block — nothing to hold
+    heldBlocks.set(s.id, m[0]);
+    replaceShapeBlock(dom.telemetryTextarea, s.id, s.toHeldStrudelCode());
+    s.held = true;
+  } else {
+    const saved = heldBlocks.get(s.id);
+    if (saved !== undefined) replaceShapeBlock(dom.telemetryTextarea, s.id, saved);
+    heldBlocks.delete(s.id);
+    s.held = false;
+    // Re-anchor the audio clock so the arm resumes from its frozen angle.
+    const acTime = getAudioTime();
+    if (acTime > 0) {
+      s.sweepAudioRefTime = acTime;
+      const twoPi = Math.PI * 2;
+      s.sweepPhaseAtRef =
+        (((s.playheadAngle - s.startAngle) % twoPi) + twoPi) % twoPi / twoPi;
+    }
+  }
+  if (state.isPlaying) evaluateAndFlash(state, dom);
 }
 
 // ── Resize handler ───────────────────────────────────────────────────────────
@@ -1220,6 +1254,10 @@ export function setupEventHandlers(
         } else {
           hidePatternSelector(dom);
         }
+        break;
+      case 'h':
+        // H: Hold the active sweeper — freeze the arm, sustain the tick.
+        toggleHold(state, dom);
         break;
       case 'e': {
         // E toggle: close if open-for-same / no-active-probe, else (re)open for
