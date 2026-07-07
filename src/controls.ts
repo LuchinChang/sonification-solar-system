@@ -5,8 +5,14 @@
 
 import { CanvasShape, PROBE_PALETTE_SIZE, resetNextId, type ShapeType } from './shapes';
 import { calculateGeocentricLines, calculateEllipticalLines, calculateCardioidLines, calculateMoonHexagonLines, SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS, clamp } from './engine';
-import { PATTERNS, computeAuScale, renderPatternThumbnail, type PlanetaryPattern } from './patterns';
-import { PLANET_ORDER, getPatternForPair, patternFromId } from './pattern-generator';
+import { PATTERNS, computeAuScale, computePatternLines, renderPatternThumbnail, type PlanetaryPattern } from './patterns';
+import { PLANET_ORDER, computeResonance, getPatternForPair, patternFromId } from './pattern-generator';
+import { findNodalPoints, type NodalPoint } from './nodal-points';
+import { playNodalChord, stopNodalChord, chordGlow } from './nodal-chord';
+import {
+  loadSettings, saveSettings, loadUnlocked, saveUnlocked,
+  settingsAsCode, NODAL_CHORD_DEFAULT_ON, type PlaygroundSettings,
+} from './playground-settings';
 import { createPreviewLoop, type PreviewLoop } from './pattern-preview';
 import { ELEMENTS } from './orbital-elements';
 import type { AppState } from './state';
@@ -397,6 +403,30 @@ let pickerInner = 'Venus';
 let pickerOuter = 'Earth';
 let previewLoop: PreviewLoop | null = null;
 
+// ── Timbre playground state (one global settings object; ADR 0003) ─────────
+let playgroundSettings: PlaygroundSettings = loadSettings(localStorage);
+let playgroundUnlocked =
+  loadUnlocked(localStorage) ||
+  new URLSearchParams(window.location.search).has('playground');
+let previewNodalPoints: NodalPoint[] = [];
+let previewResonance = { innerOrbits: 13, outerOrbits: 8 };
+
+function chordEnabled(): boolean {
+  return NODAL_CHORD_DEFAULT_ON || playgroundUnlocked;
+}
+
+const PREVIEW_CANVAS_SIZE = 280; // matches index.html width/height
+/** Detection sampling density — finer than the drawn 400 for stable maxima. */
+const NODAL_DETECT_SAMPLES = 1200;
+
+function triggerPreviewChord(): void {
+  if (!chordEnabled() || previewNodalPoints.length === 0) return;
+  playNodalChord(
+    previewNodalPoints, playgroundSettings, previewResonance,
+    PREVIEW_CANVAS_SIZE / 2,
+  );
+}
+
 function thumbLineColor(state: AppState): string {
   return state.currentTheme === 'dark'
     ? 'rgba(194, 118, 46, 0.4)'
@@ -422,15 +452,19 @@ function showPatternSelector(state: AppState, dom: DomElements, tour: TourContro
 
   if (previewLoop === null) {
     previewLoop = createPreviewLoop(dom.patternPreviewCanvas, () => thumbLineColor(state), {
-      getNodalPoints: () => [],
-      getGlow: () => 0,
-      onDrawComplete: () => {},
+      getNodalPoints: () => chordEnabled() ? previewNodalPoints : [],
+      getGlow: () => chordGlow(),
+      onDrawComplete: () => triggerPreviewChord(),
     });
   }
 
   renderPlanetColumns(state, dom);
   renderSpecialRow(state, dom, tour);
   updatePreviewPane(state, dom);
+
+  // Playground drawer never auto-opens — even when unlocked, it re-opens
+  // only via double-click on the preview.
+  dom.playgroundDrawer.classList.add('hidden');
 
   dom.patternSelectorEl.classList.remove('hidden');
 }
@@ -498,6 +532,19 @@ function renderPlanetColumns(state: AppState, dom: DomElements): void {
 function updatePreviewPane(state: AppState, dom: DomElements): void {
   const pattern = getPatternForPair(pickerInner, pickerOuter);
   previewLoop?.setPattern(pattern);
+  stopNodalChord(0.1); // pair changed mid-chord — fade the old pair out
+  previewNodalPoints = [];
+  if (chordEnabled() && (pattern.kind ?? 'planet') === 'planet'
+      && !pattern.geocentric && pattern.period1 && pattern.period2) {
+    // Nodal Chord is planet-pair only: specials (cardioid, moon-hexagon)
+    // have no consecutive-link-line envelope in the nodality.js sense.
+    previewResonance = computeResonance(pattern.period1, pattern.period2);
+    previewNodalPoints = findNodalPoints(
+      computePatternLines(pattern, PREVIEW_CANVAS_SIZE, NODAL_DETECT_SAMPLES),
+      PREVIEW_CANVAS_SIZE / 2, PREVIEW_CANVAS_SIZE / 2,
+      pattern.petals, PREVIEW_CANVAS_SIZE,
+    );
+  }
   dom.patternPreviewName.textContent = pattern.name;
   dom.patternPreviewMeta.textContent =
     `${pattern.petals} petals \u00b7 ${pattern.simYears} yr cycle`;
@@ -540,6 +587,8 @@ function renderSpecialRow(state: AppState, dom: DomElements, tour: TourControlle
 
 function hidePatternSelector(dom: DomElements): void {
   previewLoop?.stop();
+  stopNodalChord();
+  dom.playgroundDrawer.classList.add('hidden');
   dom.patternSelectorEl.classList.add('hidden');
 }
 
@@ -1188,6 +1237,72 @@ export function setupEventHandlers(
         break;
       }
     }
+  });
+
+  // ── Preview interactions: click replays the draw+chord; double-click is
+  //    the hidden surprise — it unlocks and toggles the playground drawer. ──
+  dom.patternPreviewCanvas.addEventListener('click', () => {
+    previewLoop?.replay();
+  });
+  dom.patternPreviewCanvas.addEventListener('dblclick', () => {
+    if (!playgroundUnlocked) {
+      playgroundUnlocked = true;
+      saveUnlocked(localStorage, true);
+      updatePreviewPane(state, dom); // compute points now that we're unlocked
+    }
+    syncPlaygroundInputs(dom);
+    dom.playgroundDrawer.classList.toggle('hidden');
+  });
+
+  // ── Playground knobs: mutate the one global settings object, persist,
+  //    and retrigger the chord so every change is heard immediately. ──────
+  function syncPlaygroundInputs(d: DomElements): void {
+    d.pgOperator.value = playgroundSettings.operator;
+    d.pgBalance.value = String(playgroundSettings.balance);
+    d.pgPhase.value = String(playgroundSettings.phaseDeg);
+    d.pgFmIndex.value = String(playgroundSettings.fmIndex);
+    d.pgRatioMode.value = playgroundSettings.ratioMode;
+    d.pgFreeRatio.value = String(playgroundSettings.freeRatio);
+    d.pgF0.value = String(playgroundSettings.f0);
+    d.pgWrap.checked = playgroundSettings.wrapOctave;
+    d.pgRadiusMapping.value = playgroundSettings.radiusMapping;
+    d.pgSustain.value = String(playgroundSettings.sustainMs);
+    d.pgGain.value = String(playgroundSettings.gain);
+  }
+
+  function onKnobChange(mutate: (s: PlaygroundSettings) => void): void {
+    mutate(playgroundSettings);
+    saveSettings(localStorage, playgroundSettings);
+    triggerPreviewChord();
+  }
+
+  dom.pgOperator.addEventListener('change', () =>
+    onKnobChange(s => { s.operator = dom.pgOperator.value as PlaygroundSettings['operator']; }));
+  dom.pgBalance.addEventListener('input', () =>
+    onKnobChange(s => { s.balance = Number(dom.pgBalance.value); }));
+  dom.pgPhase.addEventListener('input', () =>
+    onKnobChange(s => { s.phaseDeg = Number(dom.pgPhase.value); }));
+  dom.pgFmIndex.addEventListener('input', () =>
+    onKnobChange(s => { s.fmIndex = Number(dom.pgFmIndex.value); }));
+  dom.pgRatioMode.addEventListener('change', () =>
+    onKnobChange(s => { s.ratioMode = dom.pgRatioMode.value as PlaygroundSettings['ratioMode']; }));
+  dom.pgFreeRatio.addEventListener('input', () =>
+    onKnobChange(s => { s.freeRatio = Number(dom.pgFreeRatio.value); }));
+  dom.pgF0.addEventListener('input', () =>
+    onKnobChange(s => { s.f0 = Number(dom.pgF0.value); }));
+  dom.pgWrap.addEventListener('change', () =>
+    onKnobChange(s => { s.wrapOctave = dom.pgWrap.checked; }));
+  dom.pgRadiusMapping.addEventListener('change', () =>
+    onKnobChange(s => { s.radiusMapping = dom.pgRadiusMapping.value as PlaygroundSettings['radiusMapping']; }));
+  dom.pgSustain.addEventListener('input', () =>
+    onKnobChange(s => { s.sustainMs = Number(dom.pgSustain.value); }));
+  dom.pgGain.addEventListener('input', () =>
+    onKnobChange(s => { s.gain = Number(dom.pgGain.value); }));
+
+  dom.pgCopyCode.addEventListener('click', () => {
+    void navigator.clipboard.writeText(settingsAsCode(playgroundSettings));
+    dom.pgCopyCode.textContent = 'Copied!';
+    setTimeout(() => { dom.pgCopyCode.textContent = 'Copy settings as code'; }, 1200);
   });
 
   // Initial visuals
