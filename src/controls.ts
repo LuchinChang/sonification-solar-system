@@ -421,7 +421,11 @@ function showPatternSelector(state: AppState, dom: DomElements, tour: TourContro
   }
 
   if (previewLoop === null) {
-    previewLoop = createPreviewLoop(dom.patternPreviewCanvas, () => thumbLineColor(state));
+    previewLoop = createPreviewLoop(dom.patternPreviewCanvas, () => thumbLineColor(state), {
+      getNodalPoints: () => [],
+      getGlow: () => 0,
+      onDrawComplete: () => {},
+    });
   }
 
   renderPlanetColumns(state, dom);
