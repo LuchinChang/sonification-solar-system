@@ -70,14 +70,28 @@ export function createPreviewLoop(
     }
     if (completed) {
       const glow = hooks.getGlow();
+      // Nodal points sit in the figure's densest pixels by definition, so the
+      // glow must punch through: additive halo + bright core + breathing ring.
+      g.save();
+      g.globalCompositeOperation = 'lighter';
       for (const p of hooks.getNodalPoints()) {
+        const r = 4 + 5 * glow;
+        const halo = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 2.5);
+        halo.addColorStop(0, NODAL_GLOW_COLOR);
+        halo.addColorStop(1, 'rgba(192, 132, 252, 0)');
+        g.globalAlpha = 0.35 + 0.65 * glow;
+        g.fillStyle = halo;
         g.beginPath();
-        g.arc(p.x, p.y, 3 + 4 * glow, 0, Math.PI * 2);
-        g.fillStyle = NODAL_GLOW_COLOR;
-        g.globalAlpha = 0.25 + 0.75 * glow;
+        g.arc(p.x, p.y, r * 2.5, 0, Math.PI * 2);
         g.fill();
-        g.globalAlpha = 1;
+        g.globalAlpha = 0.5 + 0.5 * glow;
+        g.strokeStyle = NODAL_GLOW_COLOR;
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.arc(p.x, p.y, r + 2, 0, Math.PI * 2);
+        g.stroke();
       }
+      g.restore();
     }
     raf = requestAnimationFrame(frame);
   }

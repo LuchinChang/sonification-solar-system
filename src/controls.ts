@@ -406,9 +406,11 @@ let previewLoop: PreviewLoop | null = null;
 
 // ── Timbre playground state (one global settings object; ADR 0003) ─────────
 let playgroundSettings: PlaygroundSettings = loadSettings(localStorage);
-let playgroundUnlocked =
-  loadUnlocked(localStorage) ||
-  new URLSearchParams(window.location.search).has('playground');
+const urlUnlock = new URLSearchParams(window.location.search).has('playground');
+let playgroundUnlocked = loadUnlocked(localStorage) || urlUnlock;
+// Both doors persist (decided 2026-07-06): once ?playground has been visited,
+// the playground stays unlocked like a dblclick discovery would.
+if (urlUnlock) saveUnlocked(localStorage, true);
 let previewNodalPoints: NodalPoint[] = [];
 let previewResonance = { innerOrbits: 13, outerOrbits: 8 };
 
@@ -1338,7 +1340,8 @@ export function setupEventHandlers(
     onKnobChange(s => { s.gain = Number(dom.pgGain.value); }));
 
   dom.pgCopyCode.addEventListener('click', () => {
-    void navigator.clipboard.writeText(settingsAsCode(playgroundSettings));
+    navigator.clipboard.writeText(settingsAsCode(playgroundSettings))
+      .catch(() => { /* clipboard unavailable (permissions) — button still confirms */ });
     dom.pgCopyCode.textContent = 'Copied!';
     setTimeout(() => { dom.pgCopyCode.textContent = 'Copy settings as code'; }, 1200);
   });
