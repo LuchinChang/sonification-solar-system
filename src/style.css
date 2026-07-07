@@ -1607,13 +1607,14 @@ body.ui-hidden .config-btn {
   color: var(--text-secondary);
 }
 
-/* "Tour skipped" toast */
+/* "Tour skipped" toast — above the whole tour stack (170/171/172) so it
+   stays visible even when a panel is lifted or the node editor is open */
 #intro-tour-toast {
   position: fixed;
   bottom: 80px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 96;
+  z-index: 173;
   padding: 8px 20px;
   border-radius: 8px;
   background: var(--glass-bg);

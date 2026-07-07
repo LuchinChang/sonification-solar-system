@@ -31,6 +31,10 @@ interface TourStep {
 
 const TOUR_DONE_KEY = 'intro-tour-done';
 
+// Lifted-target layer: between #intro-tour's scrim (z-170) and
+// #intro-tooltip (z-172) — see the layering comment in index.html.
+const LIFT_Z = '171';
+
 const tourSteps: TourStep[] = [
   { // 0 — Spawn a sweeper
     target: () => document.getElementById('foundry-shapes'),
@@ -117,9 +121,14 @@ export function createTourController(dom: DomElements): TourController {
     dom.tourBack.disabled = stepIdx === 0;
     dom.tourNext.classList.toggle('hidden', step.trigger === 'gotit');
 
-    // Position spotlight
-    if (target && target !== document.body) {
-      const rect = target.getBoundingClientRect();
+    // Position spotlight. A hidden target (e.g. Back to the cable step after
+    // the editor closed) reports a zero rect — treat it as absent so the
+    // spotlight doesn't draw a tiny box at the top-left.
+    const rect = target && target !== document.body
+      ? target.getBoundingClientRect()
+      : null;
+    const visible = rect !== null && rect.width > 0;
+    if (target && rect && visible) {
       const pad = 8;
       dom.tourSpot.style.left   = `${rect.left - pad}px`;
       dom.tourSpot.style.top    = `${rect.top - pad}px`;
@@ -127,9 +136,9 @@ export function createTourController(dom: DomElements): TourController {
       dom.tourSpot.style.height = `${rect.height + pad * 2}px`;
       dom.tourSpot.style.display = 'block';
 
-      const liftTarget = target.closest('#foundry-panel, #telemetry-panel, #node-editor-panel') as HTMLElement ?? target;
+      const liftTarget = target.closest('#foundry-panel, #telemetry-panel, #node-editor-panel, #top-chrome') as HTMLElement ?? target;
       if (step.trigger === 'action' || step.trigger === 'gotit') {
-        liftTarget.style.zIndex = '171';
+        liftTarget.style.zIndex = LIFT_Z;
         liftedEl = liftTarget;
       }
     } else {

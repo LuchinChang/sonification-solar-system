@@ -244,7 +244,7 @@ describe('TourController', () => {
     expect(tour.isActive).toBe(true);
   });
 
-  it('next() skips a step the user already performed', () => {
+  it('next() advances without waiting for the step action', () => {
     const tour = createTourController(dom);
     tour.start();
     tour.next();
