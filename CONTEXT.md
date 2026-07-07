@@ -37,6 +37,35 @@ The node in the editor that selects a probe's sound — either a reserved **Sign
 A reserved, user-facing sound identity (Signature Waveform 1–4) chosen in the **Generator**, intended to host bespoke synthesis later.
 _Avoid_: "oscillator", "synth type" — a Signature Waveform is a named slot, distinct from the raw oscillators that also appear in the same dropdown.
 
+### Patterns
+
+**Pattern** (or **Planetary Pattern**):
+The geometric figure traced by link lines between two orbiting bodies over time — the dataset a session explores. Selected before probing; selecting a pattern rebuilds the field.
+
+**Curated Pattern**:
+A pattern with hand-authored identity — a name, a tuned cycle length, and a caption script narrating its reveal.
+
+**Computed Pattern**:
+A pattern generated on demand from the orbital constants of a user-chosen planet pair, with derived defaults in place of authored ones. Any pair not matching a curated pattern yields a computed one.
+
+**Inner Planet / Outer Planet (of a pair)**:
+The pair member with the smaller orbit (shorter period) is the pattern's inner planet; the other is its outer planet. This is *relative to the pair* — in Venus-Earth, Earth is the outer planet.
+_Avoid_: "inner planets" meaning the inner solar system (Mercury–Mars); the pair-relative sense is the canonical one here.
+
+**Preview**:
+The fast, looping, disposable drawing of a pattern shown inside the selector while browsing. A preview never touches the field or the user's probes.
+_Avoid_: calling the preview "the animation" — that word is reserved for the Reveal.
+
+**Reveal**:
+The one-time educational drawing of a newly applied pattern on the main canvas, in two phases: a slow **guided phase** where the planet bodies visibly stamp each link line, then an accelerated **completion phase** where the figure finishes and the planets recede.
+_Avoid_: "draw animation" (legacy name for the linear lines-only version).
+
+### Sound state
+
+**Muted**:
+Sound output silenced while the engine keeps running — playheads move, patterns schedule, volume is zero. Reversible instantly at any time.
+_Avoid_: conflating with **Paused**, which stops playback time itself rather than silencing it.
+
 ### The field
 
 **Link Line** (or **Orbital Line**):

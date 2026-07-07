@@ -6,7 +6,11 @@
 import { CanvasShape, PROBE_PALETTE_SIZE, resetNextId, type ShapeType } from './shapes';
 import { calculateGeocentricLines, calculateEllipticalLines, calculateCardioidLines, calculateMoonHexagonLines, SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS, clamp } from './engine';
 import { PATTERNS, computeAuScale, renderPatternThumbnail, type PlanetaryPattern } from './patterns';
+import { PLANET_ORDER, getPatternForPair, patternFromId } from './pattern-generator';
+import { createPreviewLoop, type PreviewLoop } from './pattern-preview';
+import { ELEMENTS } from './orbital-elements';
 import type { AppState } from './state';
+import { revealDurationMs, GUIDED_PHASE_MS } from './reveal';
 import {
   MIN_SAMPLES, MAX_SAMPLES, MIN_CPM, MAX_CPM,
   // MIN_SHAPE_SIZE drives wheel-to-resize for discrete circle probes.
@@ -26,9 +30,10 @@ import {
   patchAllRhythms, rebuildSweeperPatterns, updateTelemetry,
   setEvalStatus, toggleTelemetry,
 } from './telemetry';
-import { playLiveCode, syncStrudelCps, resumeAudioContext, suspendAudioContext, getAudioTime } from './audio';
+import { playLiveCode, syncStrudelCps, resumeAudioContext, suspendAudioContext, getAudioTime, setMuted } from './audio';
 import { openEditor, closeEditor, isEditorOpen, currentSweeperId } from './node-editor';
 import { setTheme } from './theme';
+import { saveMuted } from './mute';
 import { initKeyboardShortcutsPanel } from './keyboard-shortcuts';
 import { drawScene } from './renderer';
 import {
@@ -192,7 +197,8 @@ export function deleteActiveShape(state: AppState, dom: DomElements): void {
 function startDrawAnimation(state: AppState, dom: DomElements): void {
   state.drawAnimActive    = true;
   state.drawAnimStartTime = performance.now();
-  state.drawAnimDurationMs = Math.min(state.currentPattern.simYears * 1500, 25000);
+  state.drawAnimDurationMs = revealDurationMs(state.currentPattern.simYears);
+  state.drawGuidedTimeFrac = GUIDED_PHASE_MS / state.drawAnimDurationMs;
   state.drawAnimProgress  = 0;
   state.drawLineCount     = 0;
   state.currentCaptionText = '';
@@ -378,64 +384,159 @@ function applyPattern(state: AppState, dom: DomElements, pattern: PlanetaryPatte
 }
 
 // ── Pattern selector modal (P hotkey) ────────────────────────────────────────
-// Keyboard-triggered picker of pre-defined planetary patterns. Parallel to
-// the node editor — selecting a pattern swaps the active link-line field and
-// re-runs the draw-animation.
+// Three-pane picker: inner-planet column | live looping Preview | outer-planet
+// column, plus a Special row for the two non-pair patterns. Parallel to the
+// node editor — confirming a pattern swaps the active link-line field and
+// re-runs the draw-animation. Previews never call applyPattern; only Confirm
+// and the Special-row cards do.
 
-function showPatternSelector(state: AppState, dom: DomElements): void {
+// \u2500\u2500 Selector picker state \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// Transient pair selection while the selector is open. Re-seeded from the
+// active pattern each time the selector opens; committed only on Confirm.
+let pickerInner = 'Venus';
+let pickerOuter = 'Earth';
+let previewLoop: PreviewLoop | null = null;
+
+function thumbLineColor(state: AppState): string {
+  return state.currentTheme === 'dark'
+    ? 'rgba(194, 118, 46, 0.4)'
+    : 'rgba(92, 58, 33, 0.35)';
+}
+
+function showPatternSelector(state: AppState, dom: DomElements, tour: TourController): void {
   if (state.isPlaying) togglePlayback(state, dom);
 
   if (state.drawAnimActive) {
-    state.drawAnimActive = false;
-    dom.captionEl.classList.remove('visible');
-    dom.captionEl.classList.add('hidden');
-    if (state.captionTimeoutId) clearTimeout(state.captionTimeoutId);
+    // Complete — don't just abandon — an in-flight reveal: the field fills in,
+    // the non-fading "Press Space to skip" toast is replaced by the auto-fading
+    // "Pattern ready" one, and a first-run tour still gets scheduled.
+    finishDrawAnimation(state, dom, tour);
   }
 
-  dom.patternCardsEl.innerHTML = '';
-  const thumbColor = state.currentTheme === 'dark'
-    ? 'rgba(194, 118, 46, 0.4)'
-    : 'rgba(92, 58, 33, 0.35)';
+  // Seed the pair picker from the active pattern when it is a planet pair.
+  const cur = state.currentPattern;
+  if ((cur.kind ?? 'planet') === 'planet' && !cur.geocentric && cur.planet1 && cur.planet2) {
+    pickerInner = cur.planet1;
+    pickerOuter = cur.planet2;
+  }
 
-  for (const pattern of PATTERNS) {
+  if (previewLoop === null) {
+    previewLoop = createPreviewLoop(dom.patternPreviewCanvas, () => thumbLineColor(state));
+  }
+
+  renderPlanetColumns(state, dom);
+  renderSpecialRow(state, dom, tour);
+  updatePreviewPane(state, dom);
+
+  dom.patternSelectorEl.classList.remove('hidden');
+}
+
+// One button per planet per column. Right column entries not strictly outside
+// the picked inner planet's orbit are disabled.
+function renderPlanetColumns(state: AppState, dom: DomElements): void {
+  // Preserve focus across the re-render (buttons are recreated each time a
+  // selection changes, which would otherwise drop keyboard focus).
+  const focused = document.activeElement instanceof HTMLElement &&
+    document.activeElement.classList.contains('planet-option')
+    ? {
+        text: document.activeElement.textContent,
+        col: document.activeElement.closest('#pattern-inner-list') ? 'inner' : 'outer',
+      }
+    : null;
+
+  dom.patternInnerListEl.innerHTML = '';
+  dom.patternOuterListEl.innerHTML = '';
+
+  for (const planet of PLANET_ORDER) {
+    const innerBtn = document.createElement('button');
+    innerBtn.type = 'button';
+    innerBtn.className = 'planet-option';
+    innerBtn.textContent = planet;
+    innerBtn.disabled = planet === PLANET_ORDER[PLANET_ORDER.length - 1]; // Neptune has no outer partner
+    if (planet === pickerInner) innerBtn.classList.add('active');
+    innerBtn.setAttribute('role', 'radio');
+    innerBtn.setAttribute('aria-checked', String(planet === pickerInner));
+    innerBtn.addEventListener('click', () => {
+      pickerInner = planet;
+      // Keep the pair valid: outer must orbit farther out than inner.
+      if (ELEMENTS[pickerOuter].a <= ELEMENTS[pickerInner].a) {
+        pickerOuter = PLANET_ORDER[PLANET_ORDER.indexOf(planet) + 1];
+      }
+      renderPlanetColumns(state, dom);
+      updatePreviewPane(state, dom);
+    });
+    dom.patternInnerListEl.appendChild(innerBtn);
+
+    const outerBtn = document.createElement('button');
+    outerBtn.type = 'button';
+    outerBtn.className = 'planet-option';
+    outerBtn.textContent = planet;
+    outerBtn.disabled = ELEMENTS[planet].a <= ELEMENTS[pickerInner].a;
+    if (planet === pickerOuter) outerBtn.classList.add('active');
+    outerBtn.setAttribute('role', 'radio');
+    outerBtn.setAttribute('aria-checked', String(planet === pickerOuter));
+    outerBtn.addEventListener('click', () => {
+      pickerOuter = planet;
+      renderPlanetColumns(state, dom);
+      updatePreviewPane(state, dom);
+    });
+    dom.patternOuterListEl.appendChild(outerBtn);
+  }
+
+  if (focused) {
+    const list = focused.col === 'inner' ? dom.patternInnerListEl : dom.patternOuterListEl;
+    const match = Array.from(list.querySelectorAll<HTMLButtonElement>('.planet-option'))
+      .find(btn => btn.textContent === focused.text);
+    match?.focus();
+  }
+}
+
+function updatePreviewPane(state: AppState, dom: DomElements): void {
+  const pattern = getPatternForPair(pickerInner, pickerOuter);
+  previewLoop?.setPattern(pattern);
+  dom.patternPreviewName.textContent = pattern.name;
+  dom.patternPreviewMeta.textContent =
+    `${pattern.petals} petals \u00b7 ${pattern.simYears} yr cycle`;
+  dom.patternConfirmBtn.disabled = pattern.id === state.currentPattern.id;
+  dom.patternConfirmBtn.textContent = pattern.id === state.currentPattern.id
+    ? 'Currently exploring'
+    : 'Explore this pattern';
+}
+
+// The two curated non-pair patterns keep the old thumbnail-card treatment.
+function renderSpecialRow(state: AppState, dom: DomElements, tour: TourController): void {
+  dom.patternCardsEl.innerHTML = '';
+  const specials = PATTERNS.filter(p => p.kind === 'moon-hexagon' || p.kind === 'cardioid');
+  for (const pattern of specials) {
     const card = document.createElement('button');
     card.type = 'button';
     card.className = 'pattern-card';
     if (pattern.id === state.currentPattern.id) card.classList.add('active');
     card.dataset['pattern'] = pattern.id;
 
-    const thumb = renderPatternThumbnail(pattern, 120, thumbColor);
+    const thumb = renderPatternThumbnail(pattern, 120, thumbLineColor(state));
     thumb.className = 'pattern-thumb';
     card.appendChild(thumb);
 
-    const planets = document.createElement('span');
-    planets.className = 'pattern-card-planets';
-    if (pattern.kind === 'cardioid' && pattern.cardioid) {
-      planets.textContent = `N=${state.sampleRate} \u00b7 n=${pattern.cardioid.multiplier}`;
-    } else {
-      planets.textContent = `${pattern.planet1 ?? ''} \u2014 ${pattern.planet2 ?? ''}`;
-    }
-    card.appendChild(planets);
+    const label = document.createElement('span');
+    label.className = 'pattern-card-planets';
+    label.textContent = pattern.kind === 'cardioid'
+      ? `Cardioid \u00b7 n=${pattern.cardioid?.multiplier ?? 2}`
+      : pattern.name;
+    card.appendChild(label);
 
-    card.addEventListener('click', () => selectPattern(state, dom, pattern.id));
+    card.addEventListener('click', () => {
+      tour.notify('pattern-confirmed');
+      hidePatternSelector(dom);
+      if (pattern.id !== state.currentPattern.id) applyPattern(state, dom, pattern);
+    });
     dom.patternCardsEl.appendChild(card);
   }
-
-  dom.patternSelectorEl.classList.remove('hidden');
 }
 
 function hidePatternSelector(dom: DomElements): void {
+  previewLoop?.stop();
   dom.patternSelectorEl.classList.add('hidden');
-}
-
-function selectPattern(state: AppState, dom: DomElements, patternId: string): void {
-  const pattern = PATTERNS.find(p => p.id === patternId);
-  if (!pattern) return;
-
-  hidePatternSelector(dom);
-  if (pattern.id === state.currentPattern.id) return;
-
-  applyPattern(state, dom, pattern);
 }
 
 // ── Playback toggle (refactored from 191-line monolith) ──────────────────────
@@ -589,7 +690,7 @@ function saveConfig(state: AppState, dom: DomElements): void {
 
 function restoreFromSnapshot(state: AppState, dom: DomElements, snap: ConfigSnapshot): void {
   // 1 — Pattern (must be first: rebuilds linkLines)
-  const pat = PATTERNS.find(p => p.id === snap.patternId);
+  const pat = patternFromId(snap.patternId);
   if (!pat) { showToast(dom, 'Unknown pattern: ' + snap.patternId); return; }
 
   // Set pattern without triggering the draw animation
@@ -679,6 +780,46 @@ function handleConfigFile(state: AppState, dom: DomElements, file: File): void {
   reader.readAsText(file);
 }
 
+// ── Engine bootstrap (shared by both overlay buttons) ────────────────────────
+// Both entry paths initialize audio on the click gesture; "muted" only zeroes
+// the master gain, so un-muting later needs no new gesture.
+async function startEngine(state: AppState, dom: DomElements, muted: boolean): Promise<void> {
+  try {
+    const { initializeAudio } = await import('./audio');
+    const replInstance = await initializeAudio();
+    state.strudelRepl = replInstance;
+    replInstance.setCps(state.cpm / 60);
+    state.audioInitialized = true;
+    // The button choice IS the session's mute preference — it deliberately
+    // overwrites any persisted value; localStorage only drives the pre-init
+    // toggle icon and the next visit's overlay state.
+    state.muted = muted;
+    setMuted(muted);
+    saveMuted(localStorage, muted);
+    updateMuteToggleVisual(state, dom);
+    dom.audioOverlay.classList.add('hidden');
+    updateTelemetry(dom, state);
+    playLiveCode(state.strudelRepl, dom.telemetryTextarea.value, false);
+    applyPattern(state, dom, PATTERNS[0]);
+  } catch (err) {
+    console.error('[audio] init failed:', err);
+  }
+}
+
+function toggleMute(state: AppState, dom: DomElements): void {
+  if (!state.audioInitialized) return;
+  state.muted = !state.muted;
+  setMuted(state.muted);
+  saveMuted(localStorage, state.muted);
+  updateMuteToggleVisual(state, dom);
+}
+
+function updateMuteToggleVisual(state: AppState, dom: DomElements): void {
+  dom.muteToggleBtn.textContent = state.muted ? '\u{1F507}' : '\u{1F50A}';
+  dom.muteToggleBtn.setAttribute('aria-pressed', String(state.muted));
+  dom.muteToggleBtn.setAttribute('aria-label', state.muted ? 'Unmute sound' : 'Mute sound');
+}
+
 // ── Master event handler setup ───────────────────────────────────────────────
 
 export function setupEventHandlers(
@@ -689,22 +830,13 @@ export function setupEventHandlers(
   // Resize
   window.addEventListener('resize', () => handleResize(state, dom));
 
-  // Start engine button
-  dom.audioOverlay.querySelector('#start-engine-btn')?.addEventListener('click', async () => {
-    try {
-      const { initializeAudio } = await import('./audio');
-      const replInstance = await initializeAudio();
-      state.strudelRepl = replInstance;
-      replInstance.setCps(state.cpm / 60);
-      state.audioInitialized = true;
-      dom.audioOverlay.classList.add('hidden');
-      updateTelemetry(dom, state);
-      playLiveCode(state.strudelRepl, dom.telemetryTextarea.value, false);
-      applyPattern(state, dom, PATTERNS[0]);
-    } catch (err) {
-      console.error('[audio] init failed:', err);
-    }
-  });
+  // Start engine buttons — with sound, or muted
+  dom.audioOverlay.querySelector('#start-engine-btn')
+    ?.addEventListener('click', () => { void startEngine(state, dom, false); });
+  dom.startMutedBtn.addEventListener('click', () => { void startEngine(state, dom, true); });
+
+  // Persistent speaker toggle
+  dom.muteToggleBtn.addEventListener('click', () => toggleMute(state, dom));
 
   // Sample rate knob
   dom.sampleKnobEl.addEventListener('mousedown', e => {
@@ -755,6 +887,15 @@ export function setupEventHandlers(
   dom.playPauseBtn.addEventListener('click', () => {
     tour.notify('play-pressed');
     togglePlayback(state, dom);
+  });
+
+  // Pattern selector — confirm the picked pair. Confirming while the tour's
+  // final step is showing completes the tour (see tour.notify).
+  dom.patternConfirmBtn.addEventListener('click', () => {
+    const pattern = getPatternForPair(pickerInner, pickerOuter);
+    tour.notify('pattern-confirmed');
+    hidePatternSelector(dom);
+    if (pattern.id !== state.currentPattern.id) applyPattern(state, dom, pattern);
   });
 
   // ── Cardioid pattern controls ──────────────────────────────────────────────
@@ -991,6 +1132,9 @@ export function setupEventHandlers(
       case 'i':
         toggleTelemetry(dom);
         break;
+      case 'm':
+        if (state.audioInitialized) toggleMute(state, dom);
+        break;
       case ' ':
         e.preventDefault();
         if (state.drawAnimActive) {
@@ -1018,7 +1162,8 @@ export function setupEventHandlers(
         // active so swapping has no meaning.
         if (!state.audioInitialized) break;
         if (dom.patternSelectorEl.classList.contains('hidden')) {
-          showPatternSelector(state, dom);
+          showPatternSelector(state, dom, tour);
+          tour.notify('pattern-opened');
         } else {
           hidePatternSelector(dom);
         }
@@ -1044,6 +1189,7 @@ export function setupEventHandlers(
   // Initial visuals
   updateSampleKnobVisual(state, dom);
   updateCpmKnobVisual(state, dom);
+  updateMuteToggleVisual(state, dom);
 }
 
 // ── Helper: anchor sweep phase before CPM change ─────────────────────────────

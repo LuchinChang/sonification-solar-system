@@ -14,6 +14,14 @@ import type { StrudelRepl } from './state';
 type SampleLoaderUrl = (url: string) => Promise<void>;
 type SampleLoaderObj = (obj: Record<string, string[]>) => Promise<void>;
 
+// ── Master mute ──────────────────────────────────────────────────────────────
+let masterMuteGain: GainNode | null = null;
+
+/** Silence (true) or restore (false) all audio output without stopping playback. */
+export function setMuted(muted: boolean): void {
+  if (masterMuteGain !== null) masterMuteGain.gain.value = muted ? 0 : 1;
+}
+
 // ── AudioContext safe wrappers ───────────────────────────────────────────────
 // Consolidates 3 duplicated `try { getAudioContext().resume() } catch (_) {}` patterns.
 
@@ -57,7 +65,12 @@ export async function initializeAudio(): Promise<StrudelRepl> {
   compressor.ratio.value     = 4;
   compressor.attack.value    = 0.003;
   compressor.release.value   = 0.1;
-  compressor.connect(ac.destination);
+  // Master mute gain sits after the compressor. setMuted() flips it 0 ⇄ 1 so
+  // "muted" silences output while Strudel keeps scheduling (Muted ≠ Paused).
+  masterMuteGain = ac.createGain();
+  masterMuteGain.gain.value = 1;
+  masterMuteGain.connect(ac.destination);
+  compressor.connect(masterMuteGain);
 
   // Monkey-patch connect() so Strudel's internal destinationGain → ac.destination
   // routes through the compressor instead. Restored immediately after initAudio().

@@ -1129,6 +1129,46 @@ body.ui-hidden #top-chrome > * {
   white-space: nowrap;
 }
 
+/* Sound notice + two-choice start (2026-07-05 onboarding rework) */
+.sound-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 440px;
+  text-align: center;
+  margin-bottom: 28px;
+}
+.sound-notice-title {
+  font: 500 20px var(--font-mono);
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+.sound-notice-text {
+  font: 400 13px/1.6 var(--font-mono);
+  color: var(--text-secondary);
+}
+.sound-notice-text strong { color: var(--accent-amber); }
+.start-choices {
+  display: flex;
+  gap: 16px;
+}
+#start-muted-btn {
+  /* Secondary variant of #start-engine-btn — same glass, dimmer accent */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 28px;
+  border-radius: 14px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+#start-muted-btn:hover { border-color: var(--accent-copper); }
+
 /* ══════════════════════════════════════════════════════════════
    EVAL STATUS INDICATOR  (inside telemetry header)
    ══════════════════════════════════════════════════════════════ */
@@ -1421,7 +1461,7 @@ body.ui-hidden .config-btn {
 #intro-tour {
   position: fixed;
   inset: 0;
-  z-index: 95;
+  z-index: 170;
   /* Let clicks pass through to target elements underneath */
   pointer-events: none;
 }
@@ -1463,13 +1503,15 @@ body.ui-hidden .config-btn {
   100% { opacity: 0; transform: scale(1.08); }
 }
 
-/* Tooltip banner — fixed at top-center, never blocked by panels */
+/* Tooltip banner — fixed at top-center, never blocked by panels.
+   Sibling of #intro-tour (not nested inside it) so it can sit above any
+   lifted panel regardless of stacking-context order. */
 #intro-tooltip {
   position: fixed;
   top: 24px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 96;
+  z-index: 172;
   max-width: 420px;
   padding: 18px 28px 14px;
   background: var(--glass-bg);
@@ -1482,6 +1524,9 @@ body.ui-hidden .config-btn {
     0 1px 0 rgba(255, 200, 120, 0.05) inset;
   transition: opacity 0.3s var(--ease-out-quart);
   pointer-events: auto;
+}
+#intro-tooltip.hidden {
+  display: none;
 }
 
 .intro-step-counter {
@@ -1512,7 +1557,20 @@ body.ui-hidden .config-btn {
 .intro-actions {
   display: flex;
   justify-content: flex-start;
+  gap: 8px;
 }
+
+.intro-nav-btn {
+  padding: 5px 12px;
+  border-radius: 7px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  font: 400 11px var(--font-mono);
+  cursor: pointer;
+}
+.intro-nav-btn:hover:not(:disabled) { border-color: var(--accent-copper); }
+.intro-nav-btn:disabled { opacity: 0.35; cursor: default; }
 
 .intro-got-it {
   padding: 6px 16px;
@@ -1549,13 +1607,14 @@ body.ui-hidden .config-btn {
   color: var(--text-secondary);
 }
 
-/* "Tour skipped" toast */
+/* "Tour skipped" toast — above the whole tour stack (170/171/172) so it
+   stays visible even when a panel is lifted or the node editor is open */
 #intro-tour-toast {
   position: fixed;
   bottom: 80px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 96;
+  z-index: 173;
   padding: 8px 20px;
   border-radius: 8px;
   background: var(--glass-bg);
@@ -1692,4 +1751,91 @@ body.ui-hidden .config-btn {
   color: var(--text-primary);
   text-align: center;
   letter-spacing: 0.3px;
+}
+
+/* Three-pane pair picker (2026-07-05 selector redesign) */
+.pattern-columns {
+  display: flex;
+  align-items: stretch;
+  gap: 24px;
+}
+.planet-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 110px;
+}
+.planet-column-title {
+  font: 500 10px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+}
+.planet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.planet-option {
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: var(--tile-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  font: 400 12px var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+}
+.planet-option:hover:not(:disabled) { border-color: var(--accent-copper); }
+.planet-option.active {
+  border-color: var(--accent-amber);
+  color: var(--accent-amber);
+}
+.planet-option:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.pattern-preview-pane {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+#pattern-preview-canvas {
+  width: 280px;
+  height: 280px;
+  border-radius: 14px;
+  background: var(--tile-bg);
+  border: 1px solid var(--glass-border);
+}
+.pattern-preview-name {
+  font: 500 14px var(--font-mono);
+  color: var(--text-primary);
+}
+.pattern-preview-meta {
+  font: 400 11px var(--font-mono);
+  color: var(--text-dim);
+}
+.pattern-confirm-btn {
+  margin-top: 4px;
+  padding: 10px 22px;
+  border-radius: 10px;
+  background: var(--glass-bg);
+  border: 1px solid var(--accent-amber);
+  color: var(--accent-amber);
+  font: 500 12px var(--font-mono);
+  cursor: pointer;
+}
+.pattern-confirm-btn:hover:not(:disabled) { box-shadow: 0 0 14px rgba(240, 160, 48, 0.35); }
+.pattern-confirm-btn:disabled { opacity: 0.4; cursor: default; }
+.pattern-confirm-hint {
+  font: 400 9px var(--font-mono);
+  color: var(--text-dim);
+}
+.pattern-specials {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--glass-border);
+  padding-top: 14px;
 }

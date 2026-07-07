@@ -35,6 +35,8 @@ export interface DomElements {
 
   // Audio overlay
   audioOverlay: HTMLElement;
+  startMutedBtn: HTMLButtonElement;
+  muteToggleBtn: HTMLButtonElement;
 
   // Sync button
   syncAudioBtn: HTMLElement;
@@ -46,6 +48,9 @@ export interface DomElements {
   tourText: HTMLElement;
   tourGotIt: HTMLElement;
   tourSkip: HTMLElement;
+  tourTooltip: HTMLElement;
+  tourBack: HTMLButtonElement;
+  tourNext: HTMLButtonElement;
 
   // Save / load config snapshot
   dropOverlay: HTMLElement;
@@ -56,6 +61,12 @@ export interface DomElements {
   // Pattern selector (P hotkey modal)
   patternSelectorEl: HTMLElement;
   patternCardsEl: HTMLElement;
+  patternInnerListEl: HTMLElement;
+  patternOuterListEl: HTMLElement;
+  patternPreviewCanvas: HTMLCanvasElement;
+  patternPreviewName: HTMLElement;
+  patternPreviewMeta: HTMLElement;
+  patternConfirmBtn: HTMLButtonElement;
 
   // Cardioid pattern controls (only meaningful while cardioid pattern is active).
   // N (point count) is taken from the existing sample-rate knob — only the
@@ -102,6 +113,8 @@ export function resolveDomElements(): DomElements {
     themeToggleBtn: getEl('theme-toggle') as HTMLButtonElement,
 
     audioOverlay: getEl('audio-overlay'),
+    startMutedBtn: getEl('start-muted-btn') as HTMLButtonElement,
+    muteToggleBtn: getEl('mute-toggle') as HTMLButtonElement,
 
     syncAudioBtn: getEl('sync-audio-btn'),
 
@@ -111,6 +124,9 @@ export function resolveDomElements(): DomElements {
     tourText: getEl('intro-text'),
     tourGotIt: getEl('intro-got-it'),
     tourSkip: getEl('intro-skip'),
+    tourTooltip: getEl('intro-tooltip'),
+    tourBack: getEl('intro-back') as HTMLButtonElement,
+    tourNext: getEl('intro-next') as HTMLButtonElement,
 
     dropOverlay: getEl('drop-overlay'),
     saveConfigBtn: getEl('save-config-btn'),
@@ -119,6 +135,12 @@ export function resolveDomElements(): DomElements {
 
     patternSelectorEl: getEl('pattern-selector'),
     patternCardsEl: getEl('pattern-cards'),
+    patternInnerListEl: getEl('pattern-inner-list'),
+    patternOuterListEl: getEl('pattern-outer-list'),
+    patternPreviewCanvas: getEl('pattern-preview-canvas') as HTMLCanvasElement,
+    patternPreviewName: getEl('pattern-preview-name'),
+    patternPreviewMeta: getEl('pattern-preview-meta'),
+    patternConfirmBtn: getEl('pattern-confirm-btn') as HTMLButtonElement,
 
     cardioidControlsEl: getEl('cardioid-controls'),
     cardioidNSliderMultiplier: getEl('cardioid-n-slider') as HTMLInputElement,

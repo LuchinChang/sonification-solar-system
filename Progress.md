@@ -1,5 +1,111 @@
 # Progress & lessons-learned
 
+## 2026-07-06 — Onboarding sound choice, two-phase Reveal, three-pane selector
+
+Companion entry to the tutorial-redo entry below — the other three features of
+the same plan (docs/superpowers/plans/2026-07-05-onboarding-selector-reveal-tutorial.md,
+decisions in ADR 0002 + CONTEXT.md glossary additions).
+
+**Sound notice + mute.** The start overlay now states the app plays sound and
+offers "Start with sound" / "Start muted"; BOTH buttons initialize audio on
+that click (the gesture is free at that moment) — muting only zeroes a master
+`GainNode` inserted between the compressor and `ac.destination` in `audio.ts`.
+GOTCHA: the gain node must connect to `ac.destination` *before* the
+`AudioNode.prototype.connect` monkey-patch is installed, or its connection
+gets rerouted into the compressor and loops. Muted ≠ Paused (CONTEXT.md):
+muted keeps Strudel scheduling at zero volume. Persistent 🔊/🔇 toggle in
+top-chrome + `M` hotkey; preference in `localStorage('sound-muted')` via the
+pure `src/mute.ts` leaf (inject storage; don't duplicate the key literal —
+`state.ts` imports `loadMuted`).
+
+**Reveal (CONTEXT.md term).** The draw animation is now two-phase
+(`src/reveal.ts`): a 7s guided crawl revealing 12% of lines while the two
+planet bodies + name labels + a bright live chord are drawn at the newest
+line's endpoints, then a quadratic-ease-in completion while the discs fade.
+No new orbital math: `calculateEllipticalLines` line endpoints *are* the
+planet positions (`p1` = inner planet, `p2` = outer). `drawAnimProgress`
+stays a TIME fraction so authored caption timings were untouched; only the
+line count runs through the curve. LESSON (caught in review): the reveal
+helpers originally weren't total — `revealLineFraction(1.2, 0.5)` returned
+1.8448 and `planetDiscAlpha(2, 1.5)` returned alpha 6. Pure timing helpers
+must clamp inputs at entry, not rely on caller discipline.
+
+**Hybrid pattern model + three-pane selector (ADR 0002).** Any inner/outer
+planet pair now yields a pattern: curated pairs return the catalogue object
+by reference; others are computed from JPL elements
+(`src/pattern-generator.ts`: period = (360/LDot)·36525 days; resonance search
+for the smallest closing m:k cycle). LESSON (caught in review): the first
+version clamped `simYears` to 100 *after* an unbounded resonance search,
+which silently falsified the generated captions for 16 of 28 pairs
+(Mercury-Neptune claimed "3421 orbits… pattern complete" inside a 100y sim).
+Post-hoc clamping breaks derived invariants — bound the *search* (`mMax =
+floor(MAX_SIM_YEARS / outerYears)`, floor 1) and never clamp the result;
+Neptune pairs honestly run ~165 sim-years (wall-clock still capped at 25s by
+`revealDurationMs`). Selector UI: inner column | live looping Preview canvas
+(3s loop, `src/pattern-preview.ts`, never touches the field or probes —
+only Confirm and Special-row clicks call `applyPattern`) | outer column,
+plus a Special row for Moon-Earth and Cardioid. `restoreFromSnapshot` now
+resolves ids via `patternFromId` so saved computed (`pair-*`) patterns
+reload — the old `PATTERNS.find` would have silently failed.
+
+**Integration seams (caught by the final whole-branch review, not per-task
+reviews).** Features that individually passed review still fought at their
+seams: (1) the tour's final step invites confirming a pattern, but
+`finishDrawAnimation` unconditionally called `tour.start()` after every
+reveal and `start()` had no re-entrancy guard — following the tour's own
+instruction restarted it from step 0. Fixed with a guard in `start()` plus a
+`pattern-confirmed` action that *completes* the tour. (2) Opening the
+selector mid-reveal abandoned the reveal, stranding the non-fading "Press
+Space to skip" toast and (on first run) never starting the tour — now it
+completes the reveal instead. (3) One Esc keypress ended the tour AND closed
+the selector; the tour now yields Esc while the selector is open. LESSON:
+per-task review can't see cross-feature choreography — budget a final
+integration review over the whole branch diff.
+
+## 2026-07-05 — Tutorial redo: tooltip z-index fix, Back/Next, pattern-picker step
+
+**Root cause of "tooltip hidden behind node editor."** `#intro-tour` (the
+scrim+spotlight wrapper, z-index 95) contained `#intro-tooltip` as a DOM
+*child*. Sibling stacking contexts can't interleave: once `showStep()` lifted
+the node-editor panel to z-index 96 (to poke it above the scrim), the panel's
+new stacking context sat entirely above `#intro-tour` **including its
+descendant tooltip**, because a parent's z-index caps everything painted
+inside it. No z-index tweak inside `#intro-tour` could ever win against a
+sibling lifted higher — the fix had to change the DOM structure, not the
+numbers.
+
+**Fix.** Moved `#intro-tooltip` out of `#intro-tour` to be a body-level
+sibling in `index.html`. New layering: `#intro-tour` (scrim+spotlight) z-170 <
+lifted target z-171 < `#intro-tooltip` z-172. The tooltip was already
+`position: fixed` with its own placement (top/left/transform/max-width), so no
+layout changes were needed beyond the z-index bump and an explicit
+`#intro-tooltip.hidden { display: none; }` rule (it's no longer inheriting
+visibility from a hidden parent).
+
+**Also added:** Back/Next buttons (`#intro-back` / `#intro-next`, wired to new
+`tour.back()` / `tour.next()`) so users aren't locked into the forward-only
+action-driven flow; a 6th step for the pattern picker (`pattern-opened` action,
+fired from the `p` keydown case in `controls.ts` right after
+`showPatternSelector`); and accurate step copy matching the real UI (dock is
+labelled "Sonic Foundry", play button lives in the top-left `#top-chrome`
+cluster, P opens the three-pane picker). `back()` is pure navigation — it only
+calls `showStep()` again, it does not undo/replay any side effect, so stepping
+back past the cable-connect step does not reopen or re-close the editor.
+
+**Accessibility follow-up (from Task 5 review):** the two `.planet-column`
+containers no longer carry `role="listbox"`; that role moved to the inner
+`.planet-list` div as `role="radiogroup"` (each `.planet-option` button now
+has `role="radio"` + `aria-checked`). `renderPlanetColumns` also preserves
+keyboard focus across its full innerHTML-rebuild-on-click re-render (it did
+not before — clicking a planet button would drop focus back to the document
+body on every render).
+
+Verified in-browser: tooltip renders above an open node-editor panel and above
+the pattern selector; Back/Next navigate without side effects; Esc and "Got
+it" both end the tour and set `localStorage['intro-tour-done']`; no console
+errors. Test suite: 29 suites / 336 passed / 2 skipped (net +6 over the prior
+330 — one test replaced in place, six appended).
+
 ## 2026-06-07c — Dock redesign + distinct probe colours
 
 UI pass: revived the old card-style probe selector ("Sonic Foundry" cards for

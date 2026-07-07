@@ -8,6 +8,7 @@ import type { Point } from './geometry';
 import type { CanvasShape } from './shapes';
 import type { PlanetaryPattern } from './patterns';
 import { PATTERNS } from './patterns';
+import { loadMuted } from './mute';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -102,6 +103,8 @@ export interface AppState {
   drawAnimDurationMs: number;
   drawAnimProgress: number;
   drawLineCount: number;
+  /** GUIDED_PHASE_MS / drawAnimDurationMs — precomputed for the render loop. */
+  drawGuidedTimeFrac: number;
   currentCaptionText: string;
   captionTimeoutId: ReturnType<typeof setTimeout> | null;
 
@@ -122,6 +125,7 @@ export interface AppState {
   // Audio
   strudelRepl: StrudelRepl | null;
   audioInitialized: boolean;
+  muted: boolean;
 
   // Dust particles
   dustMotes: DustMote[];
@@ -173,6 +177,7 @@ export function createInitialState(): AppState {
     drawAnimDurationMs: 0,
     drawAnimProgress: 0,
     drawLineCount: 0,
+    drawGuidedTimeFrac: 0,
     currentCaptionText: '',
     captionTimeoutId: null,
 
@@ -191,6 +196,7 @@ export function createInitialState(): AppState {
     // Audio
     strudelRepl: null,
     audioInitialized: false,
+    muted: typeof localStorage !== 'undefined' && loadMuted(localStorage),
 
     // Dust particles (deferred — populated by initDust())
     dustMotes: [],

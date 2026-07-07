@@ -33,6 +33,7 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcutSection[] = [
     title: 'Global',
     bindings: [
       { keys: ['Space'], label: 'Play / Pause' },
+      { keys: ['M'], label: 'Mute / Unmute' },
       { keys: ['D'], label: 'Toggle dock' },
       { keys: ['N'], label: 'Spawn sweeper' },
       { keys: ['P'], label: 'Pattern selector' },

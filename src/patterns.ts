@@ -244,6 +244,53 @@ export function computeAuScale(pattern: PlanetaryPattern, canvasMinDim: number):
 }
 
 /**
+ * Compute a pattern's link lines scaled into a size×size square (shared by
+ * thumbnails and the selector's Preview). `planetSamples` controls density
+ * for planet/geocentric kinds; moon-hexagon and cardioid keep their intrinsic
+ * counts (588 views / 200 rim points).
+ */
+export function computePatternLines(
+  pattern: PlanetaryPattern,
+  size: number,
+  planetSamples: number = 300,
+): LinkLine[] {
+  const cx = size / 2;
+  const cy = size / 2;
+
+  if (pattern.kind === 'cardioid' && pattern.cardioid) {
+    const thumbRadius = size * 0.40;
+    const thumbN = 200;
+    return calculateCardioidLines(cx, cy, thumbN, pattern.cardioid.multiplier, thumbRadius);
+  } else if (pattern.kind === 'moon-hexagon') {
+    const scale = computeAuScale(pattern, size);
+    const a = (pattern.au1 ?? 0.00257) * scale;
+    return calculateMoonHexagonLines(
+      cx, cy, 588,
+      a, pattern.eccentricity1 ?? 0,
+      pattern.period1 ?? 27.5545,
+      (pattern.precessionPeriodYears1 ?? 8.85) * 365.25,
+      SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS,
+    );
+  } else if (pattern.geocentric) {
+    const scale = computeAuScale(pattern, size);
+    return calculateGeocentricLines(
+      cx, cy, planetSamples,
+      (pattern.au2 ?? 0) * scale, (pattern.au1 ?? 0) * scale,
+      pattern.period2 ?? 365.25, pattern.period1 ?? 27.32,
+      pattern.simYears,
+      pattern.eccentricity1 ?? 0,
+      pattern.precessionPeriodYears1 ?? 1000,
+    );
+  }
+  const scale = computeAuScale(pattern, size);
+  return calculateEllipticalLines(
+    cx, cy, planetSamples,
+    pattern.planet1 ?? 'Earth', pattern.planet2 ?? 'Venus',
+    pattern.simYears, scale,
+  );
+}
+
+/**
  * Render a small thumbnail canvas showing the full pattern.
  * Uses a low sample rate for speed.  Returns an offscreen canvas element.
  */
@@ -256,60 +303,13 @@ export function renderPatternThumbnail(
   c.width = size;
   c.height = size;
   const g = c.getContext('2d')!;
-
-  const cx = size / 2;
-  const cy = size / 2;
-
-  let lines: LinkLine[];
-  if (pattern.kind === 'cardioid' && pattern.cardioid) {
-    // Thumbnail: scale the cardioid to fit ~80% of the thumbnail size.
-    // Use a fixed point count for thumbnails (live N comes from state.sampleRate
-    // but thumbnails are rendered without state context).
-    const thumbRadius = size * 0.40;
-    const thumbN = 200;
-    lines = calculateCardioidLines(
-      cx, cy,
-      thumbN, pattern.cardioid.multiplier, thumbRadius,
-    );
-  } else if (pattern.kind === 'moon-hexagon') {
-    const scale = computeAuScale(pattern, size);
-    const a = (pattern.au1 ?? 0.00257) * scale;
-    lines = calculateMoonHexagonLines(
-      cx, cy, 588,
-      a, pattern.eccentricity1 ?? 0,
-      pattern.period1 ?? 27.5545,
-      (pattern.precessionPeriodYears1 ?? 8.85) * 365.25,
-      SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS,
-    );
-  } else if (pattern.geocentric) {
-    const scale = computeAuScale(pattern, size);
-    const r1 = (pattern.au1 ?? 0) * scale;
-    const r2 = (pattern.au2 ?? 0) * scale;
-    lines = calculateGeocentricLines(
-      cx, cy, 300,
-      r2, r1,
-      pattern.period2 ?? 365.25, pattern.period1 ?? 27.32,
-      pattern.simYears,
-      pattern.eccentricity1 ?? 0,
-      pattern.precessionPeriodYears1 ?? 1000,
-    );
-  } else {
-    const scale = computeAuScale(pattern, size);
-    lines = calculateEllipticalLines(
-      cx, cy, 300,
-      pattern.planet1 ?? 'Earth', pattern.planet2 ?? 'Venus',
-      pattern.simYears, scale,
-    );
-  }
-
   g.strokeStyle = lineColor;
   g.lineWidth = 0.5;
-  for (const line of lines) {
+  for (const line of computePatternLines(pattern, size)) {
     g.beginPath();
     g.moveTo(line.p1.x, line.p1.y);
     g.lineTo(line.p2.x, line.p2.y);
     g.stroke();
   }
-
   return c;
 }

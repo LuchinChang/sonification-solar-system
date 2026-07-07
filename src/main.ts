@@ -25,6 +25,7 @@ import './node-editor/nodes/sweeper';          // side-effect register: 4 sweepe
 import { registerPlaybackModeNode } from './node-editor/nodes/playback';
 import { setSweeperResolver, setSweeperGeometryRefresh } from './node-editor/nodes/sweeper';
 import { installQuantizeHelper } from './node-editor/codegen-helpers';
+import { revealLineFraction } from './reveal';
 
 // Expose __sw_quantizeNote on globalThis so generated Strudel code can call
 // it from inside `signal(() => ...)`. Must run before any sweeper evaluation.
@@ -199,11 +200,16 @@ function animate(now: number): void {
     }
   }
 
-  // Progressive draw animation
+  // Progressive Reveal: slow guided phase, then accelerating completion.
+  // drawAnimProgress stays a TIME fraction (captions key on it); the line
+  // count runs through the reveal curve.
   if (state.drawAnimActive) {
     const elapsed = now - state.drawAnimStartTime;
     state.drawAnimProgress = Math.min(elapsed / state.drawAnimDurationMs, 1);
-    state.drawLineCount = Math.floor(state.drawAnimProgress * state.fullLinkLines.length);
+    state.drawLineCount = Math.floor(
+      revealLineFraction(state.drawAnimProgress, state.drawGuidedTimeFrac)
+      * state.fullLinkLines.length,
+    );
     updateCaption(state, dom, state.drawAnimProgress);
     if (state.drawAnimProgress >= 1) finishDrawAnimation(state, dom, tour);
   }

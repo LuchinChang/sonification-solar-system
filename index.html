@@ -15,22 +15,60 @@
 
   <body class="ui-hidden">
 
-    <!-- ══ Audio-init overlay — browser policy requires user gesture ══ -->
+    <!-- ══ Audio-init overlay — sonification notice + sound choice.
+         Browser policy requires a user gesture; BOTH buttons initialize the
+         engine on click (the gesture is free at that moment) — "Start muted"
+         just zeroes the master mute gain so un-muting later is instant. ══ -->
     <div id="audio-overlay">
-      <button id="start-engine-btn" type="button">
+      <div class="sound-notice">
         <span class="engine-icon" aria-hidden="true">&#x25C9;</span>
-        <span class="engine-label">Start Engine</span>
-        <span class="engine-hint">Enable audio synthesis</span>
-      </button>
+        <h1 class="sound-notice-title">Solar System Sonification</h1>
+        <p class="sound-notice-text">
+          This is a <strong>sonification</strong> app &mdash; planetary motions become
+          <strong>sound</strong>. Audio will play through your speakers or headphones.
+        </p>
+      </div>
+      <div class="start-choices">
+        <button id="start-engine-btn" type="button">
+          <span class="engine-label">Start with sound</span>
+          <span class="engine-hint">Recommended &mdash; hear the orbits</span>
+        </button>
+        <button id="start-muted-btn" type="button">
+          <span class="engine-label">Start muted</span>
+          <span class="engine-hint">Explore silently &mdash; unmute anytime</span>
+        </button>
+      </div>
       <p class="signature">Solar System Sonification</p>
     </div>
 
-    <!-- ══ Pattern selector overlay — toggled with the P hotkey ══ -->
+    <!-- ══ Pattern selector — P hotkey. Three panes: inner-planet column |
+         live Preview | outer-planet column, plus a Special row for the two
+         non-pair patterns (Moon-Earth hexagon, Cardioid). ══ -->
     <div id="pattern-selector" class="hidden" role="dialog" aria-modal="true" aria-label="Choose a planetary pattern">
       <div class="pattern-band">
         <h2 class="pattern-band-title">Choose a Planetary Pattern</h2>
-        <div class="pattern-cards" id="pattern-cards">
-          <!-- Cards injected by controls.ts from PATTERNS array -->
+        <div class="pattern-columns">
+          <div class="planet-column">
+            <h3 class="planet-column-title">Inner planet</h3>
+            <div id="pattern-inner-list" class="planet-list" role="radiogroup" aria-label="Inner planet"></div>
+          </div>
+          <div class="pattern-preview-pane">
+            <canvas id="pattern-preview-canvas" width="280" height="280"></canvas>
+            <span id="pattern-preview-name" class="pattern-preview-name"></span>
+            <span id="pattern-preview-meta" class="pattern-preview-meta"></span>
+            <button id="pattern-confirm-btn" type="button" class="pattern-confirm-btn">
+              Explore this pattern
+            </button>
+            <span class="pattern-confirm-hint">replaces the canvas and any placed probes</span>
+          </div>
+          <div class="planet-column">
+            <h3 class="planet-column-title">Outer planet</h3>
+            <div id="pattern-outer-list" class="planet-list" role="radiogroup" aria-label="Outer planet"></div>
+          </div>
+        </div>
+        <div class="pattern-specials">
+          <h3 class="planet-column-title">Special patterns</h3>
+          <div id="pattern-cards" class="pattern-cards"></div>
         </div>
         <p class="pattern-band-hint">Press <kbd>P</kbd> to toggle &middot; <kbd>Esc</kbd> to cancel</p>
       </div>
@@ -42,18 +80,22 @@
     <!-- ══ Pattern-ready toast ══ -->
     <div id="pattern-toast" class="pattern-toast hidden"></div>
 
-    <!-- ══ Intro Tour overlay — first-time guided walkthrough ══ -->
+    <!-- ══ Intro Tour — first-time guided walkthrough.
+         Layering (siblings, so lifted panels can interleave):
+         #intro-tour (scrim+spotlight) z-170 < lifted target z-171 < #intro-tooltip z-172. ══ -->
     <div id="intro-tour" class="hidden" aria-label="Introduction tour">
       <div id="intro-scrim"></div>
       <div id="intro-spotlight"></div>
-      <div id="intro-tooltip">
-        <span id="intro-step-counter" class="intro-step-counter"></span>
-        <p id="intro-text" class="intro-text"></p>
-        <div id="intro-actions" class="intro-actions">
-          <button id="intro-got-it" class="intro-got-it hidden" type="button">Got it</button>
-        </div>
-        <button id="intro-skip" class="intro-skip" type="button">Skip tour</button>
+    </div>
+    <div id="intro-tooltip" class="hidden">
+      <span id="intro-step-counter" class="intro-step-counter"></span>
+      <p id="intro-text" class="intro-text"></p>
+      <div id="intro-actions" class="intro-actions">
+        <button id="intro-back" class="intro-nav-btn" type="button">&larr; Back</button>
+        <button id="intro-next" class="intro-nav-btn" type="button">Next &rarr;</button>
+        <button id="intro-got-it" class="intro-got-it hidden" type="button">Got it</button>
       </div>
+      <button id="intro-skip" class="intro-skip" type="button">Skip tour</button>
     </div>
 
     <!-- ══ Orbital canvas — driven entirely by main.ts ══ -->
@@ -89,6 +131,13 @@
         aria-label="Switch to Daylight"
         title="View: Daylight theme"
       >☀</button>
+      <button
+        id="mute-toggle"
+        class="config-btn"
+        aria-label="Mute sound"
+        aria-pressed="false"
+        title="Mute / Unmute  [ M ]"
+      >&#x1F50A;</button>
     </aside>
 
     <!-- ╔════════════════════════════════════════════════════════╗ -->
