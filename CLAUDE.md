@@ -10,7 +10,7 @@ Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-desig
 
 ### Commands
 - `npm run dev` — Vite dev server on port 5173
-- `npm test` — Vitest single run (29 suites, 336 tests pass, 2 skipped; some skipped tests require `jsdom` — install if needed)
+- `npm test` — Vitest single run (29 suites, 339 tests pass, 2 skipped; some skipped tests require `jsdom` — install if needed)
 - `npm run test:watch` — Vitest in watch mode
 - `npm run build` — TypeScript compile (`tsc`) then Vite bundle
 - `npm run deploy` — gh-pages deploy of `dist/`

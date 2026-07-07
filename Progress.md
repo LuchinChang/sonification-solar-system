@@ -48,6 +48,20 @@ plus a Special row for Moon-Earth and Cardioid. `restoreFromSnapshot` now
 resolves ids via `patternFromId` so saved computed (`pair-*`) patterns
 reload — the old `PATTERNS.find` would have silently failed.
 
+**Integration seams (caught by the final whole-branch review, not per-task
+reviews).** Features that individually passed review still fought at their
+seams: (1) the tour's final step invites confirming a pattern, but
+`finishDrawAnimation` unconditionally called `tour.start()` after every
+reveal and `start()` had no re-entrancy guard — following the tour's own
+instruction restarted it from step 0. Fixed with a guard in `start()` plus a
+`pattern-confirmed` action that *completes* the tour. (2) Opening the
+selector mid-reveal abandoned the reveal, stranding the non-fading "Press
+Space to skip" toast and (on first run) never starting the tour — now it
+completes the reveal instead. (3) One Esc keypress ended the tour AND closed
+the selector; the tour now yields Esc while the selector is open. LESSON:
+per-task review can't see cross-feature choreography — budget a final
+integration review over the whole branch diff.
+
 ## 2026-07-05 — Tutorial redo: tooltip z-index fix, Back/Next, pattern-picker step
 
 **Root cause of "tooltip hidden behind node editor."** `#intro-tour` (the
