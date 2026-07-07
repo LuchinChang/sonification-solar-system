@@ -10,7 +10,7 @@ Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-desig
 
 ### Commands
 - `npm run dev` — Vite dev server on port 5173
-- `npm test` — Vitest single run (29 suites, 339 tests pass, 2 skipped; some skipped tests require `jsdom` — install if needed)
+- `npm test` — Vitest single run (33 suites, 369 tests pass, 2 skipped; some skipped tests require `jsdom` — install if needed)
 - `npm run test:watch` — Vitest in watch mode
 - `npm run build` — TypeScript compile (`tsc`) then Vite bundle
 - `npm run deploy` — gh-pages deploy of `dist/`
@@ -23,7 +23,7 @@ Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-desig
 
 2. Rendering: HTML5 Canvas API. Maintain a high-performance render loop (requestAnimationFrame). Pre-calculate heavy static math (like orbital lines) where possible.
 
-3. Audio: Use the @strudel/core and @strudel/webaudio libraries. Audio must trigger precisely based on geometric intersections on the canvas.
+3. Audio: Use the @strudel/core and @strudel/webaudio libraries. Audio must trigger precisely based on geometric intersections on the canvas. (One deliberate exception: the pattern selector's Nodal Chord is raw WebAudio — see ADR 0003.)
 
 4. Modularity: Keep math separated from rendering and audio logic.
 
