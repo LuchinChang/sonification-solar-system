@@ -66,6 +66,73 @@
             <div id="pattern-outer-list" class="planet-list" role="radiogroup" aria-label="Outer planet"></div>
           </div>
         </div>
+        <!-- Timbre playground (hidden surprise): unlocked by double-clicking
+             the preview or ?playground. One global settings object for all
+             pairs. See ADR 0003 + CONTEXT.md (Nodal Chord). -->
+        <div id="playground-drawer" class="playground-drawer hidden">
+          <div class="playground-row playground-wave-row">
+            <canvas id="pg-wave-canvas" width="360" height="80"></canvas>
+            <div class="pg-wave-legend">
+              <span class="pg-legend-p1">partial 1</span>
+              <span class="pg-legend-p2">partial 2 <span id="pg-wave-ratio"></span></span>
+              <span class="pg-legend-combined">combined</span>
+            </div>
+          </div>
+          <div class="playground-row">
+            <label>Operator
+              <select id="pg-operator">
+                <option value="add">Add</option>
+                <option value="ring">Ring</option>
+                <option value="fm">FM</option>
+              </select>
+            </label>
+            <label>Balance
+              <input id="pg-balance" type="range" min="0" max="1" step="0.01">
+            </label>
+            <label>Phase
+              <input id="pg-phase" type="range" min="0" max="360" step="1">
+            </label>
+            <label>FM index
+              <input id="pg-fm-index" type="range" min="0" max="10" step="0.1">
+            </label>
+          </div>
+          <div class="playground-row">
+            <label>Ratio
+              <select id="pg-ratio-mode">
+                <option value="resonance">m:k resonance</option>
+                <option value="free">Free</option>
+              </select>
+            </label>
+            <label>Free ratio
+              <input id="pg-free-ratio" type="range" min="0.25" max="4" step="0.01">
+            </label>
+            <label>Root f&#8320;
+              <input id="pg-f0" type="range" min="65.4" max="1046.5" step="0.1">
+            </label>
+            <label class="pg-check">Wrap octave
+              <input id="pg-wrap" type="checkbox">
+            </label>
+          </div>
+          <div class="playground-row">
+            <label>Radius &rarr;
+              <select id="pg-radius-mapping">
+                <option value="none">None</option>
+                <option value="gain">Gain</option>
+                <option value="octave">Octave</option>
+              </select>
+            </label>
+            <label>Sustain
+              <input id="pg-sustain" type="range" min="500" max="8000" step="100">
+            </label>
+            <label>Gain
+              <input id="pg-gain" type="range" min="0" max="1" step="0.01">
+            </label>
+            <button id="pg-copy-code" type="button" class="pg-copy-btn"
+              title="Serialize current knobs as the DEFAULT_SETTINGS literal">
+              Copy settings as code
+            </button>
+          </div>
+        </div>
         <div class="pattern-specials">
           <h3 class="planet-column-title">Special patterns</h3>
           <div id="pattern-cards" class="pattern-cards"></div>

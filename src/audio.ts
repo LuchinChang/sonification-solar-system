@@ -22,6 +22,16 @@ export function setMuted(muted: boolean): void {
   if (masterMuteGain !== null) masterMuteGain.gain.value = muted ? 0 : 1;
 }
 
+// ── Nodal Chord bus (ADR 0003) ──────────────────────────────────────────────
+// Selector-local chord audio bypasses Strudel but shares the compressor +
+// master-mute chain, so it respects global mute and needs no second gesture.
+let chordBus: AudioNode | null = null;
+
+/** Input node for raw-WebAudio chord voices; null before audio init. */
+export function getChordBus(): AudioNode | null {
+  return chordBus;
+}
+
 // ── AudioContext safe wrappers ───────────────────────────────────────────────
 // Consolidates 3 duplicated `try { getAudioContext().resume() } catch (_) {}` patterns.
 
@@ -71,6 +81,7 @@ export async function initializeAudio(): Promise<StrudelRepl> {
   masterMuteGain.gain.value = 1;
   masterMuteGain.connect(ac.destination);
   compressor.connect(masterMuteGain);
+  chordBus = compressor;
 
   // Monkey-patch connect() so Strudel's internal destinationGain → ac.destination
   // routes through the compressor instead. Restored immediately after initAudio().

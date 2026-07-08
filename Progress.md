@@ -1,5 +1,73 @@
 # Progress & lessons-learned
 
+## 2026-07-06b — Nodal Chord, timbre playground, sweeper Hold
+
+Plan: docs/superpowers/plans/2026-07-06-nodal-chord-playground.md; decisions
+in CONTEXT.md (Nodal Point, Nodality, Fifths Mapping, Nodal Chord, Held) and
+ADR 0003. Ported from the 2019 CubeFest Max project (`nodality.js`,
+`kb.fifth.maxpat`).
+
+**Nodal Chord (selector).** The Preview now draws ONCE and holds (no 3s
+loop); on completion, the pattern's Nodal Points — stationary intersections
+of consecutive link lines, detected as local maxima of `1/(1+Δ)` in
+`src/nodal-points.ts` — breathe visually while a raw-WebAudio organ chord
+plays (`src/nodal-chord.ts`, one voice per symmetry lobe = `pattern.petals`,
+pitched by the continuous Fifths Mapping in `src/fifths.ts`). Voices route
+through the existing compressor + master-mute (ADR 0003: Strudel for probe
+audio, raw WebAudio for selector-local chord audio). Gate:
+`NODAL_CHORD_DEFAULT_ON`(false) `|| unlock` — unlock via `?playground` or
+double-clicking the preview, both persisted in localStorage. The playground
+drawer (operator add/ring/fm, balance, phase, FM index, ratio lock, f0,
+octave wrap, radius mapping, sustain, gain) retriggers the chord on every
+knob change; "Copy settings as code" serialises the golden defaults for
+promotion.
+
+**Detection verified against real orbits.** Venus-Earth yields exactly 5
+nodal points at ~72° spacing (13−8 = 5 — the pentagram), stable across
+sampling densities 800/1200/2000. LESSON: the radii spread ~1.20× because
+the patterns use true JPL *eccentric* orbits — a "ring" tolerance calibrated
+for ideal circles (15%) was wrong; assert against measured physical reality
+(25%), never against the idealised mental model.
+
+**Sweeper Hold.** `H` freezes the active sweeper's arm and sustains the
+current tick's voices (`toHeldStrudelCode()` — constant `freq().gain()
+.attack(.05).sustain(1).release(.3)` stack). Stays inside Strudel so the
+held probe keeps its Generator + effects. The pre-hold block is saved
+VERBATIM and restored byte-identical on unhold (a node-editor-committed
+block cannot be regenerated from `toStrudelCode()`), then the audio clock
+re-anchors so the arm resumes from the frozen angle. `held` is a DERIVED
+prop (config-snapshot classification test caught it — snapshots never
+restore held).
+
+**E2E lessons.**
+- LESSON (seam, caught in E2E): `rebuildSweeperPatterns` on geometry change
+  (sample-rate knob, resize) overwrote a Held probe's frozen block with the
+  rotating pattern — frozen arm, rotating audio. Any code path that re-emits
+  probe blocks must branch on `shape.held`.
+- LESSON (test-harness, hours of confusion): scripted browser tests raced
+  the async audio init — `P` is a no-op until `state.audioInitialized`, so
+  the selector silently never opened and every downstream assertion measured
+  a blank/stale state. Poll for the UI consequence (selector visible), never
+  sleep a fixed 600ms. Related: `localStorage.clear()` AFTER page load does
+  not reset module-scope state read at import time — clear, THEN reload.
+- Small dots vanished against the dense knots they mark (nodal points sit in
+  the figure's busiest pixels *by definition*); the glow needed an additive
+  (`lighter`) halo + ring, not a bigger alpha dot.
+- Oscillator-count fingerprints made the audio graph assertable headlessly:
+  pentagram = 6 (5 PeriodicWave voices + breathe LFO), FM mode = 2/voice
+  (37 for an 18-voice chord). Monkey-patching
+  `AudioContext.prototype.createOscillator` is a cheap, reliable audio spy.
+
+**Waveform display (follow-up).** The drawer's top row is a live scope
+(`src/waveform-viz.ts`): partial 1, partial 2 (ratio-labelled), and the
+combined trace, redrawn on every knob/pair change. It is a *mathematical
+mirror* of `buildVoice` — NOT an AnalyserNode tap, because the live chord is
+many voices summed (mush); the timbre's anatomy is per-voice. Both partials
+are integer harmonics of one fundamental, so the trace closes over exactly
+one period; display density capped at 24 cycles for extreme resonances.
+
+Suite: 34 files / 377 passed / 2 skipped (was 29 / 339).
+
 ## 2026-07-06 — Onboarding sound choice, two-phase Reveal, three-pane selector
 
 Companion entry to the tutorial-redo entry below — the other three features of

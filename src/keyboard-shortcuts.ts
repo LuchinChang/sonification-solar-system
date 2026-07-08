@@ -38,6 +38,7 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcutSection[] = [
       { keys: ['N'], label: 'Spawn sweeper' },
       { keys: ['P'], label: 'Pattern selector' },
       { keys: ['E'], label: 'Node editor' },
+      { keys: ['H'], label: 'Hold sweeper chord' },
       { keys: ['I'], label: 'Telemetry panel' },
       { keys: ['⌫'], label: 'Delete shape' },
       { keys: ['⌘', 'S'], label: 'Save config' },

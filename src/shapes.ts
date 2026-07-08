@@ -235,6 +235,8 @@ export class CanvasShape {
   playbackMode: SweeperPlaybackMode;
   /** Ping-pong direction of travel: +1 forward (CCW-ish), -1 reversed. */
   sweepDirection: 1 | -1;
+  /** Held (CONTEXT.md): arm frozen, current tick's voices sustained. */
+  held: boolean;
   /** Ping-pong cumulative angular distance since the last direction flip. */
   sweepPingPongAccum: number;
 
@@ -279,6 +281,7 @@ export class CanvasShape {
     this.playbackMode        = 'normal';
     this.sweepDirection      = 1;
     this.sweepPingPongAccum  = 0;
+    this.held                = false;
   }
 
   // ── Serialization ──────────────────────────────────────────────────────────
@@ -1014,6 +1017,51 @@ export class CanvasShape {
       + allTones.slice(1).map(t => `.stack(\n  ${t}\n)`).join('')
       + `\n  .p((${this.id}).toString())`;
 
+    return [startMarker, comment, pat, endMarker].join('\n');
+  }
+
+  /** Tick index the playhead currently occupies (floor semantics — the
+   *  interval Strudel is sounding NOW, mirroring main.ts's circle logic). */
+  currentTick(): number {
+    const TICKS = this.sweepTicks[0]?.length ?? this.ticks;
+    if (TICKS <= 0) return 0;
+    const step = (Math.PI * 2) / TICKS;
+    let tick = Math.floor((this.playheadAngle - this.startAngle) / step);
+    tick = ((tick % TICKS) + TICKS) % TICKS;
+    return tick;
+  }
+
+  /**
+   * Held (CONTEXT.md): the current tick's slots as sustained constant voices
+   * — a chord frozen out of the rotation. Stays inside Strudel so the held
+   * probe keeps its Generator sound (ADR 0003's boundary: probe audio never
+   * leaves Strudel). Swapped in/out of the live code via replaceShapeBlock;
+   * the original block is saved and restored verbatim by controls.toggleHold.
+   */
+  toHeldStrudelCode(): string {
+    const startMarker = `// @shape-start-${this.id}`;
+    const endMarker   = `// @shape-end-${this.id}`;
+    const osc  = resolveOscillator(this.instrument);
+    const tick = this.currentTick();
+    const voices: string[] = [];
+    for (let arm = 0; arm < this.sweepCount; arm++) {
+      const armTicks = this.sweepTicks[arm] ?? [];
+      if (armTicks.length === 0) continue;
+      // Arms are evenly spaced; each arm reads its own offset tick.
+      const armTick = (tick + Math.round(arm * armTicks.length / this.sweepCount))
+        % armTicks.length;
+      for (const c of armTicks[armTick] ?? []) {
+        voices.push(
+          `freq(${c.freq.toFixed(1)}).gain(${c.gain.toFixed(3)})`
+          + `.attack(0.05).sustain(1).release(0.3).s("${osc}")`,
+        );
+      }
+    }
+    if (voices.length === 0) voices.push(`freq(440).gain(0).s("${osc}")`);
+    const pat = voices[0]
+      + voices.slice(1).map(v => `.stack(\n  ${v}\n)`).join('')
+      + `\n  .p((${this.id}).toString())`;
+    const comment = `// [Sweeper ${this.id}: HELD at tick ${tick}]`;
     return [startMarker, comment, pat, endMarker].join('\n');
   }
 }

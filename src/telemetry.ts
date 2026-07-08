@@ -120,7 +120,14 @@ export function rebuildSweeperPatterns(
   let hasProbe = false;
   for (const s of shapes) {
     if (s.type === 'sweeper' || s.type === 'circle') {
-      patchShapeBlock(textarea, s, shapes, patternName, sampleRate, cpm);
+      if (s.held) {
+        // Held (CONTEXT.md): keep the frozen chord in sync with the new
+        // geometry instead of silently reverting to the rotating pattern
+        // while the arm stays frozen.
+        replaceShapeBlock(textarea, s.id, s.toHeldStrudelCode());
+      } else {
+        patchShapeBlock(textarea, s, shapes, patternName, sampleRate, cpm);
+      }
       hasProbe = true;
     }
   }

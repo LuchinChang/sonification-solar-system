@@ -5,8 +5,15 @@
 
 import { CanvasShape, PROBE_PALETTE_SIZE, resetNextId, type ShapeType } from './shapes';
 import { calculateGeocentricLines, calculateEllipticalLines, calculateCardioidLines, calculateMoonHexagonLines, SOLAR_SYNODIC_ROTATION_DAYS, MOON_VIEW_JITTER_DAYS, MOON_VIEW_JITTER_PERIOD_DAYS, clamp } from './engine';
-import { PATTERNS, computeAuScale, renderPatternThumbnail, type PlanetaryPattern } from './patterns';
-import { PLANET_ORDER, getPatternForPair, patternFromId } from './pattern-generator';
+import { PATTERNS, computeAuScale, computePatternLines, renderPatternThumbnail, type PlanetaryPattern } from './patterns';
+import { PLANET_ORDER, computeResonance, getPatternForPair, patternFromId } from './pattern-generator';
+import { findNodalPoints, type NodalPoint } from './nodal-points';
+import { playNodalChord, stopNodalChord, chordGlow } from './nodal-chord';
+import {
+  loadSettings, saveSettings, loadUnlocked, saveUnlocked,
+  settingsAsCode, NODAL_CHORD_DEFAULT_ON, type PlaygroundSettings,
+} from './playground-settings';
+import { computeWaveSamples, drawWaveform } from './waveform-viz';
 import { createPreviewLoop, type PreviewLoop } from './pattern-preview';
 import { ELEMENTS } from './orbital-elements';
 import type { AppState } from './state';
@@ -27,7 +34,7 @@ import {
   // to this import and restore the call sites.
   // patchRhythm, patchShapeBlock,
   patchHeader,
-  patchAllRhythms, rebuildSweeperPatterns, updateTelemetry,
+  patchAllRhythms, rebuildSweeperPatterns, replaceShapeBlock, updateTelemetry,
   setEvalStatus, toggleTelemetry,
 } from './telemetry';
 import { playLiveCode, syncStrudelCps, resumeAudioContext, suspendAudioContext, getAudioTime, setMuted } from './audio';
@@ -188,6 +195,7 @@ export function deleteActiveShape(state: AppState, dom: DomElements): void {
   const idx = state.shapes.indexOf(state.activeShape);
   if (idx !== -1) state.shapes.splice(idx, 1);
   state.flashCooldowns.delete(state.activeShape.id);
+  heldBlocks.delete(state.activeShape.id); // deletion regenerates full code
   state.activeShape = null;
   updateTelemetry(dom, state);
 }
@@ -397,6 +405,39 @@ let pickerInner = 'Venus';
 let pickerOuter = 'Earth';
 let previewLoop: PreviewLoop | null = null;
 
+// ── Timbre playground state (one global settings object; ADR 0003) ─────────
+let playgroundSettings: PlaygroundSettings = loadSettings(localStorage);
+const urlUnlock = new URLSearchParams(window.location.search).has('playground');
+let playgroundUnlocked = loadUnlocked(localStorage) || urlUnlock;
+// Both doors persist (decided 2026-07-06): once ?playground has been visited,
+// the playground stays unlocked like a dblclick discovery would.
+if (urlUnlock) saveUnlocked(localStorage, true);
+let previewNodalPoints: NodalPoint[] = [];
+let previewResonance = { innerOrbits: 13, outerOrbits: 8 };
+
+function chordEnabled(): boolean {
+  return NODAL_CHORD_DEFAULT_ON || playgroundUnlocked;
+}
+
+const PREVIEW_CANVAS_SIZE = 280; // matches index.html width/height
+/** Detection sampling density — finer than the drawn 400 for stable maxima. */
+const NODAL_DETECT_SAMPLES = 1200;
+
+function triggerPreviewChord(): void {
+  if (!chordEnabled() || previewNodalPoints.length === 0) return;
+  playNodalChord(
+    previewNodalPoints, playgroundSettings, previewResonance,
+    PREVIEW_CANVAS_SIZE / 2,
+  );
+}
+
+/** Redraw the drawer's one-voice waveform display (two partials + combined). */
+function renderPlaygroundWave(dom: DomElements): void {
+  const w = computeWaveSamples(playgroundSettings, previewResonance, 360);
+  drawWaveform(dom.pgWaveCanvas, w);
+  dom.pgWaveRatio.textContent = `(${w.ratioLabel})`;
+}
+
 function thumbLineColor(state: AppState): string {
   return state.currentTheme === 'dark'
     ? 'rgba(194, 118, 46, 0.4)'
@@ -421,12 +462,20 @@ function showPatternSelector(state: AppState, dom: DomElements, tour: TourContro
   }
 
   if (previewLoop === null) {
-    previewLoop = createPreviewLoop(dom.patternPreviewCanvas, () => thumbLineColor(state));
+    previewLoop = createPreviewLoop(dom.patternPreviewCanvas, () => thumbLineColor(state), {
+      getNodalPoints: () => chordEnabled() ? previewNodalPoints : [],
+      getGlow: () => chordGlow(),
+      onDrawComplete: () => triggerPreviewChord(),
+    });
   }
 
   renderPlanetColumns(state, dom);
   renderSpecialRow(state, dom, tour);
   updatePreviewPane(state, dom);
+
+  // Playground drawer never auto-opens — even when unlocked, it re-opens
+  // only via double-click on the preview.
+  dom.playgroundDrawer.classList.add('hidden');
 
   dom.patternSelectorEl.classList.remove('hidden');
 }
@@ -494,6 +543,21 @@ function renderPlanetColumns(state: AppState, dom: DomElements): void {
 function updatePreviewPane(state: AppState, dom: DomElements): void {
   const pattern = getPatternForPair(pickerInner, pickerOuter);
   previewLoop?.setPattern(pattern);
+  stopNodalChord(0.1); // pair changed mid-chord — fade the old pair out
+  previewNodalPoints = [];
+  if (chordEnabled() && (pattern.kind ?? 'planet') === 'planet'
+      && !pattern.geocentric && pattern.period1 && pattern.period2) {
+    // Nodal Chord is planet-pair only: specials (cardioid, moon-hexagon)
+    // have no consecutive-link-line envelope in the nodality.js sense.
+    previewResonance = computeResonance(pattern.period1, pattern.period2);
+    previewNodalPoints = findNodalPoints(
+      computePatternLines(pattern, PREVIEW_CANVAS_SIZE, NODAL_DETECT_SAMPLES),
+      PREVIEW_CANVAS_SIZE / 2, PREVIEW_CANVAS_SIZE / 2,
+      pattern.petals, PREVIEW_CANVAS_SIZE,
+    );
+    // Pair change moves the resonance ratio — keep the waveform display honest.
+    renderPlaygroundWave(dom);
+  }
   dom.patternPreviewName.textContent = pattern.name;
   dom.patternPreviewMeta.textContent =
     `${pattern.petals} petals \u00b7 ${pattern.simYears} yr cycle`;
@@ -536,6 +600,8 @@ function renderSpecialRow(state: AppState, dom: DomElements, tour: TourControlle
 
 function hidePatternSelector(dom: DomElements): void {
   previewLoop?.stop();
+  stopNodalChord();
+  dom.playgroundDrawer.classList.add('hidden');
   dom.patternSelectorEl.classList.add('hidden');
 }
 
@@ -632,6 +698,39 @@ function evaluateAndFlash(state: AppState, dom: DomElements): void {
     document.body.classList.add('global-flash');
     setTimeout(() => document.body.classList.remove('global-flash'), 450);
   }
+}
+
+// ── Sweeper Hold (CONTEXT.md: Held) ──────────────────────────────────────────
+// Toggle per probe: freeze the arm and sustain the current tick's voices.
+// The original Strudel block (which may be a node-editor commit we cannot
+// regenerate) is saved verbatim and restored on unhold.
+const heldBlocks = new Map<number, string>();
+
+function toggleHold(state: AppState, dom: DomElements): void {
+  const s = state.activeShape;
+  if (s === null || s.type !== 'sweeper' || !state.audioInitialized) return;
+  if (!s.held) {
+    const regex = new RegExp(`// @shape-start-${s.id}[\\s\\S]*?// @shape-end-${s.id}`);
+    const m = regex.exec(dom.telemetryTextarea.value);
+    if (m === null) return; // no live block — nothing to hold
+    heldBlocks.set(s.id, m[0]);
+    replaceShapeBlock(dom.telemetryTextarea, s.id, s.toHeldStrudelCode());
+    s.held = true;
+  } else {
+    const saved = heldBlocks.get(s.id);
+    if (saved !== undefined) replaceShapeBlock(dom.telemetryTextarea, s.id, saved);
+    heldBlocks.delete(s.id);
+    s.held = false;
+    // Re-anchor the audio clock so the arm resumes from its frozen angle.
+    const acTime = getAudioTime();
+    if (acTime > 0) {
+      s.sweepAudioRefTime = acTime;
+      const twoPi = Math.PI * 2;
+      s.sweepPhaseAtRef =
+        (((s.playheadAngle - s.startAngle) % twoPi) + twoPi) % twoPi / twoPi;
+    }
+  }
+  if (state.isPlaying) evaluateAndFlash(state, dom);
 }
 
 // ── Resize handler ───────────────────────────────────────────────────────────
@@ -1168,6 +1267,10 @@ export function setupEventHandlers(
           hidePatternSelector(dom);
         }
         break;
+      case 'h':
+        // H: Hold the active sweeper — freeze the arm, sustain the tick.
+        toggleHold(state, dom);
+        break;
       case 'e': {
         // E toggle: close if open-for-same / no-active-probe, else (re)open for
         // the active probe (sweeper OR discrete circle). openEditor itself
@@ -1184,6 +1287,75 @@ export function setupEventHandlers(
         break;
       }
     }
+  });
+
+  // ── Preview interactions: click replays the draw+chord; double-click is
+  //    the hidden surprise — it unlocks and toggles the playground drawer. ──
+  dom.patternPreviewCanvas.addEventListener('click', () => {
+    previewLoop?.replay();
+  });
+  dom.patternPreviewCanvas.addEventListener('dblclick', () => {
+    if (!playgroundUnlocked) {
+      playgroundUnlocked = true;
+      saveUnlocked(localStorage, true);
+      updatePreviewPane(state, dom); // compute points now that we're unlocked
+    }
+    syncPlaygroundInputs(dom);
+    renderPlaygroundWave(dom);
+    dom.playgroundDrawer.classList.toggle('hidden');
+  });
+
+  // ── Playground knobs: mutate the one global settings object, persist,
+  //    and retrigger the chord so every change is heard immediately. ──────
+  function syncPlaygroundInputs(d: DomElements): void {
+    d.pgOperator.value = playgroundSettings.operator;
+    d.pgBalance.value = String(playgroundSettings.balance);
+    d.pgPhase.value = String(playgroundSettings.phaseDeg);
+    d.pgFmIndex.value = String(playgroundSettings.fmIndex);
+    d.pgRatioMode.value = playgroundSettings.ratioMode;
+    d.pgFreeRatio.value = String(playgroundSettings.freeRatio);
+    d.pgF0.value = String(playgroundSettings.f0);
+    d.pgWrap.checked = playgroundSettings.wrapOctave;
+    d.pgRadiusMapping.value = playgroundSettings.radiusMapping;
+    d.pgSustain.value = String(playgroundSettings.sustainMs);
+    d.pgGain.value = String(playgroundSettings.gain);
+  }
+
+  function onKnobChange(mutate: (s: PlaygroundSettings) => void): void {
+    mutate(playgroundSettings);
+    saveSettings(localStorage, playgroundSettings);
+    renderPlaygroundWave(dom);
+    triggerPreviewChord();
+  }
+
+  dom.pgOperator.addEventListener('change', () =>
+    onKnobChange(s => { s.operator = dom.pgOperator.value as PlaygroundSettings['operator']; }));
+  dom.pgBalance.addEventListener('input', () =>
+    onKnobChange(s => { s.balance = Number(dom.pgBalance.value); }));
+  dom.pgPhase.addEventListener('input', () =>
+    onKnobChange(s => { s.phaseDeg = Number(dom.pgPhase.value); }));
+  dom.pgFmIndex.addEventListener('input', () =>
+    onKnobChange(s => { s.fmIndex = Number(dom.pgFmIndex.value); }));
+  dom.pgRatioMode.addEventListener('change', () =>
+    onKnobChange(s => { s.ratioMode = dom.pgRatioMode.value as PlaygroundSettings['ratioMode']; }));
+  dom.pgFreeRatio.addEventListener('input', () =>
+    onKnobChange(s => { s.freeRatio = Number(dom.pgFreeRatio.value); }));
+  dom.pgF0.addEventListener('input', () =>
+    onKnobChange(s => { s.f0 = Number(dom.pgF0.value); }));
+  dom.pgWrap.addEventListener('change', () =>
+    onKnobChange(s => { s.wrapOctave = dom.pgWrap.checked; }));
+  dom.pgRadiusMapping.addEventListener('change', () =>
+    onKnobChange(s => { s.radiusMapping = dom.pgRadiusMapping.value as PlaygroundSettings['radiusMapping']; }));
+  dom.pgSustain.addEventListener('input', () =>
+    onKnobChange(s => { s.sustainMs = Number(dom.pgSustain.value); }));
+  dom.pgGain.addEventListener('input', () =>
+    onKnobChange(s => { s.gain = Number(dom.pgGain.value); }));
+
+  dom.pgCopyCode.addEventListener('click', () => {
+    navigator.clipboard.writeText(settingsAsCode(playgroundSettings))
+      .catch(() => { /* clipboard unavailable (permissions) — button still confirms */ });
+    dom.pgCopyCode.textContent = 'Copied!';
+    setTimeout(() => { dom.pgCopyCode.textContent = 'Copy settings as code'; }, 1200);
   });
 
   // Initial visuals
