@@ -70,6 +70,14 @@
              the preview or ?playground. One global settings object for all
              pairs. See ADR 0003 + CONTEXT.md (Nodal Chord). -->
         <div id="playground-drawer" class="playground-drawer hidden">
+          <div class="playground-row playground-wave-row">
+            <canvas id="pg-wave-canvas" width="360" height="80"></canvas>
+            <div class="pg-wave-legend">
+              <span class="pg-legend-p1">partial 1</span>
+              <span class="pg-legend-p2">partial 2 <span id="pg-wave-ratio"></span></span>
+              <span class="pg-legend-combined">combined</span>
+            </div>
+          </div>
           <div class="playground-row">
             <label>Operator
               <select id="pg-operator">

@@ -13,6 +13,7 @@ import {
   loadSettings, saveSettings, loadUnlocked, saveUnlocked,
   settingsAsCode, NODAL_CHORD_DEFAULT_ON, type PlaygroundSettings,
 } from './playground-settings';
+import { computeWaveSamples, drawWaveform } from './waveform-viz';
 import { createPreviewLoop, type PreviewLoop } from './pattern-preview';
 import { ELEMENTS } from './orbital-elements';
 import type { AppState } from './state';
@@ -430,6 +431,13 @@ function triggerPreviewChord(): void {
   );
 }
 
+/** Redraw the drawer's one-voice waveform display (two partials + combined). */
+function renderPlaygroundWave(dom: DomElements): void {
+  const w = computeWaveSamples(playgroundSettings, previewResonance, 360);
+  drawWaveform(dom.pgWaveCanvas, w);
+  dom.pgWaveRatio.textContent = `(${w.ratioLabel})`;
+}
+
 function thumbLineColor(state: AppState): string {
   return state.currentTheme === 'dark'
     ? 'rgba(194, 118, 46, 0.4)'
@@ -547,6 +555,8 @@ function updatePreviewPane(state: AppState, dom: DomElements): void {
       PREVIEW_CANVAS_SIZE / 2, PREVIEW_CANVAS_SIZE / 2,
       pattern.petals, PREVIEW_CANVAS_SIZE,
     );
+    // Pair change moves the resonance ratio — keep the waveform display honest.
+    renderPlaygroundWave(dom);
   }
   dom.patternPreviewName.textContent = pattern.name;
   dom.patternPreviewMeta.textContent =
@@ -1291,6 +1301,7 @@ export function setupEventHandlers(
       updatePreviewPane(state, dom); // compute points now that we're unlocked
     }
     syncPlaygroundInputs(dom);
+    renderPlaygroundWave(dom);
     dom.playgroundDrawer.classList.toggle('hidden');
   });
 
@@ -1313,6 +1324,7 @@ export function setupEventHandlers(
   function onKnobChange(mutate: (s: PlaygroundSettings) => void): void {
     mutate(playgroundSettings);
     saveSettings(localStorage, playgroundSettings);
+    renderPlaygroundWave(dom);
     triggerPreviewChord();
   }
 

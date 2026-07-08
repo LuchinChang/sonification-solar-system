@@ -70,6 +70,8 @@ export interface DomElements {
 
   // Timbre playground drawer (pattern selector; hidden until unlocked)
   playgroundDrawer: HTMLElement;
+  pgWaveCanvas: HTMLCanvasElement;
+  pgWaveRatio: HTMLElement;
   pgOperator: HTMLSelectElement;
   pgBalance: HTMLInputElement;
   pgPhase: HTMLInputElement;
@@ -158,6 +160,8 @@ export function resolveDomElements(): DomElements {
     patternConfirmBtn: getEl('pattern-confirm-btn') as HTMLButtonElement,
 
     playgroundDrawer: getEl('playground-drawer'),
+    pgWaveCanvas: getEl('pg-wave-canvas') as HTMLCanvasElement,
+    pgWaveRatio: getEl('pg-wave-ratio'),
     pgOperator: getEl('pg-operator') as HTMLSelectElement,
     pgBalance: getEl('pg-balance') as HTMLInputElement,
     pgPhase: getEl('pg-phase') as HTMLInputElement,

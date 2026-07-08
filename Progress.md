@@ -58,7 +58,15 @@ restore held).
   (37 for an 18-voice chord). Monkey-patching
   `AudioContext.prototype.createOscillator` is a cheap, reliable audio spy.
 
-Suite: 33 files / 369 passed / 2 skipped (was 29 / 339).
+**Waveform display (follow-up).** The drawer's top row is a live scope
+(`src/waveform-viz.ts`): partial 1, partial 2 (ratio-labelled), and the
+combined trace, redrawn on every knob/pair change. It is a *mathematical
+mirror* of `buildVoice` — NOT an AnalyserNode tap, because the live chord is
+many voices summed (mush); the timbre's anatomy is per-voice. Both partials
+are integer harmonics of one fundamental, so the trace closes over exactly
+one period; display density capped at 24 cycles for extreme resonances.
+
+Suite: 34 files / 377 passed / 2 skipped (was 29 / 339).
 
 ## 2026-07-06 — Onboarding sound choice, two-phase Reveal, three-pane selector
 

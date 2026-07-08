@@ -1874,3 +1874,35 @@ body.ui-hidden .config-btn {
   padding: 3px 8px;
   cursor: pointer;
 }
+
+/* ── Playground waveform display ────────────────────────────────────────── */
+.playground-wave-row {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+#pg-wave-canvas {
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.04);
+  flex: 0 0 auto;
+}
+.pg-wave-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 10px;
+  padding-top: 4px;
+}
+.pg-legend-p1::before,
+.pg-legend-p2::before,
+.pg-legend-combined::before {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.pg-legend-p1::before { background: rgba(194, 118, 46, 0.8); }
+.pg-legend-p2::before { background: rgba(94, 155, 168, 0.8); }
+.pg-legend-combined::before { background: #C084FC; height: 3px; }

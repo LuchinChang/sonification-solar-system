@@ -108,6 +108,8 @@ function mockDomElements(): DomElements {
     patternPreviewMeta: el() as unknown as HTMLElement,
     patternConfirmBtn: el() as unknown as HTMLButtonElement,
     playgroundDrawer: el() as unknown as HTMLElement,
+    pgWaveCanvas: el() as unknown as HTMLCanvasElement,
+    pgWaveRatio: el() as unknown as HTMLElement,
     pgOperator: el() as unknown as HTMLSelectElement,
     pgBalance: el() as unknown as HTMLInputElement,
     pgPhase: el() as unknown as HTMLInputElement,
